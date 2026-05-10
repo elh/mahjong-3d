@@ -26,15 +26,18 @@ export type ThreeTableLayout = {
 };
 
 export const tileSize = {
-  width: 0.24,
-  height: 0.08,
-  depth: 0.34,
+  width: 0.22,
+  height: 0.15,
+  depth: 0.3,
 };
 
 const tableY = tileSize.height / 2 + 0.01;
 const handRadius = 3.45;
 const discardRadius = 1.12;
-const wallRadius = 2.1;
+const wallSideTiles = 18;
+const wallSideLength = tileSize.width * wallSideTiles;
+const wallRunRadius = wallSideLength / 2 - tileSize.width / 2;
+const wallPerpendicularRadius = wallSideLength / 2 + tileSize.depth / 2;
 
 export function createThreeTableLayout(
   replay: ReplayState,
@@ -90,7 +93,7 @@ export function playerRowPosition(
 ): Vec3 {
   const right = playerRight(player);
   const forward = playerForward(player);
-  const spacing = tileSize.width + 0.04;
+  const spacing = tileSize.width;
   const centered = (index - (total - 1) / 2) * spacing;
   return [
     forward[0] * radius + right[0] * centered,
@@ -137,8 +140,8 @@ function layoutDiscards(
   const right = playerRight(player);
   const forward = playerForward(player);
   const columns = 6;
-  const columnSpacing = tileSize.width + 0.05;
-  const rowSpacing = tileSize.depth + 0.06;
+  const columnSpacing = tileSize.width;
+  const rowSpacing = tileSize.depth;
   const origin = [
     forward[0] * discardRadius - right[0] * 0.58,
     tableY + 0.02,
@@ -172,26 +175,29 @@ function layoutWall(
   tiles: readonly TileInstance[],
   owner: "wall" | "deadWall",
 ): TilePlacement[] {
-  const perimeter = 18;
-  const offset = owner === "wall" ? 0 : perimeter * 3 + 4;
+  const offset = owner === "wall" ? 0 : wallSideTiles * 3 + 4;
 
   return tiles.map((tile, index) => {
-    const pathIndex = (index + offset) % (perimeter * 4);
-    const side = Math.floor(pathIndex / perimeter);
-    const sideIndex = pathIndex % perimeter;
-    const t = sideIndex / Math.max(perimeter - 1, 1);
-    const line = -wallRadius + t * wallRadius * 2;
-    const stack = Math.floor(index / (perimeter * 4));
+    const pathIndex = (index + offset) % (wallSideTiles * 4);
+    const side = Math.floor(pathIndex / wallSideTiles);
+    const sideIndex = pathIndex % wallSideTiles;
+    const line = -wallRunRadius + sideIndex * tileSize.width;
+    const stack = Math.floor(index / (wallSideTiles * 4));
     const y = tableY + stack * (tileSize.height + 0.01);
 
     if (side === 0) {
-      return wallPlacement(tile, owner, [line, y, wallRadius], [0, 0, 0]);
+      return wallPlacement(
+        tile,
+        owner,
+        [line, y, wallPerpendicularRadius],
+        [0, 0, 0],
+      );
     }
     if (side === 1) {
       return wallPlacement(
         tile,
         owner,
-        [wallRadius, y, -line],
+        [wallPerpendicularRadius, y, -line],
         [0, Math.PI / 2, 0],
       );
     }
@@ -199,14 +205,14 @@ function layoutWall(
       return wallPlacement(
         tile,
         owner,
-        [-line, y, -wallRadius],
+        [-line, y, -wallPerpendicularRadius],
         [0, Math.PI, 0],
       );
     }
     return wallPlacement(
       tile,
       owner,
-      [-wallRadius, y, line],
+      [-wallPerpendicularRadius, y, line],
       [0, -Math.PI / 2, 0],
     );
   });
@@ -263,6 +269,6 @@ function currentEventAnimation(
 
 function sourcePosition(source: "liveWall" | "deadWall"): Vec3 {
   return source === "deadWall"
-    ? [-wallRadius, tableY + 0.28, -wallRadius]
-    : [0, tableY + 0.28, wallRadius];
+    ? [-wallPerpendicularRadius, tableY + 0.28, -wallPerpendicularRadius]
+    : [0, tableY + 0.28, wallPerpendicularRadius];
 }

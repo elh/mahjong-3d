@@ -6,6 +6,7 @@ import {
   createThreeTableLayout,
   discardDropPosition,
   playerRowPosition,
+  tileSize,
 } from "./tableLayout";
 
 describe("3D table layout", () => {
@@ -74,4 +75,44 @@ describe("3D table layout", () => {
       );
     }
   });
+
+  test("packs player rows and wall sides edge to edge without corner overlap", () => {
+    const result = simulateRound({
+      seed: "three-spacing",
+      bots: createBaselineBots(),
+      maxTurns: 1,
+    });
+    const replay = replayEvents(result.events);
+    const layout = createThreeTableLayout(replay, replay.currentEvent);
+    const eastHand = layout.tiles
+      .filter(
+        (placement) => placement.owner === "hand" && placement.player === 0,
+      )
+      .sort((left, right) => left.position[0] - right.position[0]);
+    const wall = layout.tiles.filter((placement) => placement.owner === "wall");
+    const southWallSide = wall.slice(0, 18);
+    const eastWallSide = wall.slice(18, 36);
+
+    expect(distance(eastHand[0].position, eastHand[1].position)).toBeCloseTo(
+      tileSize.width,
+      5,
+    );
+    expect(
+      distance(southWallSide[0].position, southWallSide[1].position),
+    ).toBeCloseTo(tileSize.width, 5);
+    expect(
+      distance(eastWallSide[0].position, eastWallSide[1].position),
+    ).toBeCloseTo(tileSize.width, 5);
+    expect(southWallSide.at(-1)!.position[0] + tileSize.width / 2).toBeCloseTo(
+      eastWallSide[0].position[0] - tileSize.depth / 2,
+      5,
+    );
+  });
 });
+
+function distance(
+  left: [number, number, number],
+  right: [number, number, number],
+) {
+  return Math.hypot(left[0] - right[0], left[2] - right[2]);
+}

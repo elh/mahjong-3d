@@ -1,6 +1,7 @@
 import {
   Environment,
   OrbitControls,
+  RoundedBox,
   Text,
   useTexture,
 } from "@react-three/drei";
@@ -15,7 +16,7 @@ import { Suspense, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type { GameEvent } from "../../sim/events";
 import type { ReplayState } from "../../sim/replay";
-import { type TileInstance, tileKey } from "../../sim/tiles";
+import type { TileInstance } from "../../sim/tiles";
 import { tileImage } from "../tileImages";
 import {
   createThreeTableLayout,
@@ -24,6 +25,9 @@ import {
   tileSize,
   type Vec3,
 } from "./tableLayout";
+
+const tileBackThickness = tileSize.height * 0.18;
+const tileCornerRadius = 0.035;
 
 type ThreeGameViewProps = {
   replay: ReplayState;
@@ -242,43 +246,9 @@ function FaceUpTileBlock({ tile }: { tile: TileInstance }) {
   texture.anisotropy = 4;
   texture.minFilter = THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;
-  const accent = tileAccent(tile);
-
   return (
     <group>
-      <mesh castShadow receiveShadow>
-        <boxGeometry args={[tileSize.width, tileSize.height, tileSize.depth]} />
-        <meshStandardMaterial
-          attach="material-0"
-          color="#ded8c9"
-          roughness={0.74}
-        />
-        <meshStandardMaterial
-          attach="material-1"
-          color="#ded8c9"
-          roughness={0.74}
-        />
-        <meshStandardMaterial
-          attach="material-2"
-          color="#f5f0df"
-          roughness={0.68}
-        />
-        <meshStandardMaterial
-          attach="material-3"
-          color={accent}
-          roughness={0.74}
-        />
-        <meshStandardMaterial
-          attach="material-4"
-          color="#ded8c9"
-          roughness={0.74}
-        />
-        <meshStandardMaterial
-          attach="material-5"
-          color="#ded8c9"
-          roughness={0.74}
-        />
-      </mesh>
+      <TileBody orientation="faceUp" />
       <mesh
         position={[0, tileSize.height / 2 + 0.003, 0]}
         rotation={[-Math.PI / 2, 0, 0]}
@@ -298,39 +268,54 @@ function FaceUpTileBlock({ tile }: { tile: TileInstance }) {
 
 function FaceDownTileBlock() {
   return (
-    <mesh castShadow receiveShadow>
-      <boxGeometry args={[tileSize.width, tileSize.height, tileSize.depth]} />
+    <group>
+      <TileBody orientation="faceDown" />
+    </group>
+  );
+}
+
+function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
+  const backDirection = orientation === "faceUp" ? -1 : 1;
+  const backThreshold = tileSize.height / 2 - tileBackThickness;
+
+  return (
+    <RoundedBox
+      castShadow
+      receiveShadow
+      args={[tileSize.width, tileSize.height, tileSize.depth]}
+      radius={tileCornerRadius}
+      smoothness={8}
+    >
       <meshStandardMaterial
-        attach="material-0"
-        color="#53685e"
-        roughness={0.78}
+        color="#ffffff"
+        roughness={0.58}
+        metalness={0.02}
+        customProgramCacheKey={() => `mahjong-tile-body-${orientation}`}
+        onBeforeCompile={(shader) => {
+          shader.vertexShader = shader.vertexShader.replace(
+            "#include <common>",
+            "#include <common>\nvarying vec3 vTileLocalPosition;",
+          );
+          shader.vertexShader = shader.vertexShader.replace(
+            "#include <begin_vertex>",
+            "#include <begin_vertex>\nvTileLocalPosition = position;",
+          );
+          shader.fragmentShader = shader.fragmentShader.replace(
+            "#include <common>",
+            "#include <common>\nvarying vec3 vTileLocalPosition;",
+          );
+          shader.fragmentShader = shader.fragmentShader.replace(
+            "vec4 diffuseColor = vec4( diffuse, opacity );",
+            `
+            vec3 tileIvory = vec3(0.953, 0.918, 0.839);
+            vec3 tileGreen = vec3(0.000, 0.502, 0.341);
+            float backMask = step(${backThreshold.toFixed(5)}, ${backDirection.toFixed(1)} * vTileLocalPosition.y);
+            vec4 diffuseColor = vec4(mix(tileIvory, tileGreen, backMask), opacity);
+            `,
+          );
+        }}
       />
-      <meshStandardMaterial
-        attach="material-1"
-        color="#53685e"
-        roughness={0.78}
-      />
-      <meshStandardMaterial
-        attach="material-2"
-        color="#485d54"
-        roughness={0.8}
-      />
-      <meshStandardMaterial
-        attach="material-3"
-        color="#2f433b"
-        roughness={0.84}
-      />
-      <meshStandardMaterial
-        attach="material-4"
-        color="#53685e"
-        roughness={0.78}
-      />
-      <meshStandardMaterial
-        attach="material-5"
-        color="#53685e"
-        roughness={0.78}
-      />
-    </mesh>
+    </RoundedBox>
   );
 }
 
@@ -354,23 +339,6 @@ function TableLabels() {
       {label.label}
     </Text>
   ));
-}
-
-function tileAccent(tile: TileInstance): string {
-  const key = tileKey(tile.kind);
-  if (key.startsWith("d")) {
-    return "#486f86";
-  }
-  if (key.startsWith("b")) {
-    return "#4f7759";
-  }
-  if (key.startsWith("c")) {
-    return "#8f5652";
-  }
-  if (key.includes("dragon")) {
-    return "#8f6a43";
-  }
-  return "#6a665d";
 }
 
 function easeOutCubic(value: number): number {

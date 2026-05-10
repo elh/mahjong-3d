@@ -2,8 +2,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Info,
-  Pause,
-  Play,
   RefreshCw,
   SkipBack,
 } from "lucide-react";
@@ -49,8 +47,6 @@ function scrollActiveEventIntoView(
 export default function App() {
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"debug" | "three">("debug");
-  const [isThreePlaying, setIsThreePlaying] = useState(false);
-  const [threeSpeed, setThreeSpeed] = useState(1);
   const activeEventRef = useRef<HTMLButtonElement | null>(null);
   const eventLogRef = useRef<HTMLElement | null>(null);
   const eventLogScrollFrameRef = useRef<number | undefined>(undefined);
@@ -82,26 +78,6 @@ export default function App() {
     startEventHold,
     clickStepButton,
   } = simulation;
-
-  useEffect(() => {
-    if (viewMode !== "three" || !isThreePlaying || !canStepNext) {
-      if (!canStepNext) {
-        setIsThreePlaying(false);
-      }
-      return;
-    }
-
-    const interval = window.setInterval(
-      () => {
-        stepEvent(1);
-      },
-      Math.max(180, 900 / threeSpeed),
-    );
-
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [viewMode, isThreePlaying, canStepNext, stepEvent, threeSpeed]);
 
   useEffect(() => {
     if (!currentEvent) {
@@ -177,10 +153,7 @@ export default function App() {
           <button
             type="button"
             className={viewMode === "debug" ? "active" : ""}
-            onClick={() => {
-              setViewMode("debug");
-              setIsThreePlaying(false);
-            }}
+            onClick={() => setViewMode("debug")}
           >
             2D
           </button>
@@ -241,40 +214,6 @@ export default function App() {
             onChange={(event) => scrubToEventIndex(Number(event.target.value))}
           />
         </label>
-        {viewMode === "three" && (
-          <fieldset
-            className="three-playback"
-            aria-label="3D playback controls"
-          >
-            <button
-              type="button"
-              onClick={() => setIsThreePlaying((playing) => !playing)}
-              disabled={events.length === 0 || !canStepNext}
-              aria-label={
-                isThreePlaying ? "Pause 3D playback" : "Play 3D playback"
-              }
-              title={isThreePlaying ? "Pause" : "Play"}
-            >
-              {isThreePlaying ? (
-                <Pause size={17} aria-hidden="true" />
-              ) : (
-                <Play size={17} aria-hidden="true" />
-              )}
-            </button>
-            <label>
-              <span>Speed</span>
-              <select
-                value={threeSpeed}
-                onChange={(event) => setThreeSpeed(Number(event.target.value))}
-              >
-                <option value={0.5}>0.5x</option>
-                <option value={1}>1x</option>
-                <option value={1.5}>1.5x</option>
-                <option value={2}>2x</option>
-              </select>
-            </label>
-          </fieldset>
-        )}
       </section>
 
       {(isGenerating || generationError) && (
