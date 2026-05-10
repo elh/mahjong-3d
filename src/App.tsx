@@ -1,62 +1,122 @@
 import {
   ChevronLeft,
   ChevronRight,
-  Play,
   RefreshCw,
   SkipBack,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { createBaselineBots } from "./bots/baselineBot";
-import { simulateRound, type SimulateRoundResult } from "./sim/engine";
+import type { SimulateRoundResult } from "./sim/engine";
 import type { GameEvent } from "./sim/events";
 import { replayEvents } from "./sim/replay";
+import type {
+  SimulationRequest,
+  SimulationResponse,
+} from "./sim/simulationWorker";
 import type { TileInstance } from "./sim/tiles";
 import { tileAlt, tileImage } from "./ui/tileImages";
 
 const playerNames = ["East", "South", "West", "North"] as const;
-
-function runGame(seed: string): SimulateRoundResult {
-  return simulateRound({
-    seed,
-    bots: createBaselineBots(),
-  });
-}
+const defaultSeed = "concealed-gang-preview";
 
 export default function App() {
-  const [seedInput, setSeedInput] = useState("concealed-gang-preview");
-  const [game, setGame] = useState(() => runGame("concealed-gang-preview"));
+  const [seedInput, setSeedInput] = useState(defaultSeed);
+  const [pendingSeed, setPendingSeed] = useState(defaultSeed);
+  const [game, setGame] = useState<SimulateRoundResult | undefined>();
+  const [isGenerating, setIsGenerating] = useState(true);
+  const [generationError, setGenerationError] = useState<string | undefined>();
   const [eventIndex, setEventIndex] = useState(0);
   const activeEventRef = useRef<HTMLButtonElement | null>(null);
+  const requestIdRef = useRef(0);
+  const workerRef = useRef<Worker | null>(null);
+  const events = game?.events ?? [];
   const replay = useMemo(
-    () => replayEvents(game.events, eventIndex),
-    [game.events, eventIndex],
+    () => replayEvents(events, eventIndex),
+    [events, eventIndex],
   );
-  const currentEvent = game.events[eventIndex];
-  const eventGroups = useMemo(() => groupEvents(game.events), [game.events]);
+  const currentEvent = events[eventIndex];
+  const eventGroups = useMemo(() => groupEvents(events), [events]);
   const highlightedTileIds = useMemo(
     () => activeTileIds(currentEvent),
     [currentEvent],
   );
   const atStart = eventIndex === 0;
-  const atEnd = eventIndex === game.events.length - 1;
+  const atEnd = eventIndex >= events.length - 1;
 
   useEffect(() => {
+    queueSimulation(defaultSeed);
+
+    return () => {
+      workerRef.current?.terminate();
+      workerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!currentEvent) {
+      return;
+    }
     activeEventRef.current?.scrollIntoView({
       block: "nearest",
       inline: "nearest",
     });
-  }, [eventIndex]);
+  }, [currentEvent]);
 
-  function runSeed(seed: string) {
+  function createSimulationWorker() {
+    workerRef.current?.terminate();
+    const worker = new Worker(new URL("./sim/simulationWorker.ts", import.meta.url), {
+      type: "module",
+    });
+    worker.onmessage = (event: MessageEvent<SimulationResponse>) => {
+      if (event.data.requestId !== requestIdRef.current) {
+        return;
+      }
+
+      setIsGenerating(false);
+      if (event.data.status === "error") {
+        setGenerationError(event.data.message);
+        return;
+      }
+
+      setGenerationError(undefined);
+      setGame(event.data.result);
+      setEventIndex(0);
+      worker.terminate();
+      if (workerRef.current === worker) {
+        workerRef.current = null;
+      }
+    };
+    worker.onerror = () => {
+      if (workerRef.current === worker) {
+        setIsGenerating(false);
+        setGenerationError("Simulation worker failed.");
+      }
+      worker.terminate();
+      if (workerRef.current === worker) {
+        workerRef.current = null;
+      }
+    };
+    workerRef.current = worker;
+    return worker;
+  }
+
+  function queueSimulation(seed: string) {
     const nextSeed = seed.trim() || `game-${Date.now()}`;
-    const nextGame = runGame(nextSeed);
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     setSeedInput(nextSeed);
-    setGame(nextGame);
+    setPendingSeed(nextSeed);
+    setIsGenerating(true);
+    setGenerationError(undefined);
     setEventIndex(0);
+    const worker = createSimulationWorker();
+    worker?.postMessage({
+      requestId,
+      seed: nextSeed,
+    } satisfies SimulationRequest);
   }
 
   function newSeed() {
-    runSeed(`game-${Date.now()}`);
+    queueSimulation(`game-${Date.now()}`);
   }
 
   function restart() {
@@ -65,7 +125,7 @@ export default function App() {
 
   function startTypedSeed() {
     const seed = seedInput.trim() || `game-${Date.now()}`;
-    runSeed(seed);
+    queueSimulation(seed);
   }
 
   return (
@@ -76,8 +136,7 @@ export default function App() {
           <h1>Concealed Gang</h1>
         </div>
         <div className="run-summary">
-          <Play size={18} aria-hidden="true" />
-          <span>{game.events.length} events</span>
+          <span>{isGenerating ? "Generating..." : `${events.length} events`}</span>
         </div>
       </section>
 
@@ -106,7 +165,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setEventIndex((index) => Math.max(0, index - 1))}
-            disabled={atStart}
+            disabled={atStart || events.length === 0}
             aria-label="Previous event"
             title="Previous event"
           >
@@ -115,9 +174,9 @@ export default function App() {
           <button
             type="button"
             onClick={() =>
-              setEventIndex((index) => Math.min(game.events.length - 1, index + 1))
+              setEventIndex((index) => Math.min(events.length - 1, index + 1))
             }
-            disabled={atEnd}
+            disabled={atEnd || events.length === 0}
             aria-label="Next event"
             title="Next event"
           >
@@ -126,17 +185,29 @@ export default function App() {
         </div>
         <label className="timeline">
           <span>
-            Event {eventIndex + 1} / {game.events.length}
+            Event {events.length === 0 ? 0 : eventIndex + 1} / {events.length}
           </span>
           <input
             type="range"
             min={0}
-            max={Math.max(game.events.length - 1, 0)}
+            max={Math.max(events.length - 1, 0)}
             value={eventIndex}
+            disabled={events.length === 0}
             onChange={(event) => setEventIndex(Number(event.target.value))}
           />
         </label>
       </section>
+
+      {(isGenerating || generationError) && (
+        <section
+          className={generationError ? "generation-pill error" : "generation-pill"}
+          aria-live="polite"
+        >
+          {generationError
+            ? `Could not generate ${pendingSeed}: ${generationError}`
+            : `Generating ${pendingSeed}...`}
+        </section>
+      )}
 
       <section className="viewer-shell" aria-label="Simulation viewer">
         <article className="event-panel">
@@ -150,7 +221,7 @@ export default function App() {
             </div>
             <div>
               <dt>Seed</dt>
-              <dd>{game.seed}</dd>
+              <dd>{game?.seed ?? pendingSeed}</dd>
             </div>
             <div>
               <dt>Wall remaining</dt>
@@ -181,35 +252,41 @@ export default function App() {
         )}
 
         <div className="event-list" aria-label="Event log">
-          {eventGroups.map((group) => (
-            <section className="event-group" key={group.id}>
-              <button
-                type="button"
-                className={
-                  group.events.some((entry) => entry.index === eventIndex)
-                    ? "event-group-header active"
-                    : "event-group-header"
-                }
-                onClick={() => setEventIndex(group.events[0]?.index ?? 0)}
-              >
-                <strong>{group.label}</strong>
-                <span>{group.events.length} events</span>
-              </button>
-              {group.phase === "turn" &&
-                group.events.map(({ event, index }) => (
-                  <button
-                    type="button"
-                    key={`${event.type}-${index}`}
-                    ref={index === eventIndex ? activeEventRef : null}
-                    className={index === eventIndex ? "event-row active" : "event-row"}
-                    onClick={() => setEventIndex(index)}
-                  >
-                    <span>{String(index + 1).padStart(3, "0")}</span>
-                    <strong>{eventTitle(event)}</strong>
-                  </button>
-                ))}
-            </section>
-          ))}
+          {eventGroups.map((group) => {
+            const isActiveGroup = group.events.some(
+              (entry) => entry.index === eventIndex,
+            );
+            return (
+              <section className="event-group" key={group.id}>
+                <button
+                  type="button"
+                  ref={
+                    isActiveGroup && group.phase === "setup" ? activeEventRef : null
+                  }
+                  className={
+                    isActiveGroup ? "event-group-header active" : "event-group-header"
+                  }
+                  onClick={() => setEventIndex(group.events[0]?.index ?? 0)}
+                >
+                  <strong>{group.label}</strong>
+                  <span>{group.events.length} events</span>
+                </button>
+                {group.phase === "turn" &&
+                  group.events.map(({ event, index }) => (
+                    <button
+                      type="button"
+                      key={`${event.type}-${index}`}
+                      ref={index === eventIndex ? activeEventRef : null}
+                      className={index === eventIndex ? "event-row active" : "event-row"}
+                      onClick={() => setEventIndex(index)}
+                    >
+                      <span>{String(index + 1).padStart(3, "0")}</span>
+                      <strong>{eventTitle(event)}</strong>
+                    </button>
+                  ))}
+              </section>
+            );
+          })}
         </div>
       </section>
 

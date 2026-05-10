@@ -162,6 +162,31 @@ h3 {
   accent-color: #234832;
 }
 
+.generation-pill {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  z-index: 20;
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 8px 12px;
+  transform: translateX(-50%);
+  border: 1px solid #c6beab;
+  border-radius: 999px;
+  background: #fffaf0;
+  box-shadow: 0 8px 24px rgba(23, 32, 24, 0.12);
+  color: #607057;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.generation-pill.error {
+  border-color: #b95f4d;
+  background: #fff1ed;
+  color: #8d3f31;
+}
+
 .viewer-shell {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
@@ -350,8 +375,7 @@ dd {
   min-height: 30px;
 }
 
-.tile,
-.empty {
+.tile {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -400,13 +424,8 @@ dd {
 
 .empty {
   color: #7a756b;
-  font-weight: 600;
-  width: auto;
-  height: 28px;
-  min-width: 42px;
-  padding: 0 8px;
-  border-color: #cbc2b1;
-  background: #fdfbf5;
+  font-size: 0.88rem;
+  line-height: 30px;
 }
 
 .asset-attribution {
