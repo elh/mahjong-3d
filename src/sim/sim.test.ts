@@ -402,6 +402,13 @@ describe("simulation", () => {
     expect(result.finalState.winners?.length).toBeGreaterThan(1);
     expect(result.finalState.players[1].winningTile?.id).toBe(discard.id);
     expect(result.finalState.players[2].winningTile?.id).toBe(discard.id);
+
+    const replay = replayEvents(result.events);
+    expect(replay.players[0].discards.map((tile) => tile.id)).not.toContain(
+      discard.id,
+    );
+    expect(replay.players[1].hand.map((tile) => tile.id)).toContain(discard.id);
+    expect(replay.players[2].hand.map((tile) => tile.id)).toContain(discard.id);
   });
 
   test("uses a draw event as the final event for non-winning rounds", () => {
@@ -451,7 +458,7 @@ describe("simulation", () => {
     for (const player of result.finalState.players) {
       const replayPlayer = replay.players[player.id];
       expect(replayPlayer.hand.map((tile) => tile.id).sort()).toEqual(
-        player.hand.map((tile) => tile.id).sort(),
+        expectedReplayHandIds(player).sort(),
       );
       expect(replayPlayer.discards.map((tile) => tile.id)).toEqual(
         player.discards.map((tile) => tile.id),
@@ -798,6 +805,13 @@ function emptyRoundState(): RoundState {
     turn: 0,
     ended: false,
   };
+}
+
+function expectedReplayHandIds(
+  player: RoundState["players"][number],
+): string[] {
+  const handIds = player.hand.map((tile) => tile.id);
+  return player.winningTile ? [...handIds, player.winningTile.id] : handIds;
 }
 
 function tilesForStartingWin(pick: TilePicker): TileInstance[] {

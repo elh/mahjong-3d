@@ -166,6 +166,10 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
         const wonTile =
           removeTile(state.players[event.from].discards, event.tile.id) ??
           event.tile;
+        state.players[event.player].hand = sortTiles([
+          ...state.players[event.player].hand,
+          wonTile,
+        ]);
         state.players[event.player].winningTile = wonTile;
       }
       return;
