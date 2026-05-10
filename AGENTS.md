@@ -2,62 +2,129 @@
 
 ## Project
 
-This repository is a Bun, TypeScript, Vite, and React project for simulating Taiwanese-style 16-tile Mahjong. The first milestone is a deterministic headless simulator with baseline bots and replayable event logs. The UI should remain a viewer over those logs, not the source of game truth.
+This repository is a Bun, TypeScript, Vite, and React project for simulating Taiwanese-style 16-tile Mahjong. The app watches deterministic bot games through replayable event logs. The simulator is the source of truth; React is only a viewer/controller over generated logs.
 
-## Engineering Guardrails
+Current priorities:
 
-- Use Bun for package management and scripts.
-- Use TypeScript throughout.
-- Keep game logic framework-independent and deterministic.
-- Keep React and Vite UI code separate from simulation logic.
-- Prefer explicit game events over implicit UI state mutation.
-- Treat Taiwanese 16-tile Mahjong as the target ruleset.
-- Implement basic good strategy first; do not optimize deeply before the rules loop is reliable.
-- Keep tests close to simulation behavior and fixed-seed determinism.
+- keep the rules loop legal, deterministic, and well tested;
+- keep game generation off the main UI thread;
+- keep the viewer compact enough for a 14 inch MacBook at 100% zoom;
+- improve baseline bot quality only as far as shanten, waits, and visible-tile heuristics.
+
+## Development Commands
+
+Use Bun for package management and scripts.
+
+```sh
+make good
+```
+
+`make good` is the standard pre-handoff gate. It runs format check, Biome lint, ESLint, Knip, TypeScript, tests, and production build.
+
+Useful focused commands:
+
+```sh
+make dev
+make test
+make typecheck
+make format
+make lint
+make knip
+make build
+```
+
+When touching UI or worker bundling, run `make build` even if TypeScript passes. When touching simulator behavior, run `make test` at minimum.
 
 ## Architecture
 
-- `src/sim/` owns rules, game state, wall generation, legal actions, turn flow, win checks, and event logs.
+- `src/sim/` owns rules, game state, wall generation, legal actions, turn flow, win checks, invariants, replay, and event types.
 - `src/bots/` owns bot strategy interfaces and implementations.
-- `src/ui/` owns React viewer components.
-- `src/App.tsx` and `src/main.tsx` should stay thin.
+- `src/ui/` owns UI-specific helpers such as tile image mapping.
+- `src/sim/simulationWorker.ts` runs full-round generation in a Web Worker so page load and seed changes do not block React.
+- `src/App.tsx` should stay a compact viewer/controller. Avoid moving rules or bot logic into React.
 
-The simulator should expose pure functions or deterministic classes whose output is reproducible from a seed. UI code should consume snapshots or event logs emitted by the simulator.
+The simulator should expose deterministic functions whose output is reproducible from a seed. UI code should consume event logs and replay snapshots; it should not mutate game truth directly.
+
+## Event Model
+
+Prefer explicit events over implicit UI state. Important event conventions:
+
+- setup/deal events use `phase: "setup"` and are grouped as `setup`;
+- turn events use `groupId: turn-${turn}`;
+- winning rounds end on `winDeclared`;
+- drawn rounds end on `drawDeclared`;
+- do not add a generic terminal `roundEnded` row to the viewer log;
+- keep event payloads sufficient for replay and UI highlighting.
+
+If a new UI feature needs state, first ask whether that state should be derived from replay rather than stored independently.
 
 ## Mahjong Rules Scope
 
-The current rules target a core Taiwanese 16-tile flow:
+Target Taiwanese 16-tile Mahjong, not Riichi.
+
+Current rules expectations:
 
 - four players;
-- 16 concealed hand tiles per player after the deal;
-- a player has 17 non-flower tiles while deciding a discard after draw or claim;
-- suited tiles, honors, and flower tiles in the wall;
-- flower tiles are exposed and replaced when drawn;
-- basic draw, discard, claim, win-check, and round-end flow.
+- East starts with 17 non-flower tiles, other players with 16;
+- flowers/seasons are exposed and replaced from the dead wall;
+- supplement draws for flowers and kongs come from the dead wall;
+- after each supplement draw, the dead wall is replenished from the back of the live wall;
+- concealed kongs and claimed kongs draw a supplement before discard;
+- multiple winners on one discard are allowed;
+- win checks include normal 5 sets plus pair and Taiwanese seven pairs plus a triplet;
+- invariant checks should catch illegal concealed hand counts at turn boundaries.
 
-Detailed Taiwanese scoring, tai/fan calculation, and house-rule variants are planned subsystems and should not be mixed into the first rules loop.
+Known simplification: the wall is modeled as live/dead ordered arrays, not as a physically exact wall break, side, dice, or loose-tile layout.
+
+Planned subsystem: Taiwanese scoring/tai/fan and house-rule variants. Do not mix scoring into the core turn loop until the rules loop remains stable.
 
 ## Bot Strategy Scope
 
-Bots should receive visible state plus legal actions and return one legal action. The baseline bot should play legal, plausible Mahjong:
+Bots receive visible state plus legal actions and return one legal action. Baseline bots should play legal, plausible Mahjong:
 
 - win when a legal win is available;
-- claim only when the claim improves hand shape enough to justify it;
-- discard isolated or exhausted-value tiles before useful pairs, sequences, and honor pairs;
-- use visible tile counts to lower the value of waits that are unlikely to complete.
+- declare legal concealed kongs;
+- use shanten-ish hand shape and live waits for discard ranking;
+- use visible tile counts to devalue exhausted waits;
+- claim only with basic hand-shape justification, except kongs are currently accepted.
 
-## Testing Expectations
+Do not pursue deep search, opponent modeling, or optimal AI yet. Keep the bot fast enough that full-round generation remains comfortable in the worker and tests.
 
-Before handing off simulator changes, run:
+## UI Guidance
 
-```sh
-bun test
-bun run typecheck
-```
+The viewer is a compact operational tool, not a landing page.
 
-For UI changes, also run:
+- Keep controls dense and predictable.
+- Keep wall, current event, event list, and player panels visible without large decorative areas.
+- Avoid layout shift while stepping events; use stable heights for dynamic event text.
+- Tile displays should use image assets with consistent rounded outlines.
+- Inline event tiles should be smaller than table/wall tiles.
+- Prefer deriving highlighted tiles from the active event.
+- Preserve keyboard navigation and hold-to-repeat stepping behavior for event controls.
 
-```sh
-bun run build
-```
+## Assets and Licensing
 
+Tile art lives under `public/tiles/` and is adapted from DemChing/Cangjie6. Keep attribution minimal in the UI and complete in `public/tiles/ATTRIBUTION.md`.
+
+Do not reintroduce untracked third-party tile sets without checking license compatibility and attribution requirements.
+
+## Goal Tracking and Self-Maintenance
+
+When new goals, rule decisions, or architectural constraints emerge, keep this guide current. Update `AGENTS.md` in the same change when:
+
+- a new subsystem is introduced;
+- simulator event semantics change;
+- a Mahjong rule assumption is added, removed, or clarified;
+- required development commands or quality gates change;
+- asset licensing or attribution changes;
+- UI interaction conventions become expected behavior.
+
+For larger future work, add or update a short project-tracking note before implementation. Prefer a simple Markdown section or file with:
+
+- goal;
+- current decision;
+- affected modules;
+- test expectations;
+- known follow-ups.
+
+Do not let important rules or workflow knowledge live only in chat history.

@@ -1,4 +1,10 @@
-import { ChevronLeft, ChevronRight, RefreshCw, SkipBack } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  RefreshCw,
+  SkipBack,
+} from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { SimulateRoundResult } from "./sim/engine";
 import type { GameEvent } from "./sim/events";
@@ -20,12 +26,15 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState(true);
   const [generationError, setGenerationError] = useState<string | undefined>();
   const [eventIndex, setEventIndex] = useState(0);
+  const [isInfoOpen, setIsInfoOpen] = useState(false);
   const activeEventRef = useRef<HTMLButtonElement | null>(null);
   const requestIdRef = useRef(0);
   const workerRef = useRef<Worker | null>(null);
   const holdDelayRef = useRef<number | undefined>(undefined);
   const holdIntervalRef = useRef<number | undefined>(undefined);
   const suppressStepClickRef = useRef(false);
+  const infoButtonRef = useRef<HTMLButtonElement | null>(null);
+  const infoModalRef = useRef<HTMLElement | null>(null);
   const events = game?.events ?? [];
   const replay = useMemo(
     () => replayEvents(events, eventIndex),
@@ -70,6 +79,32 @@ export default function App() {
       inline: "nearest",
     });
   }, [currentEvent]);
+
+  useEffect(() => {
+    if (!isInfoOpen) {
+      return;
+    }
+
+    function dismissInfoOnOutsideClick(event: PointerEvent) {
+      if (!(event.target instanceof Node)) {
+        return;
+      }
+
+      if (
+        infoModalRef.current?.contains(event.target) ||
+        infoButtonRef.current?.contains(event.target)
+      ) {
+        return;
+      }
+
+      setIsInfoOpen(false);
+    }
+
+    document.addEventListener("pointerdown", dismissInfoOnOutsideClick);
+    return () => {
+      document.removeEventListener("pointerdown", dismissInfoOnOutsideClick);
+    };
+  }, [isInfoOpen]);
 
   function createSimulationWorker() {
     workerRef.current?.terminate();
@@ -416,17 +451,44 @@ export default function App() {
         ))}
       </section>
 
-      <footer className="asset-attribution">
-        <span>
-          Github:{" "}
-          <a href="https://github.com/elh/concealed-gang">elh/concealed-gang</a>
-        </span>
-        <span>
-          Tile art adapted from{" "}
-          <a href="https://demching.itch.io/mahjong">DemChing/Cangjie6</a>,{" "}
-          <a href="/tiles/ATTRIBUTION.md">CC BY-SA 4.0</a>.
-        </span>
-      </footer>
+      <button
+        type="button"
+        className="info-button"
+        ref={infoButtonRef}
+        aria-label="About this simulator"
+        title="About this simulator"
+        onClick={() => setIsInfoOpen((open) => !open)}
+      >
+        <Info size={15} aria-hidden="true" />
+      </button>
+
+      {isInfoOpen && (
+        <section
+          className="info-modal"
+          ref={infoModalRef}
+          role="dialog"
+          aria-labelledby="info-modal-title"
+        >
+          <header>
+            <h2 id="info-modal-title">About</h2>
+          </header>
+          <p>
+            This is a basic rules implementation, baseline bot, and debug UI for
+            Taiwanese Mahjong.
+          </p>
+          <p>
+            Github:{" "}
+            <a href="https://github.com/elh/concealed-gang">
+              elh/concealed-gang
+            </a>
+          </p>
+          <p>
+            Tile art adapted from{" "}
+            <a href="https://demching.itch.io/mahjong">DemChing/Cangjie6</a>,{" "}
+            <a href="/tiles/ATTRIBUTION.md">CC BY-SA 4.0</a>.
+          </p>
+        </section>
+      )}
     </main>
   );
 }
