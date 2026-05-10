@@ -225,6 +225,38 @@ describe("3D table layout", () => {
     expect([...stackCounts.values()].every((count) => count === 2)).toBe(true);
   });
 
+  test("draws dead wall visually from the opposite end top then bottom", () => {
+    const seed = "three-dead-wall-end";
+    const { wall, deadWall } = createShuffledWalls(seed);
+    const replay = emptyReplayState();
+    replay.seed = seed;
+    replay.wall = wall;
+    replay.deadWall = deadWall;
+    const layout = createThreeTableLayout(replay, undefined);
+    const firstLive = layout.tiles.find(
+      (placement) => placement.tile.id === wall[0].id,
+    );
+    const firstDead = layout.tiles.find(
+      (placement) => placement.tile.id === deadWall[0].id,
+    );
+    const secondDead = layout.tiles.find(
+      (placement) => placement.tile.id === deadWall[1].id,
+    );
+
+    expect(firstLive).toBeDefined();
+    expect(firstDead).toBeDefined();
+    expect(secondDead).toBeDefined();
+    expect(firstDead!.position[0]).toBeCloseTo(secondDead!.position[0], 5);
+    expect(firstDead!.position[2]).toBeCloseTo(secondDead!.position[2], 5);
+    expect(firstDead!.position[1]).toBeGreaterThan(secondDead!.position[1]);
+    expect(distance(firstLive!.position, firstDead!.position)).toBeGreaterThan(
+      tileSize.width,
+    );
+    expect(distance(firstLive!.position, firstDead!.position)).toBeLessThan(
+      tileSize.width + tileSize.depth,
+    );
+  });
+
   test("packs player rows and wall sides edge to edge without corner overlap", () => {
     const replay = emptyReplayState();
     replay.wall = createTileSet().slice(0, 72);

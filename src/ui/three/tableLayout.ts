@@ -389,7 +389,7 @@ function layoutDiscards(
   const rowSpacing = tileSize.depth;
   const origin = [
     forward[0] * discardRadius - right[0] * 0.58,
-    tableY + 0.02,
+    tableY,
     forward[2] * discardRadius - right[2] * 0.58,
   ] satisfies Vec3;
 
@@ -475,19 +475,26 @@ function wallSlotMap(seed: string): Map<string, number> {
   }
 
   const shuffledWalls = createShuffledWalls(seed);
-  const slots = new Map(
-    [...shuffledWalls.wall, ...shuffledWalls.deadWall].map((tile, index) => [
-      tile.id,
-      physicalWallIndexFromDrawIndex(index),
-    ]),
-  );
+  const slots = new Map<string, number>();
+  for (const [index, tile] of shuffledWalls.wall.entries()) {
+    slots.set(tile.id, physicalWallIndexFromLiveDrawIndex(index));
+  }
+  for (const [index, tile] of shuffledWalls.deadWall.entries()) {
+    slots.set(tile.id, physicalWallIndexFromDeadDrawIndex(index));
+  }
   wallSlotCache.set(seed, slots);
   return slots;
 }
 
-function physicalWallIndexFromDrawIndex(index: number): number {
+function physicalWallIndexFromLiveDrawIndex(index: number): number {
   const stackSize = wallSideTiles * 4;
   const pairIndex = Math.floor(index / 2);
+  return pairIndex + (index % 2 === 0 ? stackSize : 0);
+}
+
+function physicalWallIndexFromDeadDrawIndex(index: number): number {
+  const stackSize = wallSideTiles * 4;
+  const pairIndex = stackSize - 1 - Math.floor(index / 2);
   return pairIndex + (index % 2 === 0 ? stackSize : 0);
 }
 

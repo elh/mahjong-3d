@@ -9,6 +9,7 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import {
   CuboidCollider,
   Physics,
+  type RigidBodyProps,
   type RapierRigidBody,
   RigidBody,
 } from "@react-three/rapier";
@@ -27,8 +28,7 @@ import {
 
 const tileBackThickness = tileSize.height * 0.18;
 const tileCornerRadius = 0.035;
-const discardRevealDurationMs = 380;
-
+const flickHandoffOverlapMs = 48;
 type FlickDebugSettings = {
   force: number;
   lift: number;
@@ -65,20 +65,37 @@ export function ThreeGameView({
   roundKey,
 }: ThreeGameViewProps) {
   const [flickDebug, setFlickDebug] = useState(defaultFlickDebugSettings);
+  const [sceneReady, setSceneReady] = useState(false);
+  const lastEventIndexRef = useRef(eventIndex);
+  const initialEventIndexRef = useRef(eventIndex);
+  const lastRoundKeyRef = useRef(roundKey);
+  const didMountRef = useRef(false);
+  if (roundKey !== lastRoundKeyRef.current) {
+    lastRoundKeyRef.current = roundKey;
+    initialEventIndexRef.current = eventIndex;
+    lastEventIndexRef.current = eventIndex;
+    didMountRef.current = false;
+  }
+  const shouldAnimateEvent =
+    didMountRef.current && eventIndex !== lastEventIndexRef.current;
+  const shouldAnimateInitialEvent =
+    sceneReady && eventIndex === initialEventIndexRef.current;
   const layout = useMemo(
     () => createThreeTableLayout(replay, currentEvent, previousReplay),
     [replay, currentEvent, previousReplay],
   );
+  const animations =
+    shouldAnimateEvent || shouldAnimateInitialEvent ? layout.animations : [];
   const animatedTileIds = new Set(
-    layout.animations.map((animation) => animation.tile.id),
+    animations.map((animation) => animation.tile.id),
   );
   const flickByTileId = new Map(
-    layout.animations
+    animations
       .filter((animation) => animation.flick)
       .map((animation) => [animation.tile.id, animation.flick!]),
   );
   const nonPhysicsAnimatedTileIds = new Set(
-    layout.animations
+    animations
       .filter((animation) => !animation.flick)
       .map((animation) => animation.tile.id),
   );
@@ -90,6 +107,26 @@ export function ThreeGameView({
     (placement) =>
       placement.physics && !nonPhysicsAnimatedTileIds.has(placement.tile.id),
   );
+
+  useEffect(() => {
+    didMountRef.current = true;
+    lastEventIndexRef.current = eventIndex;
+  });
+
+  useEffect(() => {
+    void roundKey;
+    setSceneReady(false);
+    let timeout: number | undefined;
+    const frame = window.requestAnimationFrame(() => {
+      timeout = window.setTimeout(() => setSceneReady(true), 120);
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (timeout !== undefined) {
+        window.clearTimeout(timeout);
+      }
+    };
+  }, [roundKey]);
 
   return (
     <section className="three-viewer" aria-label="3D autonomous game viewer">
@@ -134,26 +171,34 @@ export function ThreeGameView({
                 }
                 flick={flickByTileId.get(placement.tile.id)}
                 settings={flickDebug}
+                startsDynamic={flickByTileId.has(placement.tile.id)}
+                visible={sceneReady}
               />
             ))}
           </Physics>
-          {staticTiles.map((placement) => (
-            <TileMesh key={placement.tile.id} placement={placement} />
-          ))}
-          {layout.animations.map((animation) => (
-            <AnimatedTile
-              key={`${animation.tile.id}-${eventIndex}`}
-              tile={animation.tile}
-              from={animation.from}
-              to={animation.to}
-              fromRotation={animation.fromRotation}
-              toRotation={animation.toRotation}
-              via={animation.via}
-              motion={animation.motion}
-              hideAfterMs={animation.flick?.delayMs}
-            />
-          ))}
-          <TableLabels />
+          <group visible={sceneReady}>
+            {staticTiles.map((placement) => (
+              <TileMesh key={placement.tile.id} placement={placement} />
+            ))}
+            {animations.map((animation) => (
+              <AnimatedTile
+                key={`${animation.tile.id}-${eventIndex}`}
+                tile={animation.tile}
+                from={animation.from}
+                to={animation.to}
+                fromRotation={animation.fromRotation}
+                toRotation={animation.toRotation}
+                via={animation.via}
+                motion={animation.motion}
+                hideAfterMs={
+                  animation.flick
+                    ? animation.flick.delayMs + flickHandoffOverlapMs
+                    : undefined
+                }
+              />
+            ))}
+            <TableLabels />
+          </group>
         </Suspense>
         <OrbitControls
           enablePan={false}
@@ -310,6 +355,8 @@ function DiscardPhysicsTile({
   placement,
   flick,
   settings,
+  startsDynamic,
+  visible,
 }: {
   placement: TilePlacement;
   flick?: {
@@ -320,11 +367,15 @@ function DiscardPhysicsTile({
     delayMs: number;
   };
   settings: FlickDebugSettings;
+  startsDynamic: boolean;
+  visible: boolean;
 }) {
   const [isActive, setIsActive] = useState(!flick);
+  const [bodyType, setBodyType] = useState<RigidBodyProps["type"]>(
+    startsDynamic ? "dynamic" : "fixed",
+  );
   const didApplyFlickRef = useRef(false);
   const pendingFlickRef = useRef(flick);
-  const canInterruptFlickRef = useRef(false);
   const latestPlacementRef = useRef(placement);
   const initialPlacementRef = useRef(placement);
   const bodyRef = useRef<RapierRigidBody>(null);
@@ -333,30 +384,23 @@ function DiscardPhysicsTile({
   useEffect(() => {
     if (flick) {
       pendingFlickRef.current = flick;
-      canInterruptFlickRef.current = false;
+      initialPlacementRef.current = latestPlacementRef.current;
+      setBodyType("dynamic");
       setIsActive(false);
       didApplyFlickRef.current = false;
-      const revealTimeout = window.setTimeout(() => {
-        canInterruptFlickRef.current = true;
-      }, discardRevealDurationMs);
-      const timeout = window.setTimeout(() => setIsActive(true), flick.delayMs);
-      return () => {
-        window.clearTimeout(revealTimeout);
-        window.clearTimeout(timeout);
-      };
+      const timeout = window.setTimeout(
+        () => setIsActive(true),
+        Math.max(0, flick.delayMs - flickHandoffOverlapMs),
+      );
+      return () => window.clearTimeout(timeout);
     }
 
-    if (
-      pendingFlickRef.current &&
-      canInterruptFlickRef.current &&
-      !didApplyFlickRef.current
-    ) {
+    if (pendingFlickRef.current && !didApplyFlickRef.current) {
       setIsActive(true);
       return;
     }
 
     pendingFlickRef.current = undefined;
-    canInterruptFlickRef.current = false;
     if (!didApplyFlickRef.current) {
       initialPlacementRef.current = latestPlacementRef.current;
     }
@@ -376,7 +420,7 @@ function DiscardPhysicsTile({
     }
     didApplyFlickRef.current = true;
     pendingFlickRef.current = undefined;
-    canInterruptFlickRef.current = false;
+    setBodyType("dynamic");
     bodyRef.current.setAngvel(
       {
         x: activeFlick.angularVelocity[0] * settings.spin,
@@ -402,6 +446,7 @@ function DiscardPhysicsTile({
   return (
     <RigidBody
       ref={bodyRef}
+      type={bodyType}
       colliders={false}
       position={initialPlacementRef.current.position}
       rotation={initialPlacementRef.current.rotation}
@@ -414,7 +459,9 @@ function DiscardPhysicsTile({
       <CuboidCollider
         args={[tileSize.width / 2, tileSize.height / 2, tileSize.depth / 2]}
       />
-      <TileBlock tile={initialPlacementRef.current.tile} faceUp />
+      <group visible={visible}>
+        <TileBlock tile={initialPlacementRef.current.tile} faceUp />
+      </group>
     </RigidBody>
   );
 }
