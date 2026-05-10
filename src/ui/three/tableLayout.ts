@@ -2,6 +2,7 @@ import type { GameEvent } from "../../sim/events";
 import type { ReplayState } from "../../sim/replay";
 import type { PlayerId } from "../../sim/state";
 import { sortTiles, type TileInstance } from "../../sim/tiles";
+import { createShuffledWalls } from "../../sim/wall";
 
 export type Vec3 = [number, number, number];
 
@@ -27,6 +28,7 @@ export type TileAnimation = {
     {
       type:
         | "tileDrawn"
+        | "tilesDrawn"
         | "tileDiscarded"
         | "flowerExposed"
         | "claimMade"
@@ -99,8 +101,8 @@ function createStaticThreeTableLayout(
   currentEvent?: GameEvent,
 ): TilePlacement[] {
   const tiles: TilePlacement[] = [
-    ...layoutWall(replay.wall, "wall"),
-    ...layoutWall(replay.deadWall, "deadWall"),
+    ...layoutWall(replay.wall, "wall", replay.seed),
+    ...layoutWall(replay.deadWall, "deadWall", replay.seed),
     ...replay.players.flatMap((player) => [
       ...(currentEvent?.type === "winDeclared" &&
       currentEvent.player === player.id
@@ -417,15 +419,18 @@ function layoutDiscards(
 function layoutWall(
   tiles: readonly TileInstance[],
   owner: "wall" | "deadWall",
+  seed?: string,
 ): TilePlacement[] {
-  const offset = owner === "wall" ? 0 : wallSideTiles * 3 + 4;
+  const offset = seed ? 0 : owner === "wall" ? 0 : wallSideTiles * 3 + 4;
+  const wallSlots = seed ? wallSlotMap(seed) : undefined;
 
   return tiles.map((tile, index) => {
-    const pathIndex = (index + offset) % (wallSideTiles * 4);
+    const wallIndex = wallSlots?.get(tile.id) ?? index;
+    const pathIndex = (wallIndex + offset) % (wallSideTiles * 4);
     const side = Math.floor(pathIndex / wallSideTiles);
     const sideIndex = pathIndex % wallSideTiles;
     const line = -wallRunRadius + sideIndex * tileSize.width;
-    const stack = Math.floor(index / (wallSideTiles * 4));
+    const stack = Math.floor(wallIndex / (wallSideTiles * 4));
     const y = tableY + stack * (tileSize.height + 0.01);
 
     if (side === 0) {
@@ -461,6 +466,31 @@ function layoutWall(
   });
 }
 
+const wallSlotCache = new Map<string, Map<string, number>>();
+
+function wallSlotMap(seed: string): Map<string, number> {
+  const cached = wallSlotCache.get(seed);
+  if (cached) {
+    return cached;
+  }
+
+  const shuffledWalls = createShuffledWalls(seed);
+  const slots = new Map(
+    [...shuffledWalls.wall, ...shuffledWalls.deadWall].map((tile, index) => [
+      tile.id,
+      physicalWallIndexFromDrawIndex(index),
+    ]),
+  );
+  wallSlotCache.set(seed, slots);
+  return slots;
+}
+
+function physicalWallIndexFromDrawIndex(index: number): number {
+  const stackSize = wallSideTiles * 4;
+  const pairIndex = Math.floor(index / 2);
+  return pairIndex + (index % 2 === 0 ? stackSize : 0);
+}
+
 function wallPlacement(
   tile: TileInstance,
   owner: "wall" | "deadWall",
@@ -483,26 +513,31 @@ function currentEventAnimations(
   replay: ReplayState,
   event: GameEvent | undefined,
 ): TileAnimation[] {
-  if (event?.type === "tileDrawn") {
-    const finalPlacement = tiles.find(
-      (placement) => placement.tile.id === event.tile.id,
-    );
-    const previousPlacement = previousTiles.find(
-      (placement) => placement.tile.id === event.tile.id,
-    );
-    return [
-      {
-        tile: event.tile,
+  if (event?.type === "tileDrawn" || event?.type === "tilesDrawn") {
+    const eventTiles = event.type === "tileDrawn" ? [event.tile] : event.tiles;
+    return eventTiles.map((tile) => {
+      const finalPlacement = tiles.find(
+        (placement) => placement.tile.id === tile.id,
+      );
+      const previousPlacement = previousTiles.find(
+        (placement) => placement.tile.id === tile.id,
+      );
+      return {
+        tile,
         event,
-        from: previousPlacement?.position ?? sourcePosition(event.source),
+        from:
+          previousPlacement?.position ??
+          sourcePosition(
+            event.type === "tileDrawn" ? event.source : "liveWall",
+          ),
         to:
           finalPlacement?.position ??
           playerHandRowPosition(event.player, 0, 1, handRadius),
         fromRotation: previousPlacement?.rotation ?? playerTileRotation(0),
         toRotation:
           finalPlacement?.rotation ?? playerHandTileRotation(event.player),
-      },
-    ];
+      };
+    });
   }
 
   if (event?.type === "tileDiscarded") {

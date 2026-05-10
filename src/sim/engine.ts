@@ -57,9 +57,9 @@ export function createInitialRound(seed: string): {
   };
   const events: GameEvent[] = [];
 
-  for (let handSize = 0; handSize < 16; handSize += 1) {
+  for (let packet = 0; packet < 4; packet += 1) {
     for (const player of state.players) {
-      drawLiveTileIntoHand(state, player.id, events, "setup", 0);
+      drawLiveTilesIntoHand(state, player.id, 4, events);
     }
   }
   drawLiveTileIntoHand(state, state.dealer, events, "setup", 0);
@@ -287,6 +287,37 @@ function drawLiveTileIntoHand(
   state.players[playerId].hand.push(tile);
   events.push(drawEvent(state, playerId, tile, false, "liveWall", phase, turn));
   return tile;
+}
+
+function drawLiveTilesIntoHand(
+  state: RoundState,
+  playerId: PlayerId,
+  count: number,
+  events: GameEvent[],
+): TileInstance[] {
+  const tiles: TileInstance[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const tile = drawLiveTile(state);
+    if (!tile) {
+      break;
+    }
+    state.players[playerId].hand.push(tile);
+    tiles.push(tile);
+  }
+
+  if (tiles.length > 0) {
+    events.push({
+      ...eventMeta("setup", 0),
+      type: "tilesDrawn",
+      player: playerId,
+      tiles,
+      source: "liveWall",
+      wallCount: state.wall.length,
+      deadWallCount: state.deadWall.length,
+    });
+  }
+
+  return tiles;
 }
 
 function replaceDealtFlowers(state: RoundState, events: GameEvent[]): void {

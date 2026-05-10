@@ -4,6 +4,7 @@ import { simulateRound } from "../../sim/engine";
 import type { GameEvent } from "../../sim/events";
 import { replayEvents, type ReplayState } from "../../sim/replay";
 import { createTileSet } from "../../sim/tiles";
+import { createShuffledWalls } from "../../sim/wall";
 import {
   createThreeTableLayout,
   discardFallPosition,
@@ -141,14 +142,94 @@ describe("3D table layout", () => {
     }
   });
 
-  test("packs player rows and wall sides edge to edge without corner overlap", () => {
+  test("keeps live wall draw origins in their seeded physical slots", () => {
     const result = simulateRound({
-      seed: "three-spacing",
+      seed: "three-wall-origin",
       bots: createBaselineBots(),
-      maxTurns: 1,
+      maxTurns: 4,
     });
-    const replay = replayEvents(result.events);
-    const layout = createThreeTableLayout(replay, replay.currentEvent);
+    const drawIndex = result.events.findIndex(
+      (event) => event.type === "tileDrawn" && event.phase === "turn",
+    );
+    const drawEvent = result.events[drawIndex];
+    const replay = replayEvents(result.events, drawIndex);
+    const previousReplay = replayEvents(result.events, drawIndex - 1);
+    const layout = createThreeTableLayout(replay, drawEvent, previousReplay);
+    const compressedPreviousReplay: ReplayState = { ...previousReplay };
+    delete compressedPreviousReplay.seed;
+
+    expect(drawEvent?.type).toBe("tileDrawn");
+    if (drawEvent?.type === "tileDrawn") {
+      const stablePreviousPlacement = createThreeTableLayout(
+        previousReplay,
+        undefined,
+      ).tiles.find((placement) => placement.tile.id === drawEvent.tile.id);
+      const compressedPreviousPlacement = createThreeTableLayout(
+        compressedPreviousReplay,
+        undefined,
+      ).tiles.find((placement) => placement.tile.id === drawEvent.tile.id);
+      const drawAnimation = layout.animations[0];
+
+      expect(stablePreviousPlacement).toBeDefined();
+      expect(compressedPreviousPlacement).toBeDefined();
+      expect(drawAnimation?.from).toEqual(stablePreviousPlacement!.position);
+      expect(drawAnimation?.from).not.toEqual(
+        compressedPreviousPlacement!.position,
+      );
+    }
+  });
+
+  test("lays live wall draw order as top then bottom of each stack", () => {
+    const seed = "three-wall-stack-order";
+    const { wall, deadWall } = createShuffledWalls(seed);
+    const replay = emptyReplayState();
+    replay.seed = seed;
+    replay.wall = wall;
+    replay.deadWall = deadWall;
+    const layout = createThreeTableLayout(replay, undefined);
+    const firstTile = layout.tiles.find(
+      (placement) => placement.tile.id === wall[0].id,
+    );
+    const secondTile = layout.tiles.find(
+      (placement) => placement.tile.id === wall[1].id,
+    );
+
+    expect(firstTile).toBeDefined();
+    expect(secondTile).toBeDefined();
+    expect(firstTile!.position[0]).toBeCloseTo(secondTile!.position[0], 5);
+    expect(firstTile!.position[2]).toBeCloseTo(secondTile!.position[2], 5);
+    expect(firstTile!.position[1]).toBeGreaterThan(secondTile!.position[1]);
+  });
+
+  test("positions live and dead wall tiles as one contiguous two-high square", () => {
+    const seed = "three-contiguous-wall";
+    const { wall, deadWall } = createShuffledWalls(seed);
+    const replay = emptyReplayState();
+    replay.seed = seed;
+    replay.wall = wall;
+    replay.deadWall = deadWall;
+    const layout = createThreeTableLayout(replay, undefined);
+    const wallPlacements = layout.tiles.filter(
+      (placement) =>
+        placement.owner === "wall" || placement.owner === "deadWall",
+    );
+    const stackCounts = new Map<string, number>();
+
+    for (const placement of wallPlacements) {
+      const key = `${placement.position[0].toFixed(5)},${placement.position[2].toFixed(5)}`;
+      stackCounts.set(key, (stackCounts.get(key) ?? 0) + 1);
+    }
+
+    expect(wallPlacements).toHaveLength(144);
+    expect(stackCounts).toHaveLength(72);
+    expect([...stackCounts.values()].every((count) => count === 2)).toBe(true);
+  });
+
+  test("packs player rows and wall sides edge to edge without corner overlap", () => {
+    const replay = emptyReplayState();
+    replay.wall = createTileSet().slice(0, 72);
+    replay.players[0].hand = createTileSet().slice(72, 74);
+    const layout = createThreeTableLayout(replay, undefined);
     const eastHand = layout.tiles
       .filter(
         (placement) => placement.owner === "hand" && placement.player === 0,

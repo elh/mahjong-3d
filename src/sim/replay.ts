@@ -15,6 +15,7 @@ export type ReplayPlayer = {
 };
 
 export type ReplayState = {
+  seed?: string;
   players: [ReplayPlayer, ReplayPlayer, ReplayPlayer, ReplayPlayer];
   wall: TileInstance[];
   deadWall: TileInstance[];
@@ -54,6 +55,7 @@ export function replayEvents(
     rulesErrors: [],
   };
   if (roundStart?.type === "roundStarted") {
+    state.seed = roundStart.seed;
     initializeWalls(state, roundStart.seed);
   }
 
@@ -89,6 +91,17 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
       state.players[event.player].hand = sortTiles([
         ...state.players[event.player].hand,
         event.tile,
+      ]);
+      return;
+    case "tilesDrawn":
+      for (const tile of event.tiles) {
+        removeTile(state.wall, tile.id);
+      }
+      state.wallCount = event.wallCount;
+      state.deadWallCount = event.deadWallCount;
+      state.players[event.player].hand = sortTiles([
+        ...state.players[event.player].hand,
+        ...event.tiles,
       ]);
       return;
     case "flowerExposed": {

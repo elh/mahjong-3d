@@ -27,6 +27,7 @@ import {
 
 const tileBackThickness = tileSize.height * 0.18;
 const tileCornerRadius = 0.035;
+const discardRevealDurationMs = 380;
 
 type FlickDebugSettings = {
   force: number;
@@ -323,24 +324,42 @@ function DiscardPhysicsTile({
   const [isActive, setIsActive] = useState(!flick);
   const didApplyFlickRef = useRef(false);
   const pendingFlickRef = useRef(flick);
+  const canInterruptFlickRef = useRef(false);
+  const latestPlacementRef = useRef(placement);
   const initialPlacementRef = useRef(placement);
   const bodyRef = useRef<RapierRigidBody>(null);
+  latestPlacementRef.current = placement;
 
   useEffect(() => {
     if (flick) {
       pendingFlickRef.current = flick;
+      canInterruptFlickRef.current = false;
       setIsActive(false);
       didApplyFlickRef.current = false;
+      const revealTimeout = window.setTimeout(() => {
+        canInterruptFlickRef.current = true;
+      }, discardRevealDurationMs);
       const timeout = window.setTimeout(() => setIsActive(true), flick.delayMs);
-      return () => window.clearTimeout(timeout);
+      return () => {
+        window.clearTimeout(revealTimeout);
+        window.clearTimeout(timeout);
+      };
     }
 
-    if (pendingFlickRef.current && !didApplyFlickRef.current) {
+    if (
+      pendingFlickRef.current &&
+      canInterruptFlickRef.current &&
+      !didApplyFlickRef.current
+    ) {
       setIsActive(true);
       return;
     }
 
     pendingFlickRef.current = undefined;
+    canInterruptFlickRef.current = false;
+    if (!didApplyFlickRef.current) {
+      initialPlacementRef.current = latestPlacementRef.current;
+    }
     setIsActive(true);
     return;
   }, [flick]);
@@ -357,6 +376,7 @@ function DiscardPhysicsTile({
     }
     didApplyFlickRef.current = true;
     pendingFlickRef.current = undefined;
+    canInterruptFlickRef.current = false;
     bodyRef.current.setAngvel(
       {
         x: activeFlick.angularVelocity[0] * settings.spin,

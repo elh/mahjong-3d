@@ -246,23 +246,54 @@ describe("simulation", () => {
       if ("tile" in event && event.tile) {
         return `${event.type}:${event.player}:${tileKey(event.tile.kind)}`;
       }
+      if (event.type === "tilesDrawn") {
+        return `${event.type}:${event.player}:${event.tiles.map((tile) => tileKey(tile.kind)).join(",")}`;
+      }
       return "wallCount" in event
         ? `${event.type}:${event.wallCount}`
         : event.type;
     });
 
     expect(compactLog).toEqual([
-      "tileDrawn:0:d5",
-      "tileDrawn:1:b1",
-      "tileDrawn:2:c3",
-      "tileDrawn:3:dragon-green",
-      "tileDrawn:0:d4",
-      "tileDrawn:1:wind-east",
-      "tileDrawn:2:b3",
-      "tileDrawn:3:c2",
-      "tileDrawn:0:d9",
-      "tileDrawn:1:d6",
+      "tilesDrawn:0:d5,b1,c3,dragon-green",
+      "tilesDrawn:1:d4,wind-east,b3,c2",
+      "tilesDrawn:2:d9,d6,c7,c5",
+      "tilesDrawn:3:d6,wind-west,d4,b7",
+      "tilesDrawn:0:b8,b9,b3,b1",
+      "tilesDrawn:1:d8,d5,b7,c6",
+      "tilesDrawn:2:b4,c2,d2,b9",
+      "tilesDrawn:3:wind-north,c5,b7,wind-west",
+      "tilesDrawn:0:wind-south,d9,b2,wind-north",
+      "tilesDrawn:1:d6,c7,d1,b4",
     ]);
+  });
+
+  test("deals setup tiles in four-tile packets plus East opening tile", () => {
+    const { events } = createInitialRound("setup-packets");
+    const setupDraws = events.filter(
+      (event) => event.type === "tilesDrawn" || event.type === "tileDrawn",
+    );
+    const packets = setupDraws.filter((event) => event.type === "tilesDrawn");
+    const openingDraw = [...setupDraws]
+      .reverse()
+      .find(
+        (event) => event.type === "tileDrawn" && event.source === "liveWall",
+      );
+
+    expect(packets).toHaveLength(16);
+    expect(
+      packets.every(
+        (event) => event.type === "tilesDrawn" && event.tiles.length === 4,
+      ),
+    ).toBe(true);
+    expect(packets.map((event) => event.player)).toEqual([
+      0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3,
+    ]);
+    expect(openingDraw?.type).toBe("tileDrawn");
+    if (openingDraw?.type === "tileDrawn") {
+      expect(openingDraw.player).toBe(0);
+      expect(openingDraw.replacement).toBe(false);
+    }
   });
 
   test("runs to a meaningful terminal event", () => {
@@ -301,7 +332,7 @@ describe("simulation", () => {
 
   test("declares concealed kongs and draws a supplement before discard", () => {
     const result = simulateRound({
-      seed: "smart-concealed-4",
+      seed: "smart-concealed-9",
       bots: createBaselineBots(),
       maxTurns: 300,
     });
@@ -329,7 +360,7 @@ describe("simulation", () => {
 
   test("claimed kongs wait for a supplement draw without a rules error", () => {
     const result = simulateRound({
-      seed: "kong-bug-1",
+      seed: "kong-bug-2",
       bots: createBaselineBots(),
       maxTurns: 80,
     });
@@ -344,24 +375,30 @@ describe("simulation", () => {
 
     const kong = result.events[kongIndex];
     const replacement = result.events[kongIndex + 1];
-    const discard = result.events[kongIndex + 2];
-
     expect(kong.type).toBe("kongDeclared");
-    if (kong.type === "kongDeclared") {
-      expect(kong.kong).toBe("claimed");
-      expect(kong.from).toBeDefined();
-      expect(kong.tile).toBeDefined();
+    if (kong.type !== "kongDeclared") {
+      throw new Error("missing claimed kong event");
     }
+    const discard = result.events.find(
+      (event, index) =>
+        index > kongIndex &&
+        event.type === "tileDiscarded" &&
+        event.player === kong.player,
+    );
+
+    expect(kong.kong).toBe("claimed");
+    expect(kong.from).toBeDefined();
+    expect(kong.tile).toBeDefined();
     expect(replacement.type).toBe("tileDrawn");
     if (kong.type === "kongDeclared" && replacement.type === "tileDrawn") {
       expect(replacement.player).toBe(kong.player);
       expect(replacement.replacement).toBe(true);
       expect(replacement.source).toBe("deadWall");
     }
-    expect(discard.type).toBe("tileDiscarded");
-    if (kong.type === "kongDeclared" && discard.type === "tileDiscarded") {
+    expect(discard?.type).toBe("tileDiscarded");
+    if (kong.type === "kongDeclared" && discard?.type === "tileDiscarded") {
       expect(discard.player).toBe(kong.player);
-      expect(discard.handCount).toBe(13);
+      expect(discard.handCount).toBe(10);
     }
   });
 

@@ -18,6 +18,8 @@ export function eventTitle(event: GameEvent | undefined): ReactNode {
           {playerNames[event.player]} drew <InlineTile tile={event.tile} />
         </>
       );
+    case "tilesDrawn":
+      return `${playerNames[event.player]} drew ${event.tiles.length} tiles`;
     case "tileDiscarded":
       return (
         <>
@@ -71,6 +73,8 @@ export function eventLogTitle(event: GameEvent): string {
       return "Round started";
     case "tileDrawn":
       return `${playerNames[event.player]} drew ${tileAlt(event.tile)}`;
+    case "tilesDrawn":
+      return `${playerNames[event.player]} drew ${event.tiles.length} tiles`;
     case "tileDiscarded":
       return `${playerNames[event.player]} discarded ${tileAlt(event.tile)}`;
     case "flowerExposed":
@@ -103,6 +107,8 @@ export function eventDetail(event: GameEvent | undefined): ReactNode {
       return `${playerNames[event.dealer]} is dealer. Each player has ${event.handCounts.join(", ")} concealed tiles.`;
     case "tileDrawn":
       return `${event.replacement ? "Supplement draw" : "Turn draw"} from ${event.source === "deadWall" ? "dead wall" : "live wall"} with ${event.wallCount} live tiles left.`;
+    case "tilesDrawn":
+      return `Initial deal packet from the live wall with ${event.wallCount} live tiles left.`;
     case "tileDiscarded":
       return `${playerNames[event.player]} now has ${event.handCount} concealed tiles.`;
     case "flowerExposed":
