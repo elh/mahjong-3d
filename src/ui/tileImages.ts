@@ -2,11 +2,19 @@ import type { TileInstance, TileKind } from "../sim/tiles";
 import { tileLabel } from "../sim/tiles";
 
 export function tileImage(tile: TileInstance): string {
-  return `/tiles/${tileImageName(tile.kind)}`;
+  return publicAssetPath(`tiles/${tileImageName(tile.kind)}`);
+}
+
+export function tileAttributionUrl(): string {
+  return publicAssetPath("tiles/ATTRIBUTION.md");
 }
 
 export function tileAlt(tile: TileInstance): string {
   return tileLabel(tile);
+}
+
+function publicAssetPath(path: string): string {
+  return `${import.meta.env.BASE_URL}${path}`;
 }
 
 function tileImageName(kind: TileKind): string {

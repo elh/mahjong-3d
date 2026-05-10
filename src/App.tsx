@@ -14,7 +14,7 @@ import type {
   SimulationResponse,
 } from "./sim/simulationWorker";
 import type { TileInstance } from "./sim/tiles";
-import { tileAlt, tileImage } from "./ui/tileImages";
+import { tileAlt, tileAttributionUrl, tileImage } from "./ui/tileImages";
 
 const playerNames = ["East", "South", "West", "North"] as const;
 
@@ -485,7 +485,7 @@ export default function App() {
           <p>
             Tile art adapted from{" "}
             <a href="https://demching.itch.io/mahjong">DemChing/Cangjie6</a>,{" "}
-            <a href="/tiles/ATTRIBUTION.md">CC BY-SA 4.0</a>.
+            <a href={tileAttributionUrl()}>CC BY-SA 4.0</a>.
           </p>
         </section>
       )}
