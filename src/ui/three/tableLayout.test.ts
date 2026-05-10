@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { createBaselineBots } from "../../bots/baselineBot";
 import { simulateRound } from "../../sim/engine";
+import type { GameEvent } from "../../sim/events";
 import { replayEvents, type ReplayState } from "../../sim/replay";
 import { createTileSet } from "../../sim/tiles";
 import {
   createThreeTableLayout,
+  discardFallPosition,
   discardDropPosition,
   playerHandRowPosition,
   playerHandTileRotation,
@@ -54,30 +56,59 @@ describe("3D table layout", () => {
 
     const drawEvent = result.events[drawIndex];
     const drawReplay = replayEvents(result.events, drawIndex);
-    const drawLayout = createThreeTableLayout(drawReplay, drawEvent);
-    expect(drawLayout.animation?.event.type).toBe("tileDrawn");
+    const drawPreviousReplay = replayEvents(result.events, drawIndex - 1);
+    const drawLayout = createThreeTableLayout(
+      drawReplay,
+      drawEvent,
+      drawPreviousReplay,
+    );
+    const drawAnimation = drawLayout.animations[0];
+    expect(drawAnimation?.event.type).toBe("tileDrawn");
     if (drawEvent?.type === "tileDrawn") {
-      expect(drawLayout.animation?.to).toEqual(
+      const previousWallPlacement = createThreeTableLayout(
+        drawPreviousReplay,
+        undefined,
+      ).tiles.find((placement) => placement.tile.id === drawEvent.tile.id);
+      expect(previousWallPlacement).toBeDefined();
+      expect(drawAnimation?.from).toEqual(previousWallPlacement!.position);
+      expect(drawAnimation?.to).toEqual(
         expect.arrayContaining([expect.any(Number)]),
       );
     }
 
     const discardEvent = result.events[discardIndex];
     const discardReplay = replayEvents(result.events, discardIndex);
-    const discardLayout = createThreeTableLayout(discardReplay, discardEvent);
-    expect(discardLayout.animation?.event.type).toBe("tileDiscarded");
+    const discardPreviousReplay = replayEvents(result.events, discardIndex - 1);
+    const discardLayout = createThreeTableLayout(
+      discardReplay,
+      discardEvent,
+      discardPreviousReplay,
+    );
+    const discardAnimation = discardLayout.animations[0];
+    expect(discardAnimation?.event.type).toBe("tileDiscarded");
     if (
       discardEvent?.type === "tileDiscarded" &&
-      discardLayout.animation?.event.type === "tileDiscarded"
+      discardAnimation?.event.type === "tileDiscarded"
     ) {
-      expect(discardLayout.animation?.from).toEqual(
-        playerHandRowPosition(discardEvent.player, 0, 1, 3.45),
-      );
-      expect(discardLayout.animation?.rotation).toEqual(
+      const previousHandPlacement = createThreeTableLayout(
+        discardPreviousReplay,
+        undefined,
+      ).tiles.find((placement) => placement.tile.id === discardEvent.tile.id);
+      expect(previousHandPlacement).toBeDefined();
+      expect(discardAnimation.from).toEqual(previousHandPlacement!.position);
+      expect(discardAnimation.fromRotation).toEqual(
         playerHandTileRotation(discardEvent.player),
       );
+      expect(discardAnimation.via).toEqual({
+        position: discardFallPosition(discardEvent.player),
+        rotation: [0, discardEvent.player * (Math.PI / 2), 0],
+        holdMs: 500,
+      });
+      expect(discardAnimation.to[1]).toBeLessThan(
+        playerHandRowPosition(discardEvent.player, 0, 1, 3.45)[1],
+      );
       expect(discardDropPosition(discardEvent.player)[1]).toBeGreaterThan(
-        discardLayout.animation.to[1],
+        discardAnimation.to[1],
       );
     }
   });
@@ -146,6 +177,56 @@ describe("3D table layout", () => {
         5,
       );
     }
+  });
+
+  test("animates claimed tiles from previous discard and hand positions into melds", () => {
+    const tiles = createTileSet();
+    const claimed = tiles[0];
+    const handTiles = tiles.slice(1, 3);
+    const previousReplay = emptyReplayState();
+    previousReplay.players[0].hand = handTiles;
+    previousReplay.players[1].discards = [claimed];
+
+    const replay = emptyReplayState();
+    replay.players[0].melds = [
+      { type: "chow", tiles: [claimed, ...handTiles], claimedFrom: 1 },
+    ];
+    const event: GameEvent = {
+      type: "claimMade",
+      phase: "turn",
+      groupId: "turn-1",
+      turn: 1,
+      player: 0,
+      from: 1,
+      claim: "chow",
+      tile: claimed,
+      tiles: [claimed, ...handTiles],
+    };
+
+    const previousLayout = createThreeTableLayout(previousReplay, undefined);
+    const layout = createThreeTableLayout(replay, event, previousReplay);
+    const claimedAnimation = layout.animations.find(
+      (animation) => animation.tile.id === claimed.id,
+    );
+    const handAnimation = layout.animations.find(
+      (animation) => animation.tile.id === handTiles[0].id,
+    );
+    const previousDiscard = previousLayout.tiles.find(
+      (placement) => placement.tile.id === claimed.id,
+    );
+    const previousHand = previousLayout.tiles.find(
+      (placement) => placement.tile.id === handTiles[0].id,
+    );
+
+    expect(layout.animations).toHaveLength(3);
+    expect(previousDiscard).toBeDefined();
+    expect(previousHand).toBeDefined();
+    expect(claimedAnimation?.from).toEqual(previousDiscard!.position);
+    expect(handAnimation?.from).toEqual(previousHand!.position);
+    expect(claimedAnimation?.to).toEqual(
+      layout.tiles.find((placement) => placement.tile.id === claimed.id)
+        ?.position,
+    );
   });
 
   test("keeps melds and flowers on one fixed auxiliary row", () => {

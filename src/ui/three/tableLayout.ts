@@ -1,7 +1,7 @@
 import type { GameEvent } from "../../sim/events";
 import type { ReplayState } from "../../sim/replay";
 import type { PlayerId } from "../../sim/state";
-import type { TileInstance } from "../../sim/tiles";
+import { sortTiles, type TileInstance } from "../../sim/tiles";
 
 export type Vec3 = [number, number, number];
 
@@ -17,11 +17,30 @@ export type TilePlacement = {
 
 export type ThreeTableLayout = {
   tiles: TilePlacement[];
-  animation?: {
-    event: Extract<GameEvent, { type: "tileDrawn" | "tileDiscarded" }>;
-    from: Vec3;
-    to: Vec3;
+  animations: TileAnimation[];
+};
+
+export type TileAnimation = {
+  tile: TileInstance;
+  event: Extract<
+    GameEvent,
+    {
+      type:
+        | "tileDrawn"
+        | "tileDiscarded"
+        | "flowerExposed"
+        | "claimMade"
+        | "kongDeclared";
+    }
+  >;
+  from: Vec3;
+  to: Vec3;
+  fromRotation: Vec3;
+  toRotation: Vec3;
+  via?: {
+    position: Vec3;
     rotation: Vec3;
+    holdMs?: number;
   };
 };
 
@@ -48,7 +67,22 @@ const wallPerpendicularRadius = wallSideLength / 2 + tileSize.depth / 2;
 export function createThreeTableLayout(
   replay: ReplayState,
   currentEvent: GameEvent | undefined,
+  previousReplay?: ReplayState,
 ): ThreeTableLayout {
+  const tiles = createStaticThreeTableLayout(replay);
+  const previousTiles = previousReplay
+    ? createStaticThreeTableLayout(previousReplay)
+    : [];
+  const animations = currentEventAnimations(
+    tiles,
+    previousTiles,
+    replay,
+    currentEvent,
+  );
+  return { tiles, animations };
+}
+
+function createStaticThreeTableLayout(replay: ReplayState): TilePlacement[] {
   const tiles: TilePlacement[] = [
     ...layoutWall(replay.wall, "wall"),
     ...layoutWall(replay.deadWall, "deadWall"),
@@ -62,9 +96,7 @@ export function createThreeTableLayout(
       ...layoutDiscards(player.discards, player.id),
     ]),
   ];
-
-  const animation = currentEventAnimation(tiles, currentEvent);
-  return { tiles, animation };
+  return tiles;
 }
 
 export function playerAngle(player: PlayerId): number {
@@ -123,6 +155,15 @@ export function discardDropPosition(player: PlayerId): Vec3 {
     forward[0] * discardRadius,
     tableY + 0.45,
     forward[2] * discardRadius,
+  ];
+}
+
+export function discardFallPosition(player: PlayerId): Vec3 {
+  const forward = playerForward(player);
+  return [
+    forward[0] * (handRadius - tileSize.depth * 2.2),
+    tableY + 0.02,
+    forward[2] * (handRadius - tileSize.depth * 2.2),
   ];
 }
 
@@ -326,42 +367,145 @@ function wallPlacement(
   };
 }
 
-function currentEventAnimation(
+function currentEventAnimations(
   tiles: readonly TilePlacement[],
+  previousTiles: readonly TilePlacement[],
+  replay: ReplayState,
   event: GameEvent | undefined,
-): ThreeTableLayout["animation"] {
+): TileAnimation[] {
   if (event?.type === "tileDrawn") {
     const finalPlacement = tiles.find(
       (placement) => placement.tile.id === event.tile.id,
     );
-    return {
-      event,
-      from: sourcePosition(event.source),
-      to:
-        finalPlacement?.position ??
-        playerHandRowPosition(event.player, 0, 1, handRadius),
-      rotation:
-        finalPlacement?.rotation ?? playerHandTileRotation(event.player),
-    };
+    const previousPlacement = previousTiles.find(
+      (placement) => placement.tile.id === event.tile.id,
+    );
+    return [
+      {
+        tile: event.tile,
+        event,
+        from: previousPlacement?.position ?? sourcePosition(event.source),
+        to:
+          finalPlacement?.position ??
+          playerHandRowPosition(event.player, 0, 1, handRadius),
+        fromRotation: previousPlacement?.rotation ?? playerTileRotation(0),
+        toRotation:
+          finalPlacement?.rotation ?? playerHandTileRotation(event.player),
+      },
+    ];
   }
 
   if (event?.type === "tileDiscarded") {
     const finalPlacement = tiles.find(
       (placement) => placement.tile.id === event.tile.id,
     );
-    return {
-      event,
-      from: playerHandRowPosition(event.player, 0, 1, handRadius),
-      to: finalPlacement?.position ?? discardDropPosition(event.player),
-      rotation: playerHandTileRotation(event.player),
-    };
+    const previousPlacement =
+      previousTiles.find((placement) => placement.tile.id === event.tile.id) ??
+      previousDiscardHandPlacement(replay, event);
+    return [
+      {
+        tile: event.tile,
+        event,
+        from: previousPlacement.position,
+        to: finalPlacement?.position ?? discardDropPosition(event.player),
+        fromRotation: previousPlacement.rotation,
+        toRotation:
+          finalPlacement?.rotation ?? playerTileRotation(event.player),
+        via: {
+          position: discardFallPosition(event.player),
+          rotation: playerTileRotation(event.player),
+          holdMs: 500,
+        },
+      },
+    ];
   }
 
-  return undefined;
+  if (event?.type === "flowerExposed") {
+    return meldTileAnimation(
+      event.tile,
+      event,
+      tiles,
+      previousTiles,
+      event.player,
+    );
+  }
+
+  if (event?.type === "claimMade") {
+    return event.tiles.flatMap((tile) =>
+      meldTileAnimation(tile, event, tiles, previousTiles, event.player),
+    );
+  }
+
+  if (event?.type === "kongDeclared") {
+    return event.tiles.flatMap((tile) =>
+      meldTileAnimation(tile, event, tiles, previousTiles, event.player),
+    );
+  }
+
+  return [];
 }
 
 function sourcePosition(source: "liveWall" | "deadWall"): Vec3 {
   return source === "deadWall"
     ? [-wallPerpendicularRadius, tableY + 0.28, -wallPerpendicularRadius]
     : [0, tableY + 0.28, wallPerpendicularRadius];
+}
+
+function previousDiscardHandPlacement(
+  replay: ReplayState,
+  event: Extract<GameEvent, { type: "tileDiscarded" }>,
+): Pick<TilePlacement, "position" | "rotation"> {
+  const handBeforeDiscard = sortTiles([
+    ...replay.players[event.player].hand,
+    event.tile,
+  ]);
+  const tileIndex = handBeforeDiscard.findIndex(
+    (tile) => tile.id === event.tile.id,
+  );
+  const index = tileIndex === -1 ? handBeforeDiscard.length - 1 : tileIndex;
+  return {
+    position: playerHandRowPosition(
+      event.player,
+      index,
+      handBeforeDiscard.length,
+      handRadius,
+    ),
+    rotation: playerHandTileRotation(event.player),
+  };
+}
+
+function meldTileAnimation(
+  tile: TileInstance,
+  event: Extract<
+    GameEvent,
+    { type: "flowerExposed" | "claimMade" | "kongDeclared" }
+  >,
+  tiles: readonly TilePlacement[],
+  previousTiles: readonly TilePlacement[],
+  player: PlayerId,
+): TileAnimation[] {
+  const finalPlacement = tiles.find(
+    (placement) =>
+      placement.tile.id === tile.id &&
+      (placement.owner === "meld" || placement.owner === "flower"),
+  );
+  if (!finalPlacement) {
+    return [];
+  }
+
+  const previousPlacement = previousTiles.find(
+    (placement) => placement.tile.id === tile.id,
+  );
+
+  return [
+    {
+      tile,
+      event,
+      from: previousPlacement?.position ?? finalPlacement.position,
+      to: finalPlacement.position,
+      fromRotation:
+        previousPlacement?.rotation ?? playerHandTileRotation(player),
+      toRotation: finalPlacement.rotation,
+    },
+  ];
 }

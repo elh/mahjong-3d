@@ -5,7 +5,8 @@ import {
   RefreshCw,
   SkipBack,
 } from "lucide-react";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { replayEvents } from "./sim/replay";
 import { EventLog } from "./ui/EventLog";
 import { eventDetail, eventTitle } from "./ui/eventText";
 import { InfoModal } from "./ui/InfoModal";
@@ -78,6 +79,10 @@ export default function App() {
     startEventHold,
     clickStepButton,
   } = simulation;
+  const previousReplay = useMemo(
+    () => (eventIndex > 0 ? replayEvents(events, eventIndex - 1) : undefined),
+    [events, eventIndex],
+  );
 
   useEffect(() => {
     if (!currentEvent) {
@@ -242,6 +247,7 @@ export default function App() {
         >
           <ThreeGameView
             replay={replay}
+            previousReplay={previousReplay}
             currentEvent={currentEvent}
             eventIndex={eventIndex}
           />

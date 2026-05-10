@@ -20,7 +20,6 @@ import type { TileInstance } from "../../sim/tiles";
 import { tileImage } from "../tileImages";
 import {
   createThreeTableLayout,
-  discardDropPosition,
   type TilePlacement,
   tileSize,
   type Vec3,
@@ -31,22 +30,26 @@ const tileCornerRadius = 0.035;
 
 type ThreeGameViewProps = {
   replay: ReplayState;
+  previousReplay: ReplayState | undefined;
   currentEvent: GameEvent | undefined;
   eventIndex: number;
 };
 
 export function ThreeGameView({
   replay,
+  previousReplay,
   currentEvent,
   eventIndex,
 }: ThreeGameViewProps) {
   const layout = useMemo(
-    () => createThreeTableLayout(replay, currentEvent),
-    [replay, currentEvent],
+    () => createThreeTableLayout(replay, currentEvent, previousReplay),
+    [replay, currentEvent, previousReplay],
   );
-  const animatedTileId = layout.animation?.event.tile.id;
+  const animatedTileIds = new Set(
+    layout.animations.map((animation) => animation.tile.id),
+  );
   const visibleTiles = layout.tiles.filter(
-    (placement) => placement.tile.id !== animatedTileId,
+    (placement) => !animatedTileIds.has(placement.tile.id),
   );
   const staticTiles = visibleTiles.filter((placement) => !placement.physics);
   const discardTiles = visibleTiles.filter((placement) => placement.physics);
@@ -79,35 +82,21 @@ export function ThreeGameView({
                 eventIndex={eventIndex}
               />
             ))}
-            {layout.animation?.event.type === "tileDiscarded" && (
-              <PhysicsTile
-                key={`${layout.animation.event.tile.id}-active-${eventIndex}`}
-                placement={{
-                  tile: layout.animation.event.tile,
-                  owner: "discard",
-                  player: layout.animation.event.player,
-                  position: layout.animation.from,
-                  rotation: layout.animation.rotation,
-                  faceUp: true,
-                  physics: true,
-                }}
-                target={discardDropPosition(layout.animation.event.player)}
-                eventIndex={eventIndex}
-              />
-            )}
           </Physics>
           {staticTiles.map((placement) => (
             <TileMesh key={placement.tile.id} placement={placement} />
           ))}
-          {layout.animation?.event.type === "tileDrawn" && (
+          {layout.animations.map((animation) => (
             <AnimatedTile
-              key={`${layout.animation.event.tile.id}-${eventIndex}`}
-              tile={layout.animation.event.tile}
-              from={layout.animation.from}
-              to={layout.animation.to}
-              rotation={layout.animation.rotation}
+              key={`${animation.tile.id}-${eventIndex}`}
+              tile={animation.tile}
+              from={animation.from}
+              to={animation.to}
+              fromRotation={animation.fromRotation}
+              toRotation={animation.toRotation}
+              via={animation.via}
             />
-          )}
+          ))}
           <TableLabels />
         </Suspense>
         <OrbitControls
@@ -200,31 +189,114 @@ function AnimatedTile({
   tile,
   from,
   to,
-  rotation,
+  fromRotation,
+  toRotation,
+  via,
 }: {
   tile: TileInstance;
   from: Vec3;
   to: Vec3;
-  rotation: Vec3;
+  fromRotation: Vec3;
+  toRotation: Vec3;
+  via?: {
+    position: Vec3;
+    rotation: Vec3;
+    holdMs?: number;
+  };
 }) {
   const ref = useRef<THREE.Group>(null);
   const elapsedRef = useRef(0);
 
   useFrame((_, delta) => {
-    elapsedRef.current = Math.min(elapsedRef.current + delta, 0.64);
-    const t = easeOutCubic(elapsedRef.current / 0.64);
-    const arc = Math.sin(t * Math.PI) * 0.32;
-    ref.current?.position.set(
-      THREE.MathUtils.lerp(from[0], to[0], t),
-      THREE.MathUtils.lerp(from[1], to[1], t) + arc,
-      THREE.MathUtils.lerp(from[2], to[2], t),
+    const holdSeconds = (via?.holdMs ?? 0) / 1000;
+    const firstDuration = via ? 0.38 : 0.64;
+    const secondDuration = via ? 0.46 : 0;
+    const totalDuration = firstDuration + holdSeconds + secondDuration;
+    elapsedRef.current = Math.min(elapsedRef.current + delta, totalDuration);
+    const elapsed = elapsedRef.current;
+
+    if (!via) {
+      const t = easeOutCubic(elapsed / firstDuration);
+      const arc = Math.sin(t * Math.PI) * 0.32;
+      applyAnimatedTransform(
+        ref.current,
+        from,
+        to,
+        fromRotation,
+        toRotation,
+        t,
+        arc,
+      );
+      return;
+    }
+
+    if (elapsed <= firstDuration) {
+      const t = easeOutCubic(elapsed / firstDuration);
+      const arc = Math.sin(t * Math.PI) * 0.08;
+      applyAnimatedTransform(
+        ref.current,
+        from,
+        via.position,
+        fromRotation,
+        via.rotation,
+        t,
+        arc,
+      );
+      return;
+    }
+
+    if (elapsed <= firstDuration + holdSeconds) {
+      applyAnimatedTransform(
+        ref.current,
+        via.position,
+        via.position,
+        via.rotation,
+        via.rotation,
+        1,
+        0,
+      );
+      return;
+    }
+
+    const t = easeInOutCubic(
+      (elapsed - firstDuration - holdSeconds) / secondDuration,
+    );
+    applyAnimatedTransform(
+      ref.current,
+      via.position,
+      to,
+      via.rotation,
+      toRotation,
+      t,
+      0,
     );
   });
 
   return (
-    <group ref={ref} position={from} rotation={rotation}>
+    <group ref={ref} position={from} rotation={fromRotation}>
       <TileBlock tile={tile} faceUp />
     </group>
+  );
+}
+
+function applyAnimatedTransform(
+  group: THREE.Group | null,
+  from: Vec3,
+  to: Vec3,
+  fromRotation: Vec3,
+  toRotation: Vec3,
+  progress: number,
+  arc: number,
+) {
+  group?.position.set(
+    THREE.MathUtils.lerp(from[0], to[0], progress),
+    THREE.MathUtils.lerp(from[1], to[1], progress) + arc,
+    THREE.MathUtils.lerp(from[2], to[2], progress),
+  );
+  group?.rotation.set(
+    THREE.MathUtils.lerp(fromRotation[0], toRotation[0], progress),
+    THREE.MathUtils.lerp(fromRotation[1], toRotation[1], progress),
+    THREE.MathUtils.lerp(fromRotation[2], toRotation[2], progress),
   );
 }
 
@@ -343,4 +415,10 @@ function TableLabels() {
 
 function easeOutCubic(value: number): number {
   return 1 - (1 - value) ** 3;
+}
+
+function easeInOutCubic(value: number): number {
+  return value < 0.5
+    ? 4 * value * value * value
+    : 1 - (-2 * value + 2) ** 3 / 2;
 }
