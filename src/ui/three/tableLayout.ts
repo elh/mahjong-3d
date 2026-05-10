@@ -33,6 +33,8 @@ export const tileSize = {
 
 const tableY = tileSize.height / 2 + 0.01;
 const handRadius = 3.45;
+const playerAuxiliaryRadius = handRadius - tileSize.depth - 0.1;
+const playerAuxiliaryGap = tileSize.width * 1.35;
 const discardRadius = 1.12;
 const wallSideTiles = 18;
 const wallSideLength = tileSize.width * wallSideTiles;
@@ -47,20 +49,11 @@ export function createThreeTableLayout(
     ...layoutWall(replay.wall, "wall"),
     ...layoutWall(replay.deadWall, "deadWall"),
     ...replay.players.flatMap((player) => [
-      ...layoutPlayerRow(player.hand, player.id, "hand", handRadius, 0),
-      ...layoutPlayerRow(
+      ...layoutPlayerArea(
+        player.hand,
         player.melds.flatMap((meld) => meld.tiles),
-        player.id,
-        "meld",
-        handRadius - 0.42,
-        0,
-      ),
-      ...layoutPlayerRow(
         player.flowers,
         player.id,
-        "flower",
-        handRadius - 0.76,
-        0,
       ),
       ...layoutDiscards(player.discards, player.id),
     ]),
@@ -131,6 +124,83 @@ function layoutPlayerRow(
     faceUp: true,
     physics: false,
   }));
+}
+
+function layoutPlayerArea(
+  hand: readonly TileInstance[],
+  melds: readonly TileInstance[],
+  flowers: readonly TileInstance[],
+  player: PlayerId,
+): TilePlacement[] {
+  return [
+    ...layoutPlayerRow(hand, player, "hand", handRadius, 0),
+    ...layoutPlayerAuxiliaryRow(hand.length, melds, flowers, player),
+  ];
+}
+
+function layoutPlayerAuxiliaryRow(
+  handCount: number,
+  melds: readonly TileInstance[],
+  flowers: readonly TileInstance[],
+  player: PlayerId,
+): TilePlacement[] {
+  if (melds.length === 0 && flowers.length === 0) {
+    return [];
+  }
+
+  const handRightEdge = (handCount * tileSize.width) / 2;
+  const gap = melds.length > 0 && flowers.length > 0 ? playerAuxiliaryGap : 0;
+  const auxiliaryWidth = (melds.length + flowers.length) * tileSize.width + gap;
+  const leftEdge = handRightEdge - auxiliaryWidth;
+  const placements: TilePlacement[] = [];
+
+  for (const [index, tile] of melds.entries()) {
+    placements.push(
+      playerAuxiliaryPlacement(
+        tile,
+        "meld",
+        player,
+        leftEdge + tileSize.width / 2 + index * tileSize.width,
+      ),
+    );
+  }
+
+  const flowerLeftEdge = leftEdge + melds.length * tileSize.width + gap;
+  for (const [index, tile] of flowers.entries()) {
+    placements.push(
+      playerAuxiliaryPlacement(
+        tile,
+        "flower",
+        player,
+        flowerLeftEdge + tileSize.width / 2 + index * tileSize.width,
+      ),
+    );
+  }
+
+  return placements;
+}
+
+function playerAuxiliaryPlacement(
+  tile: TileInstance,
+  owner: "meld" | "flower",
+  player: PlayerId,
+  rightOffset: number,
+): TilePlacement {
+  const right = playerRight(player);
+  const forward = playerForward(player);
+  return {
+    tile,
+    owner,
+    player,
+    position: [
+      forward[0] * playerAuxiliaryRadius + right[0] * rightOffset,
+      tableY,
+      forward[2] * playerAuxiliaryRadius + right[2] * rightOffset,
+    ],
+    rotation: playerTileRotation(player),
+    faceUp: true,
+    physics: false,
+  };
 }
 
 function layoutDiscards(

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createBaselineBots } from "../../bots/baselineBot";
 import { simulateRound } from "../../sim/engine";
-import { replayEvents } from "../../sim/replay";
+import { replayEvents, type ReplayState } from "../../sim/replay";
+import { createTileSet } from "../../sim/tiles";
 import {
   createThreeTableLayout,
   discardDropPosition,
@@ -108,6 +109,45 @@ describe("3D table layout", () => {
       5,
     );
   });
+
+  test("keeps melds and flowers on one right-aligned auxiliary row", () => {
+    const tiles = createTileSet();
+    const replay = emptyReplayState();
+    replay.players[0].hand = tiles.slice(0, 6);
+    replay.players[0].melds = [{ type: "pong", tiles: tiles.slice(6, 9) }];
+    replay.players[0].flowers = tiles.slice(9, 11);
+
+    const layout = createThreeTableLayout(replay, undefined);
+    const hand = layout.tiles
+      .filter(
+        (placement) => placement.owner === "hand" && placement.player === 0,
+      )
+      .sort((left, right) => left.position[0] - right.position[0]);
+    const melds = layout.tiles
+      .filter(
+        (placement) => placement.owner === "meld" && placement.player === 0,
+      )
+      .sort((left, right) => left.position[0] - right.position[0]);
+    const flowers = layout.tiles
+      .filter(
+        (placement) => placement.owner === "flower" && placement.player === 0,
+      )
+      .sort((left, right) => left.position[0] - right.position[0]);
+
+    expect(
+      new Set([...melds, ...flowers].map((tile) => tile.position[2])),
+    ).toHaveLength(1);
+    expect(melds[0].position[2]).toBeLessThan(hand[0].position[2]);
+    expect(flowers.at(-1)!.position[0] + tileSize.width / 2).toBeCloseTo(
+      hand.at(-1)!.position[0] + tileSize.width / 2,
+      5,
+    );
+    expect(
+      flowers[0].position[0] -
+        tileSize.width / 2 -
+        (melds.at(-1)!.position[0] + tileSize.width / 2),
+    ).toBeGreaterThan(tileSize.width);
+  });
 });
 
 function distance(
@@ -115,4 +155,23 @@ function distance(
   right: [number, number, number],
 ) {
   return Math.hypot(left[0] - right[0], left[2] - right[2]);
+}
+
+function emptyReplayState(): ReplayState {
+  return {
+    players: [
+      { id: 0, hand: [], flowers: [], discards: [], melds: [] },
+      { id: 1, hand: [], flowers: [], discards: [], melds: [] },
+      { id: 2, hand: [], flowers: [], discards: [], melds: [] },
+      { id: 3, hand: [], flowers: [], discards: [], melds: [] },
+    ],
+    wall: [],
+    deadWall: [],
+    wallCount: 0,
+    deadWallCount: 0,
+    dealer: 0,
+    eventIndex: 0,
+    ended: false,
+    rulesErrors: [],
+  };
 }
