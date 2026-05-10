@@ -13,6 +13,8 @@ import {
   playerHandRowPosition,
   playerHandTileRotation,
   playerRight,
+  playerRevealedHandPosition,
+  playerWinningTilePosition,
   tileSize,
 } from "./tableLayout";
 
@@ -253,6 +255,67 @@ describe("3D table layout", () => {
       layout.tiles.find((placement) => placement.tile.id === claimed.id)
         ?.position,
     );
+  });
+
+  test("reveals a winning hand flat with the winning tile to the right", () => {
+    const tiles = createTileSet();
+    const handTiles = tiles.slice(0, 3);
+    const winningTile = tiles[3];
+    const previousReplay = emptyReplayState();
+    previousReplay.players[0].hand = handTiles;
+    previousReplay.players[1].discards = [winningTile];
+
+    const replay = emptyReplayState();
+    replay.players[0].hand = [...handTiles, winningTile];
+    replay.players[0].melds = [{ type: "pong", tiles: tiles.slice(4, 7) }];
+    replay.players[0].flowers = tiles.slice(7, 9);
+    const event: GameEvent = {
+      type: "winDeclared",
+      phase: "turn",
+      groupId: "turn-1",
+      turn: 1,
+      player: 0,
+      from: 1,
+      tile: winningTile,
+    };
+
+    const previousLayout = createThreeTableLayout(previousReplay, undefined);
+    const layout = createThreeTableLayout(replay, event, previousReplay);
+    const winnerHand = layout.tiles
+      .filter(
+        (placement) => placement.owner === "hand" && placement.player === 0,
+      )
+      .sort((left, right) => left.position[0] - right.position[0]);
+    const winningPlacement = winnerHand.find(
+      (placement) => placement.tile.id === winningTile.id,
+    );
+    const winningAnimation = layout.animations.find(
+      (animation) => animation.tile.id === winningTile.id,
+    );
+    const melds = layout.tiles.filter(
+      (placement) => placement.owner === "meld" && placement.player === 0,
+    );
+    const flowers = layout.tiles.filter(
+      (placement) => placement.owner === "flower" && placement.player === 0,
+    );
+    const previousDiscard = previousLayout.tiles.find(
+      (placement) => placement.tile.id === winningTile.id,
+    );
+
+    expect(layout.animations).toHaveLength(4);
+    expect(melds).toHaveLength(3);
+    expect(flowers).toHaveLength(2);
+    expect(winningPlacement?.position).toEqual(playerWinningTilePosition(0, 3));
+    expect(winnerHand[0].position).toEqual(playerRevealedHandPosition(0, 0, 3));
+    expect(winnerHand[0].rotation).toEqual([0, 0, 0]);
+    expect(
+      winningPlacement!.position[0] -
+        (winnerHand[2].position[0] + tileSize.width),
+    ).toBeCloseTo(tileSize.width, 5);
+    expect(previousDiscard).toBeDefined();
+    expect(winningAnimation?.from).toEqual(previousDiscard!.position);
+    expect(winningAnimation?.to).toEqual(winningPlacement?.position);
+    expect(winningAnimation?.motion).toBe("knockdown");
   });
 
   test("keeps melds and flowers on one fixed auxiliary row", () => {

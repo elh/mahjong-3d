@@ -148,6 +148,7 @@ export function ThreeGameView({
               fromRotation={animation.fromRotation}
               toRotation={animation.toRotation}
               via={animation.via}
+              motion={animation.motion}
               hideAfterMs={animation.flick?.delayMs}
             />
           ))}
@@ -321,38 +322,54 @@ function DiscardPhysicsTile({
 }) {
   const [isActive, setIsActive] = useState(!flick);
   const didApplyFlickRef = useRef(false);
+  const pendingFlickRef = useRef(flick);
   const initialPlacementRef = useRef(placement);
   const bodyRef = useRef<RapierRigidBody>(null);
 
   useEffect(() => {
-    if (!flick) {
+    if (flick) {
+      pendingFlickRef.current = flick;
+      setIsActive(false);
+      didApplyFlickRef.current = false;
+      const timeout = window.setTimeout(() => setIsActive(true), flick.delayMs);
+      return () => window.clearTimeout(timeout);
+    }
+
+    if (pendingFlickRef.current && !didApplyFlickRef.current) {
       setIsActive(true);
       return;
     }
-    setIsActive(false);
-    didApplyFlickRef.current = false;
-    const timeout = window.setTimeout(() => setIsActive(true), flick.delayMs);
-    return () => window.clearTimeout(timeout);
+
+    pendingFlickRef.current = undefined;
+    setIsActive(true);
+    return;
   }, [flick]);
 
   useFrame(() => {
-    if (!flick || !isActive || !bodyRef.current || didApplyFlickRef.current) {
+    const activeFlick = flick ?? pendingFlickRef.current;
+    if (
+      !activeFlick ||
+      !isActive ||
+      !bodyRef.current ||
+      didApplyFlickRef.current
+    ) {
       return;
     }
     didApplyFlickRef.current = true;
+    pendingFlickRef.current = undefined;
     bodyRef.current.setAngvel(
       {
-        x: flick.angularVelocity[0] * settings.spin,
-        y: flick.angularVelocity[1] * settings.spin,
-        z: flick.angularVelocity[2] * settings.spin,
+        x: activeFlick.angularVelocity[0] * settings.spin,
+        y: activeFlick.angularVelocity[1] * settings.spin,
+        z: activeFlick.angularVelocity[2] * settings.spin,
       },
       true,
     );
     bodyRef.current.setLinvel(
       {
-        x: flick.linearVelocity[0] * settings.force,
-        y: flick.linearVelocity[1] * settings.lift,
-        z: flick.linearVelocity[2] * settings.force,
+        x: activeFlick.linearVelocity[0] * settings.force,
+        y: activeFlick.linearVelocity[1] * settings.lift,
+        z: activeFlick.linearVelocity[2] * settings.force,
       },
       true,
     );
@@ -389,6 +406,7 @@ function AnimatedTile({
   fromRotation,
   toRotation,
   via,
+  motion = "arc",
   hideAfterMs,
 }: {
   tile: TileInstance;
@@ -401,6 +419,7 @@ function AnimatedTile({
     rotation: Vec3;
     holdMs?: number;
   };
+  motion?: "arc" | "knockdown";
   hideAfterMs?: number;
 }) {
   const ref = useRef<THREE.Group>(null);
@@ -425,7 +444,10 @@ function AnimatedTile({
 
     if (!via) {
       const t = easeOutCubic(elapsed / firstDuration);
-      const arc = Math.sin(t * Math.PI) * 0.32;
+      const arc =
+        motion === "knockdown"
+          ? Math.sin(t * Math.PI) * 0.035
+          : Math.sin(t * Math.PI) * 0.32;
       applyAnimatedTransform(
         ref.current,
         from,
@@ -434,6 +456,7 @@ function AnimatedTile({
         toRotation,
         t,
         arc,
+        motion,
       );
       return;
     }
@@ -499,13 +522,27 @@ function applyAnimatedTransform(
   toRotation: Vec3,
   progress: number,
   arc: number,
+  motion: "arc" | "knockdown" = "arc",
 ) {
-  group?.position.set(
+  if (!group) {
+    return;
+  }
+  group.position.set(
     THREE.MathUtils.lerp(from[0], to[0], progress),
     THREE.MathUtils.lerp(from[1], to[1], progress) + arc,
     THREE.MathUtils.lerp(from[2], to[2], progress),
   );
-  group?.rotation.set(
+  if (motion === "knockdown") {
+    const fromQuaternion = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(fromRotation[0], fromRotation[1], fromRotation[2]),
+    );
+    const toQuaternion = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(toRotation[0], toRotation[1], toRotation[2]),
+    );
+    group.quaternion.copy(fromQuaternion).slerp(toQuaternion, progress);
+    return;
+  }
+  group.rotation.set(
     THREE.MathUtils.lerp(fromRotation[0], toRotation[0], progress),
     THREE.MathUtils.lerp(fromRotation[1], toRotation[1], progress),
     THREE.MathUtils.lerp(fromRotation[2], toRotation[2], progress),

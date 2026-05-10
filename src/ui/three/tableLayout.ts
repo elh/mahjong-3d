@@ -30,7 +30,8 @@ export type TileAnimation = {
         | "tileDiscarded"
         | "flowerExposed"
         | "claimMade"
-        | "kongDeclared";
+        | "kongDeclared"
+        | "winDeclared";
     }
   >;
   from: Vec3;
@@ -42,6 +43,7 @@ export type TileAnimation = {
     rotation: Vec3;
     holdMs?: number;
   };
+  motion?: "arc" | "knockdown";
   flick?: {
     position: Vec3;
     rotation: Vec3;
@@ -79,7 +81,7 @@ export function createThreeTableLayout(
   currentEvent: GameEvent | undefined,
   previousReplay?: ReplayState,
 ): ThreeTableLayout {
-  const tiles = createStaticThreeTableLayout(replay);
+  const tiles = createStaticThreeTableLayout(replay, currentEvent);
   const previousTiles = previousReplay
     ? createStaticThreeTableLayout(previousReplay)
     : [];
@@ -92,17 +94,34 @@ export function createThreeTableLayout(
   return { tiles, animations };
 }
 
-function createStaticThreeTableLayout(replay: ReplayState): TilePlacement[] {
+function createStaticThreeTableLayout(
+  replay: ReplayState,
+  currentEvent?: GameEvent,
+): TilePlacement[] {
   const tiles: TilePlacement[] = [
     ...layoutWall(replay.wall, "wall"),
     ...layoutWall(replay.deadWall, "deadWall"),
     ...replay.players.flatMap((player) => [
-      ...layoutPlayerArea(
-        player.hand,
-        player.melds.flatMap((meld) => meld.tiles),
-        player.flowers,
-        player.id,
-      ),
+      ...(currentEvent?.type === "winDeclared" &&
+      currentEvent.player === player.id
+        ? [
+            ...layoutWinningPlayerArea(
+              player.hand,
+              currentEvent.tile,
+              player.id,
+            ),
+            ...layoutPlayerAuxiliaryRow(
+              player.melds.flatMap((meld) => meld.tiles),
+              player.flowers,
+              player.id,
+            ),
+          ]
+        : layoutPlayerArea(
+            player.hand,
+            player.melds.flatMap((meld) => meld.tiles),
+            player.flowers,
+            player.id,
+          )),
       ...layoutDiscards(player.discards, player.id),
     ]),
   ];
@@ -157,6 +176,31 @@ export function playerHandRowPosition(
 ): Vec3 {
   const [x, , z] = playerRowPosition(player, index, total, radius, 0);
   return [x, handUprightY, z];
+}
+
+export function playerRevealedHandPosition(
+  player: PlayerId,
+  index: number,
+  total: number,
+): Vec3 {
+  return playerRowPosition(player, index, total, handRadius, 0);
+}
+
+export function playerWinningTilePosition(
+  player: PlayerId,
+  revealedHandCount: number,
+): Vec3 {
+  const right = playerRight(player);
+  const forward = playerForward(player);
+  const rightOffset =
+    revealedHandCount === 0
+      ? 0
+      : ((revealedHandCount - 1) / 2 + 2) * tileSize.width;
+  return [
+    forward[0] * handRadius + right[0] * rightOffset,
+    tableY,
+    forward[2] * handRadius + right[2] * rightOffset,
+  ];
 }
 
 export function discardDropPosition(player: PlayerId): Vec3 {
@@ -238,6 +282,34 @@ function layoutPlayerArea(
   return [
     ...layoutPlayerRow(hand, player, "hand", handRadius, 0),
     ...layoutPlayerAuxiliaryRow(melds, flowers, player),
+  ];
+}
+
+function layoutWinningPlayerArea(
+  hand: readonly TileInstance[],
+  winningTile: TileInstance,
+  player: PlayerId,
+): TilePlacement[] {
+  const revealedHand = removeFirstTileById(hand, winningTile.id);
+  return [
+    ...revealedHand.map((tile, index) => ({
+      tile,
+      owner: "hand" as const,
+      player,
+      position: playerRevealedHandPosition(player, index, revealedHand.length),
+      rotation: playerTileRotation(player),
+      faceUp: true,
+      physics: false,
+    })),
+    {
+      tile: winningTile,
+      owner: "hand",
+      player,
+      position: playerWinningTilePosition(player, revealedHand.length),
+      rotation: playerTileRotation(player),
+      faceUp: true,
+      physics: false,
+    },
   ];
 }
 
@@ -490,6 +562,10 @@ function currentEventAnimations(
     );
   }
 
+  if (event?.type === "winDeclared") {
+    return winningTileAnimations(event, tiles, previousTiles);
+  }
+
   return [];
 }
 
@@ -565,4 +641,45 @@ function meldTileAnimation(
       toRotation: finalPlacement.rotation,
     },
   ];
+}
+
+function winningTileAnimations(
+  event: Extract<GameEvent, { type: "winDeclared" }>,
+  tiles: readonly TilePlacement[],
+  previousTiles: readonly TilePlacement[],
+): TileAnimation[] {
+  const winningTiles = tiles.filter(
+    (placement) =>
+      placement.owner === "hand" && placement.player === event.player,
+  );
+
+  return winningTiles.map((placement) => {
+    const previousPlacement = previousTiles.find(
+      (candidate) => candidate.tile.id === placement.tile.id,
+    );
+    return {
+      tile: placement.tile,
+      event,
+      from: previousPlacement?.position ?? placement.position,
+      to: placement.position,
+      fromRotation:
+        previousPlacement?.rotation ?? playerHandTileRotation(event.player),
+      toRotation: placement.rotation,
+      motion: "knockdown",
+    };
+  });
+}
+
+function removeFirstTileById(
+  tiles: readonly TileInstance[],
+  tileId: string,
+): TileInstance[] {
+  let removed = false;
+  return tiles.filter((tile) => {
+    if (!removed && tile.id === tileId) {
+      removed = true;
+      return false;
+    }
+    return true;
+  });
 }
