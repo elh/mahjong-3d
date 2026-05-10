@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SimulateRoundResult } from "../sim/engine";
 import type { GameEvent } from "../sim/events";
 import { replayEvents } from "../sim/replay";
@@ -22,10 +22,14 @@ export function useSimulationController() {
   const [isGenerating, setIsGenerating] = useState(true);
   const [generationError, setGenerationError] = useState<string | undefined>();
   const [eventIndex, setEventIndex] = useState(0);
+  const [isScrubbingEvent, setIsScrubbingEvent] = useState(false);
   const requestIdRef = useRef(0);
   const workerRef = useRef<Worker | null>(null);
   const holdDelayRef = useRef<number | undefined>(undefined);
   const holdIntervalRef = useRef<number | undefined>(undefined);
+  const scrubFrameRef = useRef<number | undefined>(undefined);
+  const scrubIdleTimeoutRef = useRef<number | undefined>(undefined);
+  const scrubEventIndexRef = useRef<number | undefined>(undefined);
   const suppressStepClickRef = useRef(false);
   const events = game?.events ?? [];
   const replay = useMemo(
@@ -59,6 +63,7 @@ export function useSimulationController() {
       workerRef.current?.terminate();
       workerRef.current = null;
       clearEventHold();
+      clearEventScrub({ updateState: false });
     };
   }, []);
 
@@ -115,6 +120,7 @@ export function useSimulationController() {
     setPendingSeed(nextSeed);
     setIsGenerating(true);
     setGenerationError(undefined);
+    clearEventScrub();
     setEventIndex(0);
     const worker = createSimulationWorker();
     worker.postMessage({
@@ -128,7 +134,7 @@ export function useSimulationController() {
   }
 
   function restart() {
-    setEventIndex(0);
+    jumpToEventIndex(0);
   }
 
   function startTypedSeed() {
@@ -136,10 +142,67 @@ export function useSimulationController() {
     queueSimulation(seed);
   }
 
-  function stepEvent(direction: -1 | 1) {
-    setEventIndex((index) =>
-      Math.min(Math.max(0, index + direction), Math.max(events.length - 1, 0)),
-    );
+  const clearEventScrub = useCallback(
+    ({ updateState }: { updateState: boolean } = { updateState: true }) => {
+      if (scrubFrameRef.current !== undefined) {
+        window.cancelAnimationFrame(scrubFrameRef.current);
+        scrubFrameRef.current = undefined;
+      }
+      if (scrubIdleTimeoutRef.current !== undefined) {
+        window.clearTimeout(scrubIdleTimeoutRef.current);
+        scrubIdleTimeoutRef.current = undefined;
+      }
+      scrubEventIndexRef.current = undefined;
+      if (updateState) {
+        setIsScrubbingEvent(false);
+      }
+    },
+    [],
+  );
+
+  const stepEvent = useCallback(
+    (direction: -1 | 1) => {
+      clearEventScrub();
+      setEventIndex((index) =>
+        Math.min(
+          Math.max(0, index + direction),
+          Math.max(events.length - 1, 0),
+        ),
+      );
+    },
+    [events.length, clearEventScrub],
+  );
+
+  const jumpToEventIndex = useCallback(
+    (index: number) => {
+      clearEventScrub();
+      setEventIndex(clampEventIndex(index, events.length));
+    },
+    [events.length, clearEventScrub],
+  );
+
+  function scrubToEventIndex(index: number) {
+    scrubEventIndexRef.current = clampEventIndex(index, events.length);
+    setIsScrubbingEvent(true);
+
+    if (scrubFrameRef.current === undefined) {
+      scrubFrameRef.current = window.requestAnimationFrame(() => {
+        scrubFrameRef.current = undefined;
+        const nextIndex = scrubEventIndexRef.current;
+        scrubEventIndexRef.current = undefined;
+        if (nextIndex !== undefined) {
+          setEventIndex(nextIndex);
+        }
+      });
+    }
+
+    if (scrubIdleTimeoutRef.current !== undefined) {
+      window.clearTimeout(scrubIdleTimeoutRef.current);
+    }
+    scrubIdleTimeoutRef.current = window.setTimeout(() => {
+      scrubIdleTimeoutRef.current = undefined;
+      setIsScrubbingEvent(false);
+    }, 140);
   }
 
   function clearEventHold() {
@@ -187,7 +250,7 @@ export function useSimulationController() {
     isGenerating,
     generationError,
     eventIndex,
-    setEventIndex,
+    isScrubbingEvent,
     events,
     replay,
     currentEvent,
@@ -199,6 +262,8 @@ export function useSimulationController() {
     restart,
     startTypedSeed,
     stepEvent,
+    jumpToEventIndex,
+    scrubToEventIndex,
     clearEventHold,
     cancelEventHold,
     startEventHold,
@@ -225,6 +290,10 @@ function activeTileIds(event: GameEvent | undefined): ReadonlySet<string> {
     case "rulesError":
       return new Set();
   }
+}
+
+function clampEventIndex(index: number, eventCount: number): number {
+  return Math.min(Math.max(0, index), Math.max(eventCount - 1, 0));
 }
 
 function seedFromUrlOrRandom(): string {

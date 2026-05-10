@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import type { GameEvent } from "../sim/events";
-import { tileAlt } from "./tileImages";
-import { InlineTile } from "./TileGroup";
 import { playerNames } from "./playerNames";
+import { InlineTile } from "./TileGroup";
+import { tileAlt } from "./tileImages";
 
 export function eventTitle(event: GameEvent | undefined): ReactNode {
   if (!event) {
@@ -53,6 +53,31 @@ export function eventTitle(event: GameEvent | undefined): ReactNode {
           <InlineTile tile={event.tile} />
         </>
       );
+    case "drawDeclared":
+      return event.reason === "turnLimit"
+        ? "Turn limit draw"
+        : "Exhaustive draw";
+    case "rulesError":
+      return `Rules error for ${playerNames[event.player]}`;
+  }
+}
+
+export function eventLogTitle(event: GameEvent): string {
+  switch (event.type) {
+    case "roundStarted":
+      return "Round started";
+    case "tileDrawn":
+      return `${playerNames[event.player]} drew ${tileAlt(event.tile)}`;
+    case "tileDiscarded":
+      return `${playerNames[event.player]} discarded ${tileAlt(event.tile)}`;
+    case "flowerExposed":
+      return `${playerNames[event.player]} exposed flower ${tileAlt(event.tile)}`;
+    case "claimMade":
+      return `${playerNames[event.player]} claimed ${event.claim} ${tileAlt(event.tile)}`;
+    case "kongDeclared":
+      return `${playerNames[event.player]} declared ${event.kong} kong ${event.tiles.map(tileAlt).join(", ")}`;
+    case "winDeclared":
+      return `${playerNames[event.player]} declared win ${tileAlt(event.tile)}`;
     case "drawDeclared":
       return event.reason === "turnLimit"
         ? "Turn limit draw"

@@ -6,15 +6,43 @@ import {
   SkipBack,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { EventLog } from "./ui/EventLog";
 import { eventDetail, eventTitle } from "./ui/eventText";
 import { InfoModal } from "./ui/InfoModal";
 import { playerNames } from "./ui/playerNames";
 import { TileGroup } from "./ui/TileGroup";
 import { useSimulationController } from "./ui/useSimulationController";
 
+function scrollActiveEventIntoView(
+  eventLog: HTMLElement | null,
+  activeEvent: HTMLElement | null,
+): void {
+  if (!eventLog || !activeEvent) {
+    return;
+  }
+
+  const margin = 8;
+  const logRect = eventLog.getBoundingClientRect();
+  const activeRect = activeEvent.getBoundingClientRect();
+  const isVisible =
+    activeRect.top >= logRect.top + margin &&
+    activeRect.bottom <= logRect.bottom - margin;
+
+  if (isVisible) {
+    return;
+  }
+
+  eventLog.scrollTop +=
+    activeRect.top -
+    logRect.top -
+    (eventLog.clientHeight - activeEvent.offsetHeight) / 2;
+}
+
 export default function App() {
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   const activeEventRef = useRef<HTMLButtonElement | null>(null);
+  const eventLogRef = useRef<HTMLElement | null>(null);
+  const eventLogScrollFrameRef = useRef<number | undefined>(undefined);
   const infoButtonRef = useRef<HTMLButtonElement | null>(null);
   const infoModalRef = useRef<HTMLElement | null>(null);
   const simulation = useSimulationController();
@@ -25,7 +53,6 @@ export default function App() {
     isGenerating,
     generationError,
     eventIndex,
-    setEventIndex,
     events,
     replay,
     currentEvent,
@@ -37,6 +64,8 @@ export default function App() {
     restart,
     startTypedSeed,
     stepEvent,
+    jumpToEventIndex,
+    scrubToEventIndex,
     clearEventHold,
     cancelEventHold,
     startEventHold,
@@ -47,10 +76,21 @@ export default function App() {
     if (!currentEvent) {
       return;
     }
-    activeEventRef.current?.scrollIntoView({
-      block: "nearest",
-      inline: "nearest",
+
+    if (eventLogScrollFrameRef.current !== undefined) {
+      window.cancelAnimationFrame(eventLogScrollFrameRef.current);
+    }
+    eventLogScrollFrameRef.current = window.requestAnimationFrame(() => {
+      eventLogScrollFrameRef.current = undefined;
+      scrollActiveEventIntoView(eventLogRef.current, activeEventRef.current);
     });
+
+    return () => {
+      if (eventLogScrollFrameRef.current !== undefined) {
+        window.cancelAnimationFrame(eventLogScrollFrameRef.current);
+        eventLogScrollFrameRef.current = undefined;
+      }
+    };
   }, [currentEvent]);
 
   useEffect(() => {
@@ -148,7 +188,7 @@ export default function App() {
             max={Math.max(events.length - 1, 0)}
             value={eventIndex}
             disabled={events.length === 0}
-            onChange={(event) => setEventIndex(Number(event.target.value))}
+            onChange={(event) => scrubToEventIndex(Number(event.target.value))}
           />
         </label>
       </section>
@@ -209,66 +249,15 @@ export default function App() {
             </section>
           )}
 
-          <section
-            className="event-list"
-            aria-label="Event log"
-            onKeyDown={(event) => {
-              if (event.key === "ArrowDown") {
-                event.preventDefault();
-                stepEvent(1);
-              }
-              if (event.key === "ArrowUp") {
-                event.preventDefault();
-                stepEvent(-1);
-              }
-            }}
-          >
-            {eventGroups.map((group) => {
-              const isActiveGroup = group.events.some(
-                (entry) => entry.index === eventIndex,
-              );
-              return (
-                <section className="event-group" key={group.id}>
-                  <button
-                    type="button"
-                    ref={
-                      isActiveGroup && group.phase === "setup"
-                        ? activeEventRef
-                        : null
-                    }
-                    className={
-                      isActiveGroup
-                        ? "event-group-header active"
-                        : "event-group-header"
-                    }
-                    onClick={() => setEventIndex(group.events[0]?.index ?? 0)}
-                  >
-                    <strong>{group.label}</strong>
-                    {group.phase === "setup" && (
-                      <span>{group.events.length} events</span>
-                    )}
-                  </button>
-                  {group.phase === "turn" &&
-                    group.events.map(({ event, index }) => (
-                      <button
-                        type="button"
-                        key={`${event.type}-${index}`}
-                        ref={index === eventIndex ? activeEventRef : null}
-                        className={
-                          index === eventIndex
-                            ? "event-row active"
-                            : "event-row"
-                        }
-                        onClick={() => setEventIndex(index)}
-                      >
-                        <span>{String(index + 1).padStart(3, "0")}</span>
-                        <strong>{eventTitle(event)}</strong>
-                      </button>
-                    ))}
-                </section>
-              );
-            })}
-          </section>
+          <EventLog
+            eventGroups={eventGroups}
+            activeEvent={currentEvent}
+            eventIndex={eventIndex}
+            eventLogRef={eventLogRef}
+            activeEventRef={activeEventRef}
+            onJump={jumpToEventIndex}
+            onStep={stepEvent}
+          />
         </section>
       </section>
 
