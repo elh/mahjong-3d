@@ -39,6 +39,7 @@ const playerAuxiliaryRightInset = 0;
 const playerAuxiliaryRightEdge =
   (16 * tileSize.width) / 2 - playerAuxiliaryRightInset;
 const discardRadius = 1.12;
+const handUprightY = tileSize.depth / 2 + 0.01;
 const wallSideTiles = 18;
 const wallSideLength = tileSize.width * wallSideTiles;
 const wallRunRadius = wallSideLength / 2 - tileSize.width / 2;
@@ -102,6 +103,20 @@ export function playerTileRotation(player: PlayerId): Vec3 {
   return [0, playerAngle(player), 0];
 }
 
+export function playerHandTileRotation(player: PlayerId): Vec3 {
+  return [Math.PI / 2, 0, -playerAngle(player)];
+}
+
+export function playerHandRowPosition(
+  player: PlayerId,
+  index: number,
+  total: number,
+  radius: number,
+): Vec3 {
+  const [x, , z] = playerRowPosition(player, index, total, radius, 0);
+  return [x, handUprightY, z];
+}
+
 export function discardDropPosition(player: PlayerId): Vec3 {
   const forward = playerForward(player);
   return [
@@ -122,8 +137,14 @@ function layoutPlayerRow(
     tile,
     owner,
     player,
-    position: playerRowPosition(player, index, tiles.length, radius, rowOffset),
-    rotation: playerTileRotation(player),
+    position:
+      owner === "hand"
+        ? playerHandRowPosition(player, index, tiles.length, radius)
+        : playerRowPosition(player, index, tiles.length, radius, rowOffset),
+    rotation:
+      owner === "hand"
+        ? playerHandTileRotation(player)
+        : playerTileRotation(player),
     faceUp: true,
     physics: false,
   }));
@@ -318,8 +339,9 @@ function currentEventAnimation(
       from: sourcePosition(event.source),
       to:
         finalPlacement?.position ??
-        playerRowPosition(event.player, 0, 1, handRadius, 0),
-      rotation: playerTileRotation(event.player),
+        playerHandRowPosition(event.player, 0, 1, handRadius),
+      rotation:
+        finalPlacement?.rotation ?? playerHandTileRotation(event.player),
     };
   }
 
@@ -329,9 +351,9 @@ function currentEventAnimation(
     );
     return {
       event,
-      from: playerRowPosition(event.player, 0, 1, handRadius, 0),
+      from: playerHandRowPosition(event.player, 0, 1, handRadius),
       to: finalPlacement?.position ?? discardDropPosition(event.player),
-      rotation: playerTileRotation(event.player),
+      rotation: playerHandTileRotation(event.player),
     };
   }
 

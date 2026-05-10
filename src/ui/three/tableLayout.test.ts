@@ -6,7 +6,9 @@ import { createTileSet } from "../../sim/tiles";
 import {
   createThreeTableLayout,
   discardDropPosition,
-  playerRowPosition,
+  playerHandRowPosition,
+  playerHandTileRotation,
+  playerRight,
   tileSize,
 } from "./tableLayout";
 
@@ -69,7 +71,10 @@ describe("3D table layout", () => {
       discardLayout.animation?.event.type === "tileDiscarded"
     ) {
       expect(discardLayout.animation?.from).toEqual(
-        playerRowPosition(discardEvent.player, 0, 1, 3.45, 0),
+        playerHandRowPosition(discardEvent.player, 0, 1, 3.45),
+      );
+      expect(discardLayout.animation?.rotation).toEqual(
+        playerHandTileRotation(discardEvent.player),
       );
       expect(discardDropPosition(discardEvent.player)[1]).toBeGreaterThan(
         discardLayout.animation.to[1],
@@ -98,6 +103,8 @@ describe("3D table layout", () => {
       tileSize.width,
       5,
     );
+    expect(eastHand[0].position[1]).toBeCloseTo(tileSize.depth / 2 + 0.01, 5);
+    expect(eastHand[0].rotation).toEqual(playerHandTileRotation(0));
     expect(
       distance(southWallSide[0].position, southWallSide[1].position),
     ).toBeCloseTo(tileSize.width, 5);
@@ -108,6 +115,37 @@ describe("3D table layout", () => {
       eastWallSide[0].position[0] - tileSize.depth / 2,
       5,
     );
+  });
+
+  test("orients every concealed hand upright toward its player", () => {
+    const tiles = createTileSet();
+    const replay = emptyReplayState();
+    for (const player of replay.players) {
+      player.hand = tiles.slice(player.id * 2, player.id * 2 + 2);
+    }
+
+    const layout = createThreeTableLayout(replay, undefined);
+
+    for (const player of replay.players) {
+      const hand = layout.tiles
+        .filter(
+          (placement) =>
+            placement.owner === "hand" && placement.player === player.id,
+        )
+        .sort((left, right) => left.tile.id.localeCompare(right.tile.id));
+      const right = playerRight(player.id);
+
+      expect(hand[0].rotation).toEqual(playerHandTileRotation(player.id));
+      expect(hand[0].position[1]).toBeCloseTo(tileSize.depth / 2 + 0.01, 5);
+      expect(hand[1].position[0] - hand[0].position[0]).toBeCloseTo(
+        right[0] * tileSize.width,
+        5,
+      );
+      expect(hand[1].position[2] - hand[0].position[2]).toBeCloseTo(
+        right[2] * tileSize.width,
+        5,
+      );
+    }
   });
 
   test("keeps melds and flowers on one fixed auxiliary row", () => {

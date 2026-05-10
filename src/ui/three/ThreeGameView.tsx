@@ -259,7 +259,7 @@ function FaceUpTileBlock({ tile }: { tile: TileInstance }) {
           transparent
           alphaTest={0.02}
           toneMapped={false}
-          side={THREE.DoubleSide}
+          side={THREE.FrontSide}
         />
       </mesh>
     </group>
