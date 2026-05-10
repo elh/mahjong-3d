@@ -66,10 +66,7 @@ export type GameEvent =
       expected: number;
     });
 
-export function eventMeta(
-  phase: "setup" | "turn",
-  turn: number,
-): EventMeta {
+export function eventMeta(phase: "setup" | "turn", turn: number): EventMeta {
   return {
     phase,
     turn,

@@ -36,4 +36,3 @@ export function shuffle<T>(items: readonly T[], rng: Rng): T[] {
   }
   return shuffled;
 }
-

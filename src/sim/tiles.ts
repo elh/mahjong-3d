@@ -107,9 +107,9 @@ export function isFlower(tile: TileInstance): boolean {
 }
 
 export function sortTiles(tiles: readonly TileInstance[]): TileInstance[] {
-  return [...tiles].sort((left, right) =>
-    tileKey(left.kind).localeCompare(tileKey(right.kind)) ||
-    left.id.localeCompare(right.id),
+  return [...tiles].sort(
+    (left, right) =>
+      tileKey(left.kind).localeCompare(tileKey(right.kind)) ||
+      left.id.localeCompare(right.id),
   );
 }
-

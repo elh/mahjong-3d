@@ -44,7 +44,10 @@ export function replayEvents(
     wallCount: 144,
     deadWallCount: 0,
     dealer: 0,
-    eventIndex: Math.min(Math.max(eventIndex, 0), Math.max(events.length - 1, 0)),
+    eventIndex: Math.min(
+      Math.max(eventIndex, 0),
+      Math.max(events.length - 1, 0),
+    ),
     ended: false,
     rulesErrors: [],
   };
@@ -52,7 +55,11 @@ export function replayEvents(
     initializeWalls(state, roundStart.seed);
   }
 
-  for (let index = 0; index <= state.eventIndex && index < events.length; index += 1) {
+  for (
+    let index = 0;
+    index <= state.eventIndex && index < events.length;
+    index += 1
+  ) {
     applyEvent(state, events[index]);
     state.currentEvent = events[index];
   }
@@ -116,9 +123,14 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
     case "winDeclared":
       state.ended = true;
       state.winner = event.player;
-      state.winners = Array.from(new Set([...(state.winners ?? []), event.player]));
+      state.winners = Array.from(
+        new Set([...(state.winners ?? []), event.player]),
+      );
       if (event.from !== undefined) {
-        const discarded = removeTile(state.players[event.from].discards, event.tile.id);
+        const discarded = removeTile(
+          state.players[event.from].discards,
+          event.tile.id,
+        );
         state.players[event.player].hand = sortTiles([
           ...state.players[event.player].hand,
           discarded ?? event.tile,
@@ -149,7 +161,10 @@ function replenishDeadWall(state: ReplayState): void {
   }
 }
 
-function removeTile(tiles: TileInstance[], tileId: string): TileInstance | undefined {
+function removeTile(
+  tiles: TileInstance[],
+  tileId: string,
+): TileInstance | undefined {
   const index = tiles.findIndex((tile) => tile.id === tileId);
   if (index === -1) {
     return undefined;

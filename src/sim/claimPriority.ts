@@ -12,4 +12,3 @@ export function claimPriority(claim: ClaimAction["claim"]): number {
       return 1;
   }
 }
-

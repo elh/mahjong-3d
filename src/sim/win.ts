@@ -50,7 +50,10 @@ export function isSevenPairsAndTriplet(hand: readonly TileInstance[]): boolean {
   );
 }
 
-function canMakeGroups(counts: Map<string, number>, groupsRemaining: number): boolean {
+function canMakeGroups(
+  counts: Map<string, number>,
+  groupsRemaining: number,
+): boolean {
   if (groupsRemaining === 0) {
     return [...counts.values()].every((count) => count === 0);
   }
@@ -105,7 +108,9 @@ function firstRemainingKey(counts: Map<string, number>): string | undefined {
   return [...counts.keys()].sort().find((key) => (counts.get(key) ?? 0) > 0);
 }
 
-function parseSuitedKey(key: string): { suit: "c" | "d" | "b"; rank: number } | null {
+function parseSuitedKey(
+  key: string,
+): { suit: "c" | "d" | "b"; rank: number } | null {
   const match = /^(c|d|b)([1-9])$/.exec(key);
   if (!match) {
     return null;

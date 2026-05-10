@@ -1,0 +1,54 @@
+.PHONY: help install dev test typecheck format format-check lint lint-biome lint-eslint knip build clean good
+
+help:
+	@printf "%s\n" \
+		"install       Install dependencies" \
+		"dev           Start the Vite dev server" \
+		"test          Run tests" \
+		"typecheck     Run TypeScript checks" \
+		"format        Run Biome formatter" \
+		"format-check  Check formatting" \
+		"lint          Run Biome and ESLint" \
+		"knip          Run Knip workspace hygiene checks" \
+		"build         Run production build" \
+		"clean         Remove build output" \
+		"good          Run format check, lint, knip, typecheck, tests, and build"
+
+install:
+	bun install
+
+dev:
+	bun run dev
+
+test:
+	bun run test
+
+typecheck:
+	bun run typecheck
+
+format:
+	bun run format
+
+format-check:
+	bun run format:check
+
+lint:
+	bun run lint
+
+lint-biome:
+	bun run lint:biome
+
+lint-eslint:
+	bun run lint:eslint
+
+knip:
+	bun run knip
+
+build:
+	bun run build
+
+clean:
+	bun run clean
+
+good:
+	bun run good

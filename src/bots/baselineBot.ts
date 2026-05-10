@@ -48,7 +48,12 @@ export function createBaselineBot(name = "Baseline Bot"): MahjongBot {
   };
 }
 
-export function createBaselineBots(): [MahjongBot, MahjongBot, MahjongBot, MahjongBot] {
+export function createBaselineBots(): [
+  MahjongBot,
+  MahjongBot,
+  MahjongBot,
+  MahjongBot,
+] {
   return [
     createBaselineBot("East Baseline"),
     createBaselineBot("South Baseline"),
@@ -57,14 +62,15 @@ export function createBaselineBots(): [MahjongBot, MahjongBot, MahjongBot, Mahjo
   ];
 }
 
-function chooseDiscard(
-  context: BotContext,
-): TileInstance {
+function chooseDiscard(context: BotContext): TileInstance {
   const hand = context.hand;
   const candidates = hand.filter((tile) => !isFlower(tile));
   const visibleCounts = new Map<string, number>();
   for (const tile of context.visibleTiles) {
-    visibleCounts.set(tileKey(tile.kind), (visibleCounts.get(tileKey(tile.kind)) ?? 0) + 1);
+    visibleCounts.set(
+      tileKey(tile.kind),
+      (visibleCounts.get(tileKey(tile.kind)) ?? 0) + 1,
+    );
   }
 
   const scores = new Map(
@@ -98,15 +104,24 @@ function chooseDiscard(
   })[0];
 }
 
-function shouldClaim(context: BotContext, claim: "chow" | "pong" | "kong"): boolean {
+function shouldClaim(
+  context: BotContext,
+  claim: "chow" | "pong" | "kong",
+): boolean {
   if (claim === "kong") {
     return true;
   }
-  const current = analyzeHand(context.hand, context.melds, context.visibleTiles);
+  const current = analyzeHand(
+    context.hand,
+    context.melds,
+    context.visibleTiles,
+  );
   if (claim === "pong") {
     return current.shanten <= 3 && current.liveWaits >= 4;
   }
-  return current.shanten <= 2 || (context.wallCount < 50 && current.liveWaits >= 4);
+  return (
+    current.shanten <= 2 || (context.wallCount < 50 && current.liveWaits >= 4)
+  );
 }
 
 function tileUsefulness(
@@ -115,7 +130,9 @@ function tileUsefulness(
   visibleCounts: Map<string, number>,
 ): number {
   const key = tileKey(tile.kind);
-  const matching = hand.filter((candidate) => tileKey(candidate.kind) === key).length;
+  const matching = hand.filter(
+    (candidate) => tileKey(candidate.kind) === key,
+  ).length;
   const exhaustedPenalty = (visibleCounts.get(key) ?? 0) >= 4 ? -3 : 0;
 
   if (tile.kind.category !== "suited") {
@@ -129,7 +146,9 @@ function tileUsefulness(
       return score;
     }
     const neighborKey = `${suited.suit[0]}${rank}`;
-    const inHand = hand.some((candidate) => tileKey(candidate.kind) === neighborKey);
+    const inHand = hand.some(
+      (candidate) => tileKey(candidate.kind) === neighborKey,
+    );
     const visible = visibleCounts.get(neighborKey) ?? 0;
     return score + (inHand ? 2 : 0) - (visible >= 4 ? 1 : 0);
   }, 0);

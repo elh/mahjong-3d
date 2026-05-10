@@ -42,6 +42,7 @@ export default function App() {
   const canStepPrevious = !atStart && events.length > 0;
   const canStepNext = !atEnd && events.length > 0;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: bootstrap and popstate wiring should be registered once for the app lifetime.
   useEffect(() => {
     queueSimulation(initialSeed, { replaceUrl: true });
 
@@ -307,15 +308,17 @@ export default function App() {
           {replay.rulesErrors.length > 0 && (
             <section className="rules-error" aria-label="Rules errors">
               <p className="eyebrow">Rules error</p>
-              {replay.rulesErrors.map((error, index) => (
-                <p key={`${error.player}-${error.turn}-${index}`}>
+              {replay.rulesErrors.map((error) => (
+                <p
+                  key={`${error.player}-${error.turn}-${error.handCount}-${error.expected}-${error.message}`}
+                >
                   {error.message}
                 </p>
               ))}
             </section>
           )}
 
-          <div
+          <section
             className="event-list"
             aria-label="Event log"
             onKeyDown={(event) => {
@@ -372,7 +375,7 @@ export default function App() {
                 </section>
               );
             })}
-          </div>
+          </section>
         </section>
       </section>
 

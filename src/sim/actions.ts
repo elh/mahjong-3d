@@ -22,7 +22,11 @@ export type PassAction = {
   type: "pass";
 };
 
-export type LegalAction = DiscardAction | ClaimAction | DeclareKongAction | PassAction;
+export type LegalAction =
+  | DiscardAction
+  | ClaimAction
+  | DeclareKongAction
+  | PassAction;
 
 export type BotContext = {
   player: PlayerId;

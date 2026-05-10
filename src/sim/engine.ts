@@ -90,7 +90,9 @@ export function createInitialRound(seed: string): {
   return { state, events };
 }
 
-export function simulateRound(options: SimulateRoundOptions): SimulateRoundResult {
+export function simulateRound(
+  options: SimulateRoundOptions,
+): SimulateRoundResult {
   const { state, events } = createInitialRound(options.seed);
   const maxTurns = options.maxTurns ?? 400;
 
@@ -173,7 +175,9 @@ function playTurn(
       action.type === "discard" ? action.tileId : "",
     );
     if (!discarded) {
-      throw new Error(`Bot ${bots[playerId].name} failed to discard a legal tile.`);
+      throw new Error(
+        `Bot ${bots[playerId].name} failed to discard a legal tile.`,
+      );
     }
 
     player.discards.push(discarded);
@@ -261,7 +265,9 @@ function drawUntilNonFlower(
   let drawFromDeadWall = replacement;
 
   while (state.wall.length > 0 || state.deadWall.length > 0) {
-    const tile = drawFromDeadWall ? drawSupplementTile(state) : drawLiveTile(state);
+    const tile = drawFromDeadWall
+      ? drawSupplementTile(state)
+      : drawLiveTile(state);
     if (!tile) {
       return undefined;
     }
@@ -284,7 +290,10 @@ function drawUntilNonFlower(
       continue;
     }
 
-    state.players[playerId].hand = sortTiles([...state.players[playerId].hand, tile]);
+    state.players[playerId].hand = sortTiles([
+      ...state.players[playerId].hand,
+      tile,
+    ]);
     return tile;
   }
 
@@ -341,17 +350,23 @@ function drawEvent(
   };
 }
 
-function legalTurnActions(player: RoundState["players"][number]): LegalAction[] {
+function legalTurnActions(
+  player: RoundState["players"][number],
+): LegalAction[] {
   return [
     ...concealedKongActions(player.hand),
-    ...player.hand.filter((tile) => !isFlower(tile)).map((tile) => ({
-      type: "discard" as const,
-      tileId: tile.id,
-    })),
+    ...player.hand
+      .filter((tile) => !isFlower(tile))
+      .map((tile) => ({
+        type: "discard" as const,
+        tileId: tile.id,
+      })),
   ];
 }
 
-function concealedKongActions(hand: readonly TileInstance[]): DeclareKongAction[] {
+function concealedKongActions(
+  hand: readonly TileInstance[],
+): DeclareKongAction[] {
   const byKind = new Map<string, TileInstance[]>();
   for (const tile of hand) {
     if (isFlower(tile)) {
@@ -384,7 +399,12 @@ function resolveClaim(
   const meldClaims: { player: PlayerId; action: ClaimAction }[] = [];
 
   for (const playerId of contenders) {
-    const legalActions = legalClaimActions(state, playerId, discarder, discarded);
+    const legalActions = legalClaimActions(
+      state,
+      playerId,
+      discarder,
+      discarded,
+    );
     if (legalActions.length === 1) {
       continue;
     }
@@ -440,7 +460,10 @@ function legalClaimActions(
     actions.push({ type: "claim", claim: "pong", tileId: discarded.id });
   }
 
-  if (nextPlayer(discarder) === playerId && discarded.kind.category === "suited") {
+  if (
+    nextPlayer(discarder) === playerId &&
+    discarded.kind.category === "suited"
+  ) {
     const chow = findChowTiles(player.hand, discarded);
     if (chow.length === 2) {
       actions.push({ type: "claim", claim: "chow", tileId: discarded.id });
@@ -461,7 +484,10 @@ function applyWinClaims(
   state.winner = winners[0];
   state.winners = winners;
   for (const winner of winners) {
-    state.players[winner].hand = sortTiles([...state.players[winner].hand, discarded]);
+    state.players[winner].hand = sortTiles([
+      ...state.players[winner].hand,
+      discarded,
+    ]);
     events.push({
       ...eventMeta("turn", state.turn),
       type: "winDeclared",
@@ -582,7 +608,9 @@ function botContext(
 
 function chooseLegalAction(bot: MahjongBot, context: BotContext): LegalAction {
   const action = bot.chooseAction(context);
-  const legal = context.legalActions.some((candidate) => actionsEqual(candidate, action));
+  const legal = context.legalActions.some((candidate) =>
+    actionsEqual(candidate, action),
+  );
 
   if (!legal) {
     return context.legalActions[0];
@@ -661,7 +689,10 @@ function findChowTiles(
   return [];
 }
 
-function removeTile(tiles: TileInstance[], tileId: string): TileInstance | undefined {
+function removeTile(
+  tiles: TileInstance[],
+  tileId: string,
+): TileInstance | undefined {
   const index = tiles.findIndex((tile) => tile.id === tileId);
   if (index === -1) {
     return undefined;

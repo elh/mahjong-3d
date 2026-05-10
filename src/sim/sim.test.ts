@@ -13,7 +13,9 @@ describe("tile set", () => {
   test("generates a Taiwanese wall with unique tile instances", () => {
     const tiles = createTileSet();
     const ids = new Set(tiles.map((tile) => tile.id));
-    const flowerCount = tiles.filter((tile) => tile.kind.category === "flower").length;
+    const flowerCount = tiles.filter(
+      (tile) => tile.kind.category === "flower",
+    ).length;
 
     expect(tiles).toHaveLength(144);
     expect(ids.size).toBe(144);
@@ -24,8 +26,12 @@ describe("tile set", () => {
 describe("rng", () => {
   test("shuffles deterministically for a fixed seed", () => {
     const tiles = createTileSet();
-    const left = shuffle(tiles, createSeededRng("fixed-seed")).map((tile) => tile.id);
-    const right = shuffle(tiles, createSeededRng("fixed-seed")).map((tile) => tile.id);
+    const left = shuffle(tiles, createSeededRng("fixed-seed")).map(
+      (tile) => tile.id,
+    );
+    const right = shuffle(tiles, createSeededRng("fixed-seed")).map(
+      (tile) => tile.id,
+    );
 
     expect(left.slice(0, 12)).toEqual(right.slice(0, 12));
   });
@@ -47,7 +53,10 @@ describe("round setup", () => {
   test("uses the dead wall for flower supplements during setup", () => {
     const { events } = createInitialRound("stable-log");
     const supplement = events.find(
-      (event) => event.type === "tileDrawn" && event.phase === "setup" && event.replacement,
+      (event) =>
+        event.type === "tileDrawn" &&
+        event.phase === "setup" &&
+        event.replacement,
     );
 
     expect(supplement?.type).toBe("tileDrawn");
@@ -163,7 +172,9 @@ describe("Taiwanese rule expectations", () => {
     expect(analysis.shanten).toBe(0);
     expect(analysis.waitKeys).toEqual(["c3", "c6", "c9"]);
     expect(analysis.liveWaits).toBe(10);
-    expect(analyzeHand(hand, [], []).shanten).toBeGreaterThanOrEqual(analysis.shanten);
+    expect(analyzeHand(hand, [], []).shanten).toBeGreaterThanOrEqual(
+      analysis.shanten,
+    );
   });
 });
 
@@ -179,7 +190,9 @@ describe("simulation", () => {
       expect(player.hand.length).toBeGreaterThanOrEqual(1);
       expect(player.hand.length).toBeLessThanOrEqual(17);
     }
-    expect(result.events.filter((event) => event.type === "rulesError")).toEqual([]);
+    expect(
+      result.events.filter((event) => event.type === "rulesError"),
+    ).toEqual([]);
   });
 
   test("dealer discards on the first actual turn instead of drawing again", () => {
@@ -197,8 +210,12 @@ describe("simulation", () => {
       expect(firstTurnEvents[0].player).toBe(0);
       expect(firstTurnEvents[0].handCount).toBe(16);
     }
-    expect(firstTurnEvents.some((event) => event.type === "tileDrawn")).toBe(false);
-    expect(firstTurnEvents.some((event) => event.type === "rulesError")).toBe(false);
+    expect(firstTurnEvents.some((event) => event.type === "tileDrawn")).toBe(
+      false,
+    );
+    expect(firstTurnEvents.some((event) => event.type === "rulesError")).toBe(
+      false,
+    );
   });
 
   test("every turn boundary keeps concealed hand counts valid", () => {
@@ -208,7 +225,9 @@ describe("simulation", () => {
       maxTurns: 120,
     });
 
-    expect(result.events.filter((event) => event.type === "rulesError")).toEqual([]);
+    expect(
+      result.events.filter((event) => event.type === "rulesError"),
+    ).toEqual([]);
   });
 
   test("keeps fixed-seed event logs stable", () => {
@@ -221,7 +240,9 @@ describe("simulation", () => {
       if ("tile" in event) {
         return `${event.type}:${event.player}:${tileKey(event.tile.kind)}`;
       }
-      return "wallCount" in event ? `${event.type}:${event.wallCount}` : event.type;
+      return "wallCount" in event
+        ? `${event.type}:${event.wallCount}`
+        : event.type;
     });
 
     expect(compactLog).toEqual([
@@ -259,15 +280,17 @@ describe("simulation", () => {
       bots: createBaselineBots(),
       maxTurns: 8,
     });
-    const setupEvents = result.events.filter((event) => event.phase === "setup");
+    const setupEvents = result.events.filter(
+      (event) => event.phase === "setup",
+    );
     const turnEvents = result.events.filter((event) => event.phase === "turn");
 
     expect(setupEvents.length).toBeGreaterThan(0);
     expect(setupEvents.every((event) => event.groupId === "setup")).toBe(true);
     expect(turnEvents.length).toBeGreaterThan(0);
-    expect(turnEvents.every((event) => event.groupId === `turn-${event.turn}`)).toBe(
-      true,
-    );
+    expect(
+      turnEvents.every((event) => event.groupId === `turn-${event.turn}`),
+    ).toBe(true);
   });
 
   test("declares concealed kongs and draws a supplement before discard", () => {
@@ -276,7 +299,9 @@ describe("simulation", () => {
       bots: createBaselineBots(),
       maxTurns: 300,
     });
-    const kongIndex = result.events.findIndex((event) => event.type === "kongDeclared");
+    const kongIndex = result.events.findIndex(
+      (event) => event.type === "kongDeclared",
+    );
 
     expect(kongIndex).toBeGreaterThan(-1);
     const kong = result.events[kongIndex];
@@ -307,7 +332,9 @@ describe("simulation", () => {
     );
 
     expect(kongIndex).toBeGreaterThan(-1);
-    expect(result.events.filter((event) => event.type === "rulesError")).toEqual([]);
+    expect(
+      result.events.filter((event) => event.type === "rulesError"),
+    ).toEqual([]);
 
     const kong = result.events[kongIndex];
     const replacement = result.events[kongIndex + 1];
@@ -394,9 +421,9 @@ describe("simulation", () => {
       expect(replayPlayer.flowers.map((tile) => tile.id)).toEqual(
         player.flowers.map((tile) => tile.id),
       );
-      expect(replayPlayer.melds.map((meld) => meld.tiles.map((tile) => tile.id))).toEqual(
-        player.melds.map((meld) => meld.tiles.map((tile) => tile.id)),
-      );
+      expect(
+        replayPlayer.melds.map((meld) => meld.tiles.map((tile) => tile.id)),
+      ).toEqual(player.melds.map((meld) => meld.tiles.map((tile) => tile.id)));
     }
   });
 });

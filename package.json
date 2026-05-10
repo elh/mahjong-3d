@@ -6,6 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "clean": "rm -rf dist",
+    "format": "biome format --write .",
+    "format:check": "biome check . --linter-enabled=false --assist-enabled=false",
+    "good": "bun run format:check && bun run lint && bun run knip && bun run typecheck && bun run test && bun run build",
+    "knip": "knip --no-progress",
+    "lint": "bun run lint:biome && bun run lint:eslint",
+    "lint:biome": "biome lint .",
+    "lint:eslint": "eslint . --cache --cache-location node_modules/.cache/eslint/.eslintcache --cache-strategy content",
     "typecheck": "tsc -b --pretty false",
     "test": "bun test"
   },
@@ -18,9 +26,13 @@
     "lucide-react": "^0.468.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.15",
     "@types/bun": "^1.2.0",
     "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0"
+    "@types/react-dom": "^19.0.0",
+    "eslint": "^10.3.0",
+    "globals": "^17.6.0",
+    "knip": "^6.12.2",
+    "typescript-eslint": "^8.59.2"
   }
 }
-

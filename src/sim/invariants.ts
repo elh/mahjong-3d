@@ -24,15 +24,19 @@ export function validateBetweenTurns(state: RoundState): InvariantViolation[] {
   });
 }
 
-export function expectedConcealedCount(state: RoundState, player: PlayerId): number {
+export function expectedConcealedCount(
+  state: RoundState,
+  player: PlayerId,
+): number {
   const meldPenalty = state.players[player].melds.reduce(
     (total, meld) => total + (meld.type === "kong" ? 3 : meld.tiles.length),
     0,
   );
-  const base = state.needsReplacementDraw === player
-    ? 16
-    : state.needsDiscard === player
-      ? 17
-      : 16;
+  const base =
+    state.needsReplacementDraw === player
+      ? 16
+      : state.needsDiscard === player
+        ? 17
+        : 16;
   return base - meldPenalty;
 }

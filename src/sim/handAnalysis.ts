@@ -86,7 +86,9 @@ export function estimateShanten(
     shapes.push(greedyShape(counts, requiredSets, true));
   }
 
-  const best = shapes.sort((left, right) => shapeScore(right) - shapeScore(left))[0];
+  const best = shapes.sort(
+    (left, right) => shapeScore(right) - shapeScore(left),
+  )[0];
   return Math.max(
     0,
     requiredSets * 2 -
@@ -163,14 +165,18 @@ function greedyShape(
 }
 
 function shapeScore(shape: Shape): number {
-  return shape.completeSets * 100 + shape.partialSets * 10 + (shape.hasPair ? 1 : 0);
+  return (
+    shape.completeSets * 100 + shape.partialSets * 10 + (shape.hasPair ? 1 : 0)
+  );
 }
 
 function countVisibleTiles(
   visibleTiles: readonly TileInstance[],
   hand: readonly TileInstance[],
 ): Map<string, number> {
-  return countKeys([...visibleTiles, ...hand].map((tile) => tileKey(tile.kind)));
+  return countKeys(
+    [...visibleTiles, ...hand].map((tile) => tileKey(tile.kind)),
+  );
 }
 
 function countKeys(keys: readonly string[]): Map<string, number> {
@@ -185,6 +191,10 @@ function sortedKeys(counts: Map<string, number>): string[] {
   return [...counts.keys()].sort();
 }
 
-function decrement(counts: Map<string, number>, key: string, amount: number): void {
+function decrement(
+  counts: Map<string, number>,
+  key: string,
+  amount: number,
+): void {
   counts.set(key, (counts.get(key) ?? 0) - amount);
 }
