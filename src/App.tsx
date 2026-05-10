@@ -634,7 +634,9 @@ function eventDetail(event: GameEvent | undefined): ReactNode {
         </>
       );
     case "kongDeclared":
-      return `${playerNames[event.player]} declared a ${event.kong} kong and must draw a supplement tile before discarding.`;
+      return event.kong === "claimed" && event.from !== undefined && event.tile
+        ? `${playerNames[event.player]} took ${tileAlt(event.tile)} from ${playerNames[event.from]} for a claimed kong and must draw a supplement tile before discarding.`
+        : `${playerNames[event.player]} declared a ${event.kong} kong and must draw a supplement tile before discarding.`;
     case "winDeclared":
       return event.from === undefined ? (
         <>

@@ -650,15 +650,27 @@ function applyMeldClaim(
   state.needsDiscard = playerId;
   state.discardSource = action.claim === "kong" ? "draw" : "claim";
   state.needsReplacementDraw = action.claim === "kong" ? playerId : undefined;
-  events.push({
-    ...eventMeta("turn", state.turn),
-    type: "claimMade",
-    player: playerId,
-    from,
-    claim: action.claim,
-    tile: discarded,
-    tiles: meldTiles,
-  });
+  if (action.claim === "kong") {
+    events.push({
+      ...eventMeta("turn", state.turn),
+      type: "kongDeclared",
+      player: playerId,
+      kong: "claimed",
+      from,
+      tile: discarded,
+      tiles: meldTiles,
+    });
+  } else {
+    events.push({
+      ...eventMeta("turn", state.turn),
+      type: "claimMade",
+      player: playerId,
+      from,
+      claim: action.claim,
+      tile: discarded,
+      tiles: meldTiles,
+    });
+  }
 }
 
 function applyConcealedKong(

@@ -115,6 +115,22 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
       });
       return;
     case "kongDeclared":
+      if (event.kong === "claimed") {
+        if (event.from !== undefined && event.tile) {
+          removeTile(state.players[event.from].discards, event.tile.id);
+        }
+        for (const tile of event.tiles) {
+          if (tile.id !== event.tile?.id) {
+            removeTile(state.players[event.player].hand, tile.id);
+          }
+        }
+        state.players[event.player].melds.push({
+          type: "kong",
+          tiles: event.tiles,
+          claimedFrom: event.from,
+        });
+        return;
+      }
       if (event.kong === "concealed") {
         for (const tile of event.tiles) {
           removeTile(state.players[event.player].hand, tile.id);

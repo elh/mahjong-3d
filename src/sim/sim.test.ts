@@ -243,7 +243,7 @@ describe("simulation", () => {
       maxTurns: 40,
     });
     const compactLog = result.events.slice(0, 10).map((event) => {
-      if ("tile" in event) {
+      if ("tile" in event && event.tile) {
         return `${event.type}:${event.player}:${tileKey(event.tile.kind)}`;
       }
       return "wallCount" in event
@@ -334,7 +334,7 @@ describe("simulation", () => {
       maxTurns: 80,
     });
     const kongIndex = result.events.findIndex(
-      (event) => event.type === "claimMade" && event.claim === "kong",
+      (event) => event.type === "kongDeclared" && event.kong === "claimed",
     );
 
     expect(kongIndex).toBeGreaterThan(-1);
@@ -346,15 +346,20 @@ describe("simulation", () => {
     const replacement = result.events[kongIndex + 1];
     const discard = result.events[kongIndex + 2];
 
-    expect(kong.type).toBe("claimMade");
+    expect(kong.type).toBe("kongDeclared");
+    if (kong.type === "kongDeclared") {
+      expect(kong.kong).toBe("claimed");
+      expect(kong.from).toBeDefined();
+      expect(kong.tile).toBeDefined();
+    }
     expect(replacement.type).toBe("tileDrawn");
-    if (kong.type === "claimMade" && replacement.type === "tileDrawn") {
+    if (kong.type === "kongDeclared" && replacement.type === "tileDrawn") {
       expect(replacement.player).toBe(kong.player);
       expect(replacement.replacement).toBe(true);
       expect(replacement.source).toBe("deadWall");
     }
     expect(discard.type).toBe("tileDiscarded");
-    if (kong.type === "claimMade" && discard.type === "tileDiscarded") {
+    if (kong.type === "kongDeclared" && discard.type === "tileDiscarded") {
       expect(discard.player).toBe(kong.player);
       expect(discard.handCount).toBe(13);
     }

@@ -40,15 +40,17 @@ export type GameEvent =
       type: "claimMade";
       player: PlayerId;
       from: PlayerId;
-      claim: "chow" | "pong" | "kong";
+      claim: "chow" | "pong";
       tile: TileInstance;
       tiles: TileInstance[];
     })
   | (EventMeta & {
       type: "kongDeclared";
       player: PlayerId;
-      kong: "concealed" | "added";
+      kong: "concealed" | "claimed" | "added";
       tiles: TileInstance[];
+      from?: PlayerId;
+      tile?: TileInstance;
       addedTile?: TileInstance;
     })
   | (EventMeta & {

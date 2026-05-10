@@ -29,6 +29,7 @@ Core rule: simulation state and event logs are the source of truth. UI state sho
 - Event payloads must support replay and active-tile highlighting.
 - Flower exposure is explicit via `flowerExposed`; do not rely on implicit UI mutation from `tileDrawn`.
 - Chow claim actions carry the two consumed tile ids so ambiguous chows are replayable.
+- All kongs use `kongDeclared`; discard-claimed kongs use `kong: "claimed"` with `from` and `tile`.
 
 ## Taiwanese Mahjong Scope
 
