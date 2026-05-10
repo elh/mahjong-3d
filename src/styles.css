@@ -446,6 +446,11 @@ h3 {
 }
 
 .asset-attribution {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 2px;
   margin-top: 10px;
   color: #7a756b;
   font-size: 0.66rem;

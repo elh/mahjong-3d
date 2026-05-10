@@ -1,9 +1,4 @@
-import {
-  ChevronLeft,
-  ChevronRight,
-  RefreshCw,
-  SkipBack,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, SkipBack } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { SimulateRoundResult } from "./sim/engine";
 import type { GameEvent } from "./sim/events";
@@ -16,11 +11,11 @@ import type { TileInstance } from "./sim/tiles";
 import { tileAlt, tileImage } from "./ui/tileImages";
 
 const playerNames = ["East", "South", "West", "North"] as const;
-const defaultSeed = "concealed-gang-preview";
 
 export default function App() {
-  const [seedInput, setSeedInput] = useState(defaultSeed);
-  const [pendingSeed, setPendingSeed] = useState(defaultSeed);
+  const initialSeed = useMemo(() => seedFromUrlOrRandom(), []);
+  const [seedInput, setSeedInput] = useState(initialSeed);
+  const [pendingSeed, setPendingSeed] = useState(initialSeed);
   const [game, setGame] = useState<SimulateRoundResult | undefined>();
   const [isGenerating, setIsGenerating] = useState(true);
   const [generationError, setGenerationError] = useState<string | undefined>();
@@ -48,9 +43,17 @@ export default function App() {
   const canStepNext = !atEnd && events.length > 0;
 
   useEffect(() => {
-    queueSimulation(defaultSeed);
+    queueSimulation(initialSeed, { replaceUrl: true });
+
+    function syncSeedFromHistory() {
+      const seed = seedFromUrlOrRandom();
+      queueSimulation(seed, { replaceUrl: true });
+    }
+
+    window.addEventListener("popstate", syncSeedFromHistory);
 
     return () => {
+      window.removeEventListener("popstate", syncSeedFromHistory);
       workerRef.current?.terminate();
       workerRef.current = null;
       clearEventHold();
@@ -69,9 +72,12 @@ export default function App() {
 
   function createSimulationWorker() {
     workerRef.current?.terminate();
-    const worker = new Worker(new URL("./sim/simulationWorker.ts", import.meta.url), {
-      type: "module",
-    });
+    const worker = new Worker(
+      new URL("./sim/simulationWorker.ts", import.meta.url),
+      {
+        type: "module",
+      },
+    );
     worker.onmessage = (event: MessageEvent<SimulationResponse>) => {
       if (event.data.requestId !== requestIdRef.current) {
         return;
@@ -105,10 +111,14 @@ export default function App() {
     return worker;
   }
 
-  function queueSimulation(seed: string) {
-    const nextSeed = seed.trim() || `game-${Date.now()}`;
+  function queueSimulation(
+    seed: string,
+    options: { replaceUrl?: boolean } = {},
+  ) {
+    const nextSeed = seed.trim() || randomSeed();
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
+    syncSeedQueryParam(nextSeed, options.replaceUrl ? "replace" : "push");
     setSeedInput(nextSeed);
     setPendingSeed(nextSeed);
     setIsGenerating(true);
@@ -122,7 +132,7 @@ export default function App() {
   }
 
   function newSeed() {
-    queueSimulation(`game-${Date.now()}`);
+    queueSimulation(randomSeed());
   }
 
   function restart() {
@@ -130,7 +140,7 @@ export default function App() {
   }
 
   function startTypedSeed() {
-    const seed = seedInput.trim() || `game-${Date.now()}`;
+    const seed = seedInput.trim() || randomSeed();
     queueSimulation(seed);
   }
 
@@ -254,7 +264,9 @@ export default function App() {
 
       {(isGenerating || generationError) && (
         <section
-          className={generationError ? "generation-pill error" : "generation-pill"}
+          className={
+            generationError ? "generation-pill error" : "generation-pill"
+          }
           aria-live="polite"
         >
           {generationError
@@ -296,7 +308,9 @@ export default function App() {
             <section className="rules-error" aria-label="Rules errors">
               <p className="eyebrow">Rules error</p>
               {replay.rulesErrors.map((error, index) => (
-                <p key={`${error.player}-${error.turn}-${index}`}>{error.message}</p>
+                <p key={`${error.player}-${error.turn}-${index}`}>
+                  {error.message}
+                </p>
               ))}
             </section>
           )}
@@ -324,10 +338,14 @@ export default function App() {
                   <button
                     type="button"
                     ref={
-                      isActiveGroup && group.phase === "setup" ? activeEventRef : null
+                      isActiveGroup && group.phase === "setup"
+                        ? activeEventRef
+                        : null
                     }
                     className={
-                      isActiveGroup ? "event-group-header active" : "event-group-header"
+                      isActiveGroup
+                        ? "event-group-header active"
+                        : "event-group-header"
                     }
                     onClick={() => setEventIndex(group.events[0]?.index ?? 0)}
                   >
@@ -341,7 +359,9 @@ export default function App() {
                         key={`${event.type}-${index}`}
                         ref={index === eventIndex ? activeEventRef : null}
                         className={
-                          index === eventIndex ? "event-row active" : "event-row"
+                          index === eventIndex
+                            ? "event-row active"
+                            : "event-row"
                         }
                         onClick={() => setEventIndex(index)}
                       >
@@ -394,9 +414,15 @@ export default function App() {
       </section>
 
       <footer className="asset-attribution">
-        Tile art adapted from{" "}
-        <a href="https://demching.itch.io/mahjong">DemChing/Cangjie6</a>,{" "}
-        <a href="/tiles/ATTRIBUTION.md">CC BY-SA 4.0</a>.
+        <span>
+          Github:{" "}
+          <a href="https://github.com/elh/concealed-gang">elh/concealed-gang</a>
+        </span>
+        <span>
+          Tile art adapted from{" "}
+          <a href="https://demching.itch.io/mahjong">DemChing/Cangjie6</a>,{" "}
+          <a href="/tiles/ATTRIBUTION.md">CC BY-SA 4.0</a>.
+        </span>
       </footer>
     </main>
   );
@@ -420,7 +446,9 @@ function TileGroup({
         ) : (
           tiles.map((tile) => (
             <span
-              className={highlightedTileIds.has(tile.id) ? "tile highlighted" : "tile"}
+              className={
+                highlightedTileIds.has(tile.id) ? "tile highlighted" : "tile"
+              }
               key={tile.id}
               title={tile.id}
             >
@@ -499,11 +527,14 @@ function eventTitle(event: GameEvent | undefined): ReactNode {
     case "winDeclared":
       return (
         <>
-          {playerNames[event.player]} declared win <InlineTile tile={event.tile} />
+          {playerNames[event.player]} declared win{" "}
+          <InlineTile tile={event.tile} />
         </>
       );
     case "drawDeclared":
-      return event.reason === "turnLimit" ? "Turn limit draw" : "Exhaustive draw";
+      return event.reason === "turnLimit"
+        ? "Turn limit draw"
+        : "Exhaustive draw";
     case "rulesError":
       return `Rules error for ${playerNames[event.player]}`;
   }
@@ -530,19 +561,17 @@ function eventDetail(event: GameEvent | undefined): ReactNode {
     case "kongDeclared":
       return `${playerNames[event.player]} exposed four matching concealed tiles and must draw a supplement tile before discarding.`;
     case "winDeclared":
-      return event.from === undefined
-        ? (
-          <>
-            {playerNames[event.player]} won by self draw on{" "}
-            <InlineTile tile={event.tile} />.
-          </>
-        )
-        : (
-          <>
-            {playerNames[event.player]} won on {playerNames[event.from]}'s{" "}
-            <InlineTile tile={event.tile} />.
-          </>
-        );
+      return event.from === undefined ? (
+        <>
+          {playerNames[event.player]} won by self draw on{" "}
+          <InlineTile tile={event.tile} />.
+        </>
+      ) : (
+        <>
+          {playerNames[event.player]} won on {playerNames[event.from]}'s{" "}
+          <InlineTile tile={event.tile} />.
+        </>
+      );
     case "drawDeclared":
       return event.reason === "turnLimit"
         ? `No winner before the turn limit after ${event.turn} turns.`
@@ -559,13 +588,38 @@ type EventGroup = {
   events: { event: GameEvent; index: number }[];
 };
 
+function seedFromUrlOrRandom(): string {
+  const seed = new URLSearchParams(window.location.search).get("seed")?.trim();
+  return seed || randomSeed();
+}
+
+function randomSeed(): string {
+  const bytes = new Uint8Array(5);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function syncSeedQueryParam(seed: string, mode: "push" | "replace"): void {
+  const url = new URL(window.location.href);
+  if (url.searchParams.get("seed") === seed) {
+    return;
+  }
+  url.searchParams.set("seed", seed);
+  window.history[mode === "replace" ? "replaceState" : "pushState"](
+    null,
+    "",
+    url,
+  );
+}
+
 function groupEvents(events: readonly GameEvent[]): EventGroup[] {
   const groups = new Map<string, EventGroup>();
   events.forEach((event, index) => {
     const group = groups.get(event.groupId) ?? {
       id: event.groupId,
       phase: event.phase,
-      label: event.phase === "setup" ? "Initial deal" : `Turn ${event.turn + 1}`,
+      label:
+        event.phase === "setup" ? "Initial deal" : `Turn ${event.turn + 1}`,
       events: [],
     };
     group.events.push({ event, index });
