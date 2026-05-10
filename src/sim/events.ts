@@ -26,6 +26,11 @@ export type GameEvent =
       deadWallCount: number;
     })
   | (EventMeta & {
+      type: "flowerExposed";
+      player: PlayerId;
+      tile: TileInstance;
+    })
+  | (EventMeta & {
       type: "tileDiscarded";
       player: PlayerId;
       tile: TileInstance;
@@ -42,8 +47,9 @@ export type GameEvent =
   | (EventMeta & {
       type: "kongDeclared";
       player: PlayerId;
-      kong: "concealed";
+      kong: "concealed" | "added";
       tiles: TileInstance[];
+      addedTile?: TileInstance;
     })
   | (EventMeta & {
       type: "winDeclared";

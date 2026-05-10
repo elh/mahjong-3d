@@ -1,10 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { createBaselineBot, createBaselineBots } from "../bots/baselineBot";
+import type { MahjongBot } from "../bots/types";
 import { claimPriority } from "./claimPriority";
-import { createInitialRound, simulateRound } from "./engine";
+import {
+  createInitialRound,
+  simulateRound,
+  simulateRoundFromState,
+} from "./engine";
 import { analyzeHand, evaluateDiscard } from "./handAnalysis";
 import { validateBetweenTurns } from "./invariants";
 import { createSeededRng, shuffle } from "./rng";
+import type { RoundState } from "./state";
 import { replayEvents } from "./replay";
 import { createTileSet, tileKey, type TileInstance } from "./tiles";
 import { isWinningHand } from "./win";
@@ -355,15 +361,42 @@ describe("simulation", () => {
   });
 
   test("allows multiple winners on the same discard", () => {
-    const result = simulateRound({
-      seed: "smart-multi-12",
-      bots: createBaselineBots(),
+    const pick = tilePicker();
+    const state = emptyRoundState();
+    const discard = pick("c1", 1)[0];
+    state.currentPlayer = 0;
+    state.needsDiscard = 0;
+    state.discardSource = "draw";
+    state.players[0].hand = [
+      discard,
+      ...pick("c4", 2),
+      ...pick("c5", 2),
+      ...pick("c6", 2),
+      ...pick("c7", 2),
+      ...pick("c8", 2),
+      ...pick("c9", 2),
+      ...pick("wind-north", 4),
+    ];
+    state.players[1].hand = discardWinWait(pick, "wind-east", "dragon-red");
+    state.players[2].hand = discardWinWait(pick, "wind-south", "dragon-green");
+
+    const result = simulateRoundFromState({
+      seed: "multi-discard-win",
+      state,
+      bots: [
+        discardSpecificBot(discard.id),
+        createBaselineBot(),
+        createBaselineBot(),
+        firstLegalBot(),
+      ],
       maxTurns: 400,
     });
     const finalEvent = result.events.at(-1);
 
     expect(finalEvent?.type).toBe("winDeclared");
     expect(result.finalState.winners?.length).toBeGreaterThan(1);
+    expect(result.finalState.players[1].winningTile?.id).toBe(discard.id);
+    expect(result.finalState.players[2].winningTile?.id).toBe(discard.id);
   });
 
   test("uses a draw event as the final event for non-winning rounds", () => {
@@ -424,7 +457,294 @@ describe("simulation", () => {
       expect(
         replayPlayer.melds.map((meld) => meld.tiles.map((tile) => tile.id)),
       ).toEqual(player.melds.map((meld) => meld.tiles.map((tile) => tile.id)));
+      expect(replayPlayer.winningTile?.id).toBe(player.winningTile?.id);
     }
+  });
+
+  test("does not allow concealed kong declarations while discarding after a chow or pong claim", () => {
+    const pick = tilePicker();
+    const state = emptyRoundState();
+    state.currentPlayer = 1;
+    state.needsDiscard = 1;
+    state.discardSource = "claim";
+    state.players[1].melds.push({
+      type: "pong",
+      tiles: pick("d1", 3),
+      claimedFrom: 0,
+    });
+    state.players[1].hand = [
+      ...pick("c1", 4),
+      ...pick("b1", 3),
+      ...pick("b2", 3),
+      ...pick("b3", 3),
+      ...pick("wind-east", 1),
+    ];
+
+    const result = simulateRoundFromState({
+      seed: "claim-discard-no-kong",
+      state,
+      bots: [
+        firstLegalBot(),
+        kongSeekingBot(),
+        firstLegalBot(),
+        firstLegalBot(),
+      ],
+      maxTurns: 1,
+    });
+
+    expect(result.events.some((event) => event.type === "kongDeclared")).toBe(
+      false,
+    );
+    expect(result.events.at(0)?.type).toBe("tileDiscarded");
+  });
+
+  test("allows the dealer to win on the initial 17-tile hand", () => {
+    const pick = tilePicker();
+    const state = emptyRoundState();
+    state.currentPlayer = 0;
+    state.needsDiscard = 0;
+    state.discardSource = "draw";
+    state.players[0].hand = tilesForStartingWin(pick);
+
+    const result = simulateRoundFromState({
+      seed: "dealer-starting-win",
+      state,
+      bots: createBaselineBots(),
+      maxTurns: 1,
+    });
+
+    expect(result.events.at(0)?.type).toBe("winDeclared");
+    expect(result.finalState.winners).toEqual([0]);
+    expect(result.events.some((event) => event.type === "tileDiscarded")).toBe(
+      false,
+    );
+  });
+
+  test("uses the chow tile pair selected by the claiming action", () => {
+    const pick = tilePicker();
+    const state = emptyRoundState();
+    const discard = pick("c5", 1)[0];
+    state.currentPlayer = 0;
+    state.needsDiscard = 0;
+    state.discardSource = "draw";
+    state.players[0].hand = [
+      discard,
+      ...pick("d1", 3),
+      ...pick("d2", 3),
+      ...pick("d3", 3),
+      ...pick("b1", 3),
+      ...pick("b2", 3),
+      ...pick("wind-east", 1),
+    ];
+    const lowChow = pick("c3", 1);
+    const lowChowSecond = pick("c4", 1);
+    const chosenChow = pick("c6", 1);
+    const chosenChowSecond = pick("c7", 1);
+    state.players[1].hand = [
+      ...lowChow,
+      ...lowChowSecond,
+      ...chosenChow,
+      ...chosenChowSecond,
+      ...pick("b4", 3),
+      ...pick("b5", 3),
+      ...pick("b6", 3),
+      ...pick("dragon-red", 3),
+    ];
+
+    const result = simulateRoundFromState({
+      seed: "chosen-chow",
+      state,
+      bots: [
+        discardSpecificBot(discard.id),
+        chowChoosingBot([chosenChow[0].id, chosenChowSecond[0].id]),
+        firstLegalBot(),
+        firstLegalBot(),
+      ],
+      maxTurns: 1,
+    });
+
+    const claim = result.events.find((event) => event.type === "claimMade");
+    expect(claim?.type).toBe("claimMade");
+    if (claim?.type === "claimMade") {
+      expect(claim.claim).toBe("chow");
+      expect(claim.tiles.map((tile) => tile.id).sort()).toEqual(
+        [discard.id, chosenChow[0].id, chosenChowSecond[0].id].sort(),
+      );
+    }
+  });
+
+  test("does not replenish the dead wall when no supplement tile exists", () => {
+    const pick = tilePicker();
+    const state = emptyRoundState();
+    state.currentPlayer = 0;
+    state.needsReplacementDraw = 0;
+    state.wall = pick("c9", 1);
+    state.deadWall = [];
+    state.players[0].hand = fillerTiles(pick, 13);
+
+    const result = simulateRoundFromState({
+      seed: "empty-dead-wall",
+      state,
+      bots: createBaselineBots(),
+      maxTurns: 1,
+    });
+
+    expect(result.finalState.wall.map((tile) => tile.id)).toEqual(
+      state.wall.map((tile) => tile.id),
+    );
+    expect(result.finalState.deadWall).toEqual([]);
+    expect(result.events.at(-1)?.type).toBe("drawDeclared");
+  });
+
+  test("declares added kongs and draws a supplement before discarding", () => {
+    const pick = tilePicker();
+    const state = emptyRoundState();
+    const addedTile = pick("c1", 1)[0];
+    const supplement = pick("c9", 1)[0];
+    state.currentPlayer = 0;
+    state.needsDiscard = 0;
+    state.discardSource = "draw";
+    state.deadWall = [supplement];
+    state.players[0].melds.push({
+      type: "pong",
+      tiles: pick("c1", 3),
+      claimedFrom: 3,
+    });
+    state.players[0].hand = [
+      addedTile,
+      ...pick("d1", 3),
+      ...pick("d2", 3),
+      ...pick("d3", 3),
+      ...pick("b1", 3),
+      ...pick("wind-east", 1),
+    ];
+
+    const result = simulateRoundFromState({
+      seed: "added-kong",
+      state,
+      bots: [
+        kongSeekingBot(),
+        firstLegalBot(),
+        firstLegalBot(),
+        firstLegalBot(),
+      ],
+      maxTurns: 1,
+    });
+    const kong = result.events[0];
+    const draw = result.events[1];
+    const discardEvent = result.events[2];
+
+    expect(kong?.type).toBe("kongDeclared");
+    if (kong?.type === "kongDeclared") {
+      expect(kong.kong).toBe("added");
+      expect(kong.addedTile?.id).toBe(addedTile.id);
+    }
+    expect(draw?.type).toBe("tileDrawn");
+    if (draw?.type === "tileDrawn") {
+      expect(draw.tile.id).toBe(supplement.id);
+      expect(draw.replacement).toBe(true);
+    }
+    expect(discardEvent?.type).toBe("tileDiscarded");
+    expect(result.finalState.players[0].melds[0].type).toBe("kong");
+  });
+
+  test("allows opponents to rob an added kong before it is finalized", () => {
+    const pick = tilePicker();
+    const state = emptyRoundState();
+    const robbedTile = pick("c1", 1)[0];
+    state.currentPlayer = 0;
+    state.needsDiscard = 0;
+    state.discardSource = "draw";
+    state.players[0].melds.push({
+      type: "pong",
+      tiles: pick("c1", 3),
+      claimedFrom: 3,
+    });
+    state.players[0].hand = [
+      robbedTile,
+      ...pick("d7", 3),
+      ...pick("d8", 3),
+      ...pick("d9", 3),
+      ...pick("b7", 3),
+      ...pick("wind-north", 1),
+    ];
+    state.players[1].hand = [
+      ...pick("c2", 1),
+      ...pick("c3", 1),
+      ...pick("d1", 1),
+      ...pick("d2", 1),
+      ...pick("d3", 1),
+      ...pick("d4", 1),
+      ...pick("d5", 1),
+      ...pick("d6", 1),
+      ...pick("b1", 1),
+      ...pick("b2", 1),
+      ...pick("b3", 1),
+      ...pick("wind-east", 3),
+      ...pick("dragon-red", 2),
+    ];
+
+    const result = simulateRoundFromState({
+      seed: "rob-added-kong",
+      state,
+      bots: [
+        kongSeekingBot(),
+        createBaselineBot(),
+        firstLegalBot(),
+        firstLegalBot(),
+      ],
+      maxTurns: 1,
+    });
+
+    expect(result.events.some((event) => event.type === "kongDeclared")).toBe(
+      false,
+    );
+    const win = result.events.at(-1);
+    expect(win?.type).toBe("winDeclared");
+    if (win?.type === "winDeclared") {
+      expect(win.player).toBe(1);
+      expect(win.from).toBe(0);
+      expect(win.tile.id).toBe(robbedTile.id);
+    }
+    expect(result.finalState.players[1].winningTile?.id).toBe(robbedTile.id);
+  });
+
+  test("records flower exposure explicitly and replays it", () => {
+    const pick = tilePicker();
+    const state = emptyRoundState();
+    const flower = pick("flower-1", 1)[0];
+    const supplement = pick("c9", 1)[0];
+    state.currentPlayer = 0;
+    state.wall = [flower];
+    state.deadWall = [supplement];
+    state.players[0].hand = [
+      ...pick("d1", 3),
+      ...pick("d2", 3),
+      ...pick("d3", 3),
+      ...pick("b1", 3),
+      ...pick("b2", 3),
+      ...pick("wind-east", 1),
+    ];
+
+    const result = simulateRoundFromState({
+      seed: "flower-event",
+      state,
+      bots: createBaselineBots(),
+      maxTurns: 1,
+    });
+    const replay = replayEvents(result.events);
+
+    expect(result.events.slice(0, 3).map((event) => event.type)).toEqual([
+      "tileDrawn",
+      "flowerExposed",
+      "tileDrawn",
+    ]);
+    expect(replay.players[0].flowers.map((tile) => tile.id)).toEqual([
+      flower.id,
+    ]);
+    expect(replay.players[0].hand.some((tile) => tile.id === flower.id)).toBe(
+      false,
+    );
   });
 });
 
@@ -433,4 +753,182 @@ function tilesByKinds(requested: [string, number][]): TileInstance[] {
   return requested.flatMap(([key, count]) =>
     tiles.filter((tile) => tileKey(tile.kind) === key).slice(0, count),
   );
+}
+
+type TilePicker = (key: string, count: number) => TileInstance[];
+
+function tilePicker(): TilePicker {
+  const tiles = createTileSet();
+  return (key, count) => {
+    const picked: TileInstance[] = [];
+    for (
+      let index = tiles.length - 1;
+      index >= 0 && picked.length < count;
+      index -= 1
+    ) {
+      if (tileKey(tiles[index].kind) !== key) {
+        continue;
+      }
+      picked.push(tiles.splice(index, 1)[0]);
+    }
+    if (picked.length !== count) {
+      throw new Error(`Could not pick ${count} tiles for ${key}.`);
+    }
+    return picked;
+  };
+}
+
+function emptyRoundState(): RoundState {
+  return {
+    players: [
+      { id: 0, hand: [], flowers: [], discards: [], melds: [] },
+      { id: 1, hand: [], flowers: [], discards: [], melds: [] },
+      { id: 2, hand: [], flowers: [], discards: [], melds: [] },
+      { id: 3, hand: [], flowers: [], discards: [], melds: [] },
+    ],
+    wall: [],
+    deadWall: [],
+    currentPlayer: 0,
+    dealer: 0,
+    turn: 0,
+    ended: false,
+  };
+}
+
+function tilesForStartingWin(pick: TilePicker): TileInstance[] {
+  return [
+    ...pick("c1", 1),
+    ...pick("c2", 1),
+    ...pick("c3", 1),
+    ...pick("c4", 1),
+    ...pick("c5", 1),
+    ...pick("c6", 1),
+    ...pick("d1", 1),
+    ...pick("d2", 1),
+    ...pick("d3", 1),
+    ...pick("b1", 1),
+    ...pick("b2", 1),
+    ...pick("b3", 1),
+    ...pick("wind-east", 3),
+    ...pick("dragon-red", 2),
+  ];
+}
+
+function discardWinWait(
+  pick: TilePicker,
+  tripletKey: string,
+  pairKey: string,
+): TileInstance[] {
+  return [
+    ...pick("c2", 1),
+    ...pick("c3", 1),
+    ...pick("d1", 1),
+    ...pick("d2", 1),
+    ...pick("d3", 1),
+    ...pick("d4", 1),
+    ...pick("d5", 1),
+    ...pick("d6", 1),
+    ...pick("b1", 1),
+    ...pick("b2", 1),
+    ...pick("b3", 1),
+    ...pick(tripletKey, 3),
+    ...pick(pairKey, 2),
+  ];
+}
+
+function fillerTiles(pick: TilePicker, count: number): TileInstance[] {
+  const keys = [
+    "c1",
+    "c2",
+    "c3",
+    "c4",
+    "c5",
+    "c6",
+    "c7",
+    "c8",
+    "c9",
+    "d1",
+    "d2",
+    "d3",
+    "d4",
+    "d5",
+    "d6",
+    "d7",
+    "d8",
+    "d9",
+    "b1",
+    "b2",
+    "b3",
+    "b4",
+    "b5",
+    "b6",
+    "b7",
+    "b8",
+    "b9",
+  ];
+  const tiles: TileInstance[] = [];
+  for (const key of keys) {
+    while (tiles.length < count) {
+      try {
+        tiles.push(...pick(key, 1));
+      } catch {
+        break;
+      }
+    }
+    if (tiles.length === count) {
+      return tiles;
+    }
+  }
+  throw new Error(`Could not pick ${count} filler tiles.`);
+}
+
+function firstLegalBot(name = "First Legal"): MahjongBot {
+  return {
+    name,
+    chooseAction(context) {
+      return context.legalActions[0];
+    },
+  };
+}
+
+function kongSeekingBot(): MahjongBot {
+  return {
+    name: "Kong Seeking",
+    chooseAction(context) {
+      return (
+        context.legalActions.find((action) => action.type === "declareKong") ??
+        context.legalActions.find((action) => action.type === "discard") ??
+        context.legalActions[0]
+      );
+    },
+  };
+}
+
+function discardSpecificBot(tileId: string): MahjongBot {
+  return {
+    name: "Specific Discard",
+    chooseAction(context) {
+      return (
+        context.legalActions.find(
+          (action) => action.type === "discard" && action.tileId === tileId,
+        ) ?? context.legalActions[0]
+      );
+    },
+  };
+}
+
+function chowChoosingBot(consumedTileIds: [string, string]): MahjongBot {
+  return {
+    name: "Chow Choosing",
+    chooseAction(context) {
+      return (
+        context.legalActions.find(
+          (action) =>
+            action.type === "claim" &&
+            action.claim === "chow" &&
+            action.consumedTileIds?.join("|") === consumedTileIds.join("|"),
+        ) ?? { type: "pass" }
+      );
+    },
+  };
 }

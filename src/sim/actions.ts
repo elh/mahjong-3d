@@ -11,12 +11,25 @@ export type ClaimAction = {
   type: "claim";
   claim: "chow" | "pong" | "kong" | "win";
   tileId: string;
+  consumedTileIds?: [string, string];
 };
 
-export type DeclareKongAction = {
+export type DeclareConcealedKongAction = {
   type: "declareKong";
+  kong: "concealed";
   tileIds: [string, string, string, string];
 };
+
+export type DeclareAddedKongAction = {
+  type: "declareKong";
+  kong: "added";
+  meldIndex: number;
+  tileId: string;
+};
+
+export type DeclareKongAction =
+  | DeclareConcealedKongAction
+  | DeclareAddedKongAction;
 
 export type PassAction = {
   type: "pass";

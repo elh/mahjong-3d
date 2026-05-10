@@ -2,7 +2,7 @@ import type { GameEvent } from "./events";
 import { createSeededRng, shuffle } from "./rng";
 import type { Meld, PlayerId } from "./state";
 import type { TileInstance } from "./tiles";
-import { createTileSet, isFlower, sortTiles } from "./tiles";
+import { createTileSet, sortTiles } from "./tiles";
 
 export type ReplayPlayer = {
   id: PlayerId;
@@ -10,6 +10,7 @@ export type ReplayPlayer = {
   flowers: TileInstance[];
   discards: TileInstance[];
   melds: Meld[];
+  winningTile?: TileInstance;
 };
 
 export type ReplayState = {
@@ -84,15 +85,18 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
       }
       state.wallCount = event.wallCount;
       state.deadWallCount = event.deadWallCount;
-      if (isFlower(event.tile)) {
-        state.players[event.player].flowers.push(event.tile);
-      } else {
-        state.players[event.player].hand = sortTiles([
-          ...state.players[event.player].hand,
-          event.tile,
-        ]);
-      }
+      state.players[event.player].hand = sortTiles([
+        ...state.players[event.player].hand,
+        event.tile,
+      ]);
       return;
+    case "flowerExposed": {
+      const exposed =
+        removeTile(state.players[event.player].hand, event.tile.id) ??
+        event.tile;
+      state.players[event.player].flowers.push(exposed);
+      return;
+    }
     case "tileDiscarded":
       removeTile(state.players[event.player].hand, event.tile.id);
       state.players[event.player].discards.push(event.tile);
@@ -111,14 +115,29 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
       });
       return;
     case "kongDeclared":
-      for (const tile of event.tiles) {
-        removeTile(state.players[event.player].hand, tile.id);
+      if (event.kong === "concealed") {
+        for (const tile of event.tiles) {
+          removeTile(state.players[event.player].hand, tile.id);
+        }
+        state.players[event.player].melds.push({
+          type: "kong",
+          tiles: event.tiles,
+          concealed: true,
+        });
+        return;
       }
-      state.players[event.player].melds.push({
-        type: "kong",
-        tiles: event.tiles,
-        concealed: true,
-      });
+      if (event.addedTile) {
+        removeTile(state.players[event.player].hand, event.addedTile.id);
+      }
+      state.players[event.player].melds = state.players[event.player].melds.map(
+        (meld) =>
+          meld.type === "pong" &&
+          meld.tiles.every((tile) =>
+            event.tiles.some((eventTile) => eventTile.id === tile.id),
+          )
+            ? { ...meld, type: "kong", tiles: event.tiles }
+            : meld,
+      );
       return;
     case "winDeclared":
       state.ended = true;
@@ -127,14 +146,10 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
         new Set([...(state.winners ?? []), event.player]),
       );
       if (event.from !== undefined) {
-        const discarded = removeTile(
-          state.players[event.from].discards,
-          event.tile.id,
-        );
-        state.players[event.player].hand = sortTiles([
-          ...state.players[event.player].hand,
-          discarded ?? event.tile,
-        ]);
+        const wonTile =
+          removeTile(state.players[event.from].discards, event.tile.id) ??
+          event.tile;
+        state.players[event.player].winningTile = wonTile;
       }
       return;
     case "drawDeclared":

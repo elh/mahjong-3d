@@ -17,6 +17,7 @@ export type PlayerState = {
   flowers: TileInstance[];
   discards: TileInstance[];
   melds: Meld[];
+  winningTile?: TileInstance;
 };
 
 export type RoundState = {
@@ -25,6 +26,7 @@ export type RoundState = {
   deadWall: TileInstance[];
   currentPlayer: PlayerId;
   needsDiscard?: PlayerId;
+  discardSource?: "draw" | "claim";
   needsReplacementDraw?: PlayerId;
   dealer: PlayerId;
   turn: number;
@@ -55,6 +57,7 @@ export function cloneRoundState(state: RoundState): RoundState {
       flowers: [...player.flowers],
       discards: [...player.discards],
       melds: player.melds.map((meld) => ({ ...meld, tiles: [...meld.tiles] })),
+      winningTile: player.winningTile,
     })) as RoundState["players"],
     wall: [...state.wall],
     deadWall: [...state.deadWall],

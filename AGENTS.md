@@ -27,6 +27,8 @@ Core rule: simulation state and event logs are the source of truth. UI state sho
 - Winning rounds end on `winDeclared`; drawn rounds end on `drawDeclared`.
 - Do not add a generic terminal `roundEnded` viewer row.
 - Event payloads must support replay and active-tile highlighting.
+- Flower exposure is explicit via `flowerExposed`; do not rely on implicit UI mutation from `tileDrawn`.
+- Chow claim actions carry the two consumed tile ids so ambiguous chows are replayable.
 
 ## Taiwanese Mahjong Scope
 
@@ -40,6 +42,8 @@ Implemented expectations:
 - flower and kong supplements draw from the dead wall;
 - each dead-wall supplement is replenished from the back of the live wall;
 - concealed and claimed kongs draw a supplement before discard;
+- added kongs from exposed pongs are supported;
+- opponents may rob an added kong before it is finalized;
 - multiple winners on one discard are allowed;
 - wins include normal 5-sets-plus-pair and Taiwanese seven-pairs-plus-triplet;
 - turn-boundary invariants catch illegal concealed hand counts.

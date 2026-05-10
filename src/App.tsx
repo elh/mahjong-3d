@@ -445,6 +445,11 @@ export default function App() {
                   tiles={player.flowers}
                   highlightedTileIds={highlightedTileIds}
                 />
+                <TileGroup
+                  title="Win"
+                  tiles={player.winningTile ? [player.winningTile] : []}
+                  highlightedTileIds={highlightedTileIds}
+                />
               </div>
             </div>
           </article>
@@ -541,6 +546,7 @@ function activeTileIds(event: GameEvent | undefined): ReadonlySet<string> {
   switch (event.type) {
     case "tileDrawn":
     case "tileDiscarded":
+    case "flowerExposed":
     case "winDeclared":
       return new Set([event.tile.id]);
     case "claimMade":
@@ -573,6 +579,13 @@ function eventTitle(event: GameEvent | undefined): ReactNode {
           {playerNames[event.player]} discarded <InlineTile tile={event.tile} />
         </>
       );
+    case "flowerExposed":
+      return (
+        <>
+          {playerNames[event.player]} exposed flower{" "}
+          <InlineTile tile={event.tile} />
+        </>
+      );
     case "claimMade":
       return (
         <>
@@ -583,7 +596,7 @@ function eventTitle(event: GameEvent | undefined): ReactNode {
     case "kongDeclared":
       return (
         <>
-          {playerNames[event.player]} declared concealed kong{" "}
+          {playerNames[event.player]} declared {event.kong} kong{" "}
           {event.tiles.map((tile) => (
             <InlineTile key={tile.id} tile={tile} />
           ))}
@@ -616,6 +629,8 @@ function eventDetail(event: GameEvent | undefined): ReactNode {
       return `${event.replacement ? "Supplement draw" : "Turn draw"} from ${event.source === "deadWall" ? "dead wall" : "live wall"} with ${event.wallCount} live tiles left.`;
     case "tileDiscarded":
       return `${playerNames[event.player]} now has ${event.handCount} concealed tiles.`;
+    case "flowerExposed":
+      return `${playerNames[event.player]} exposed a flower and will draw a supplement tile.`;
     case "claimMade":
       return (
         <>
@@ -624,7 +639,7 @@ function eventDetail(event: GameEvent | undefined): ReactNode {
         </>
       );
     case "kongDeclared":
-      return `${playerNames[event.player]} exposed four matching concealed tiles and must draw a supplement tile before discarding.`;
+      return `${playerNames[event.player]} declared a ${event.kong} kong and must draw a supplement tile before discarding.`;
     case "winDeclared":
       return event.from === undefined ? (
         <>
