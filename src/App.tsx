@@ -130,16 +130,6 @@ export default function App() {
 
   return (
     <main className="app-shell">
-      <section className="status-band">
-        <div>
-          <p className="eyebrow">Taiwanese 16-tile Mahjong simulator</p>
-          <h1>Concealed Gang</h1>
-        </div>
-        <div className="run-summary">
-          <span>{isGenerating ? "Generating..." : `${events.length} events`}</span>
-        </div>
-      </section>
-
       <section className="controls-band" aria-label="Game controls">
         <label className="seed-field">
           <span>Seed</span>
@@ -210,84 +200,81 @@ export default function App() {
       )}
 
       <section className="viewer-shell" aria-label="Simulation viewer">
-        <article className="event-panel">
-          <p className="eyebrow">Current event</p>
-          <h2>{eventTitle(currentEvent)}</h2>
-          <p>{eventDetail(currentEvent)}</p>
-          <dl>
-            <div>
-              <dt>Group</dt>
-              <dd>{formatGroupLabel(currentEvent)}</dd>
-            </div>
-            <div>
-              <dt>Seed</dt>
-              <dd>{game?.seed ?? pendingSeed}</dd>
-            </div>
-            <div>
-              <dt>Wall remaining</dt>
-              <dd>{replay.wallCount}</dd>
-            </div>
-            <div>
-              <dt>Dead wall</dt>
-              <dd>{replay.deadWallCount}</dd>
-            </div>
-            <div>
-              <dt>Winner</dt>
-              <dd>
-                {replay.winners?.length
-                  ? replay.winners.map((winner) => playerNames[winner]).join(", ")
-                  : "None"}
-              </dd>
-            </div>
-          </dl>
-        </article>
+        <section className="wall-panel" aria-label="Wall state">
+          <header>
+            <h2>Remaining tiles</h2>
+            <span>
+              {replay.wall.length} live / {replay.deadWall.length} dead
+            </span>
+          </header>
+          <TileGroup
+            title="Live wall"
+            tiles={replay.wall}
+            highlightedTileIds={highlightedTileIds}
+          />
+          <TileGroup
+            title="Dead wall"
+            tiles={replay.deadWall}
+            highlightedTileIds={highlightedTileIds}
+          />
+        </section>
 
-        {replay.rulesErrors.length > 0 && (
-          <section className="rules-error" aria-label="Rules errors">
-            <p className="eyebrow">Rules error</p>
-            {replay.rulesErrors.map((error, index) => (
-              <p key={`${error.player}-${error.turn}-${index}`}>{error.message}</p>
-            ))}
-          </section>
-        )}
+        <section className="event-rail" aria-label="Event detail and log">
+          <article className="event-panel">
+            <p className="eyebrow">Current event</p>
+            <h2>{eventTitle(currentEvent)}</h2>
+            <p>{eventDetail(currentEvent)}</p>
+          </article>
 
-        <div className="event-list" aria-label="Event log">
-          {eventGroups.map((group) => {
-            const isActiveGroup = group.events.some(
-              (entry) => entry.index === eventIndex,
-            );
-            return (
-              <section className="event-group" key={group.id}>
-                <button
-                  type="button"
-                  ref={
-                    isActiveGroup && group.phase === "setup" ? activeEventRef : null
-                  }
-                  className={
-                    isActiveGroup ? "event-group-header active" : "event-group-header"
-                  }
-                  onClick={() => setEventIndex(group.events[0]?.index ?? 0)}
-                >
-                  <strong>{group.label}</strong>
-                  <span>{group.events.length} events</span>
-                </button>
-                {group.phase === "turn" &&
-                  group.events.map(({ event, index }) => (
-                    <button
-                      type="button"
-                      key={`${event.type}-${index}`}
-                      ref={index === eventIndex ? activeEventRef : null}
-                      className={index === eventIndex ? "event-row active" : "event-row"}
-                      onClick={() => setEventIndex(index)}
-                    >
-                      <span>{String(index + 1).padStart(3, "0")}</span>
-                      <strong>{eventTitle(event)}</strong>
-                    </button>
-                  ))}
-              </section>
-            );
-          })}
-        </div>
+          {replay.rulesErrors.length > 0 && (
+            <section className="rules-error" aria-label="Rules errors">
+              <p className="eyebrow">Rules error</p>
+              {replay.rulesErrors.map((error, index) => (
+                <p key={`${error.player}-${error.turn}-${index}`}>{error.message}</p>
+              ))}
+            </section>
+          )}
+
+          <div className="event-list" aria-label="Event log">
+            {eventGroups.map((group) => {
+              const isActiveGroup = group.events.some(
+                (entry) => entry.index === eventIndex,
+              );
+              return (
+                <section className="event-group" key={group.id}>
+                  <button
+                    type="button"
+                    ref={
+                      isActiveGroup && group.phase === "setup" ? activeEventRef : null
+                    }
+                    className={
+                      isActiveGroup ? "event-group-header active" : "event-group-header"
+                    }
+                    onClick={() => setEventIndex(group.events[0]?.index ?? 0)}
+                  >
+                    <strong>{group.label}</strong>
+                    <span>{group.events.length} events</span>
+                  </button>
+                  {group.phase === "turn" &&
+                    group.events.map(({ event, index }) => (
+                      <button
+                        type="button"
+                        key={`${event.type}-${index}`}
+                        ref={index === eventIndex ? activeEventRef : null}
+                        className={
+                          index === eventIndex ? "event-row active" : "event-row"
+                        }
+                        onClick={() => setEventIndex(index)}
+                      >
+                        <span>{String(index + 1).padStart(3, "0")}</span>
+                        <strong>{eventTitle(event)}</strong>
+                      </button>
+                    ))}
+                </section>
+              );
+            })}
+          </div>
+        </section>
       </section>
 
       <section className="table-grid" aria-label="Player states">
@@ -297,50 +284,34 @@ export default function App() {
               <h2>{playerNames[player.id]}</h2>
               <span>{player.hand.length} tiles</span>
             </header>
-            <TileGroup
-              title="Hand"
-              tiles={player.hand}
-              highlightedTileIds={highlightedTileIds}
-            />
-            <TileGroup
-              title="Melds"
-              tiles={player.melds.flatMap((meld) => meld.tiles)}
-              highlightedTileIds={highlightedTileIds}
-            />
-            <TileGroup
-              title="Discards"
-              tiles={player.discards}
-              highlightedTileIds={highlightedTileIds}
-            />
-            <TileGroup
-              title="Flowers"
-              tiles={player.flowers}
-              highlightedTileIds={highlightedTileIds}
-            />
+            <div className="player-tile-rows">
+              <div className="player-tile-row">
+                <TileGroup
+                  title="Hand"
+                  tiles={player.hand}
+                  highlightedTileIds={highlightedTileIds}
+                />
+                <TileGroup
+                  title="Melds"
+                  tiles={player.melds.flatMap((meld) => meld.tiles)}
+                  highlightedTileIds={highlightedTileIds}
+                />
+              </div>
+              <div className="player-tile-row">
+                <TileGroup
+                  title="Discards"
+                  tiles={player.discards}
+                  highlightedTileIds={highlightedTileIds}
+                />
+                <TileGroup
+                  title="Flowers"
+                  tiles={player.flowers}
+                  highlightedTileIds={highlightedTileIds}
+                />
+              </div>
+            </div>
           </article>
         ))}
-      </section>
-
-      <section className="wall-panel" aria-label="Wall state">
-        <header>
-          <div>
-            <p className="eyebrow">Wall</p>
-            <h2>Remaining tiles</h2>
-          </div>
-          <span>
-            {replay.wall.length} live / {replay.deadWall.length} dead
-          </span>
-        </header>
-        <TileGroup
-          title="Live wall"
-          tiles={replay.wall}
-          highlightedTileIds={highlightedTileIds}
-        />
-        <TileGroup
-          title="Dead wall"
-          tiles={replay.deadWall}
-          highlightedTileIds={highlightedTileIds}
-        />
       </section>
 
       <footer className="asset-attribution">
@@ -457,13 +428,6 @@ function eventTitle(event: GameEvent | undefined): ReactNode {
     case "rulesError":
       return `Rules error for ${playerNames[event.player]}`;
   }
-}
-
-function formatGroupLabel(event: GameEvent | undefined): string {
-  if (!event) {
-    return "None";
-  }
-  return event.phase === "setup" ? "Initial deal" : `Turn ${event.turn + 1}`;
 }
 
 function eventDetail(event: GameEvent | undefined): ReactNode {
