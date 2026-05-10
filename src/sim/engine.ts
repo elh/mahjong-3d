@@ -100,17 +100,7 @@ export function simulateRound(options: SimulateRoundOptions): SimulateRoundResul
 
   if (!state.ended) {
     appendInvariantErrors(state, events);
-    state.ended = true;
-    events.push({
-      ...eventMeta("turn", state.turn),
-      type: "roundEnded",
-      reason: "turnLimit",
-      winner: state.winner,
-      winners: state.winners,
-      wallCount: state.wall.length,
-      deadWallCount: state.deadWall.length,
-      turn: state.turn,
-    });
+    endRound(state, events, "turnLimit");
   }
 
   return {
@@ -558,12 +548,13 @@ function endRound(
   reason: "win" | "exhaustiveDraw" | "turnLimit",
 ): void {
   state.ended = true;
+  if (reason === "win") {
+    return;
+  }
   events.push({
     ...eventMeta("turn", state.turn),
-    type: "roundEnded",
+    type: "drawDeclared",
     reason,
-    winner: state.winner,
-    winners: state.winners,
     wallCount: state.wall.length,
     deadWallCount: state.deadWall.length,
     turn: state.turn,

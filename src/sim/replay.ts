@@ -114,6 +114,7 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
       });
       return;
     case "winDeclared":
+      state.ended = true;
       state.winner = event.player;
       state.winners = Array.from(new Set([...(state.winners ?? []), event.player]));
       if (event.from !== undefined) {
@@ -124,10 +125,8 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
         ]);
       }
       return;
-    case "roundEnded":
+    case "drawDeclared":
       state.ended = true;
-      state.winner = event.winner;
-      state.winners = event.winners;
       state.wallCount = event.wallCount;
       state.deadWallCount = event.deadWallCount;
       return;

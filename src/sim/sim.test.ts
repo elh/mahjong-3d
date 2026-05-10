@@ -238,14 +238,18 @@ describe("simulation", () => {
     ]);
   });
 
-  test("runs to a terminal round event", () => {
+  test("runs to a meaningful terminal event", () => {
     const result = simulateRound({
       seed: "smoke",
       bots: createBaselineBots(),
     });
     const finalEvent = result.events.at(-1);
 
-    expect(finalEvent?.type).toBe("roundEnded");
+    expect(finalEvent).toBeDefined();
+    if (!finalEvent) {
+      throw new Error("missing final event");
+    }
+    expect(["winDeclared", "drawDeclared"]).toContain(finalEvent.type);
     expect(result.finalState.ended).toBe(true);
   });
 
@@ -331,12 +335,22 @@ describe("simulation", () => {
     });
     const finalEvent = result.events.at(-1);
 
-    expect(finalEvent?.type).toBe("roundEnded");
-    if (finalEvent?.type === "roundEnded") {
-      expect(finalEvent.reason).toBe("win");
-      expect(finalEvent.winners?.length).toBeGreaterThan(1);
-    }
+    expect(finalEvent?.type).toBe("winDeclared");
     expect(result.finalState.winners?.length).toBeGreaterThan(1);
+  });
+
+  test("uses a draw event as the final event for non-winning rounds", () => {
+    const result = simulateRound({
+      seed: "turn-limit-draw",
+      bots: createBaselineBots(),
+      maxTurns: 1,
+    });
+    const finalEvent = result.events.at(-1);
+
+    expect(finalEvent?.type).toBe("drawDeclared");
+    if (finalEvent?.type === "drawDeclared") {
+      expect(finalEvent.reason).toBe("turnLimit");
+    }
   });
 
   test("recognizes Taiwanese seven pairs plus a triplet as a winning hand", () => {

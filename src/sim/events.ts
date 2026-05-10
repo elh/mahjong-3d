@@ -52,10 +52,8 @@ export type GameEvent =
       tile: TileInstance;
     })
   | (EventMeta & {
-      type: "roundEnded";
-      reason: "win" | "exhaustiveDraw" | "turnLimit";
-      winner?: PlayerId;
-      winners?: PlayerId[];
+      type: "drawDeclared";
+      reason: "exhaustiveDraw" | "turnLimit";
       wallCount: number;
       deadWallCount: number;
       turn: number;

@@ -64,8 +64,9 @@ h1 {
 }
 
 h2 {
-  margin-bottom: 5px;
+  margin-bottom: 0;
   font-size: 1rem;
+  line-height: 1.15;
   letter-spacing: 0;
 }
 
@@ -193,6 +194,25 @@ h3 {
   min-width: 0;
 }
 
+.event-panel header {
+  display: flex;
+  align-items: baseline;
+  min-height: 18px;
+  margin-bottom: 5px;
+}
+
+.event-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 24px;
+  color: #172018;
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
 .event-panel p {
   max-width: 64ch;
   color: #485242;
@@ -278,7 +298,6 @@ h3 {
   gap: 4px;
 }
 
-.event-panel h2,
 .event-panel p:not(.eyebrow) {
   display: flex;
   align-items: center;
@@ -323,10 +342,11 @@ h3 {
 
 .wall-panel header {
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 4px;
+  min-height: 18px;
+  margin-bottom: 5px;
 }
 
 .wall-panel header span {
@@ -337,6 +357,7 @@ h3 {
 
 .player-panel header {
   display: flex;
+  align-items: baseline;
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 6px;

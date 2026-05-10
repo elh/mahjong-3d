@@ -28,6 +28,9 @@ export default function App() {
   const activeEventRef = useRef<HTMLButtonElement | null>(null);
   const requestIdRef = useRef(0);
   const workerRef = useRef<Worker | null>(null);
+  const holdDelayRef = useRef<number | undefined>(undefined);
+  const holdIntervalRef = useRef<number | undefined>(undefined);
+  const suppressStepClickRef = useRef(false);
   const events = game?.events ?? [];
   const replay = useMemo(
     () => replayEvents(events, eventIndex),
@@ -41,6 +44,8 @@ export default function App() {
   );
   const atStart = eventIndex === 0;
   const atEnd = eventIndex >= events.length - 1;
+  const canStepPrevious = !atStart && events.length > 0;
+  const canStepNext = !atEnd && events.length > 0;
 
   useEffect(() => {
     queueSimulation(defaultSeed);
@@ -48,6 +53,7 @@ export default function App() {
     return () => {
       workerRef.current?.terminate();
       workerRef.current = null;
+      clearEventHold();
     };
   }, []);
 
@@ -128,6 +134,50 @@ export default function App() {
     queueSimulation(seed);
   }
 
+  function stepEvent(direction: -1 | 1) {
+    setEventIndex((index) =>
+      Math.min(Math.max(0, index + direction), Math.max(events.length - 1, 0)),
+    );
+  }
+
+  function clearEventHold() {
+    if (holdDelayRef.current !== undefined) {
+      window.clearTimeout(holdDelayRef.current);
+      holdDelayRef.current = undefined;
+    }
+    if (holdIntervalRef.current !== undefined) {
+      window.clearInterval(holdIntervalRef.current);
+      holdIntervalRef.current = undefined;
+    }
+  }
+
+  function cancelEventHold() {
+    clearEventHold();
+    suppressStepClickRef.current = false;
+  }
+
+  function startEventHold(direction: -1 | 1, enabled: boolean) {
+    if (!enabled) {
+      return;
+    }
+    suppressStepClickRef.current = true;
+    clearEventHold();
+    stepEvent(direction);
+    holdDelayRef.current = window.setTimeout(() => {
+      holdIntervalRef.current = window.setInterval(() => {
+        stepEvent(direction);
+      }, 65);
+    }, 280);
+  }
+
+  function clickStepButton(direction: -1 | 1) {
+    if (suppressStepClickRef.current) {
+      suppressStepClickRef.current = false;
+      return;
+    }
+    stepEvent(direction);
+  }
+
   return (
     <main className="app-shell">
       <section className="controls-band" aria-label="Game controls">
@@ -154,8 +204,16 @@ export default function App() {
         <div className="step-controls">
           <button
             type="button"
-            onClick={() => setEventIndex((index) => Math.max(0, index - 1))}
-            disabled={atStart || events.length === 0}
+            onClick={() => clickStepButton(-1)}
+            onPointerDown={(event) => {
+              if (event.button === 0) {
+                startEventHold(-1, canStepPrevious);
+              }
+            }}
+            onPointerUp={clearEventHold}
+            onPointerCancel={cancelEventHold}
+            onPointerLeave={cancelEventHold}
+            disabled={!canStepPrevious}
             aria-label="Previous event"
             title="Previous event"
           >
@@ -163,10 +221,16 @@ export default function App() {
           </button>
           <button
             type="button"
-            onClick={() =>
-              setEventIndex((index) => Math.min(events.length - 1, index + 1))
-            }
-            disabled={atEnd || events.length === 0}
+            onClick={() => clickStepButton(1)}
+            onPointerDown={(event) => {
+              if (event.button === 0) {
+                startEventHold(1, canStepNext);
+              }
+            }}
+            onPointerUp={clearEventHold}
+            onPointerCancel={cancelEventHold}
+            onPointerLeave={cancelEventHold}
+            disabled={!canStepNext}
             aria-label="Next event"
             title="Next event"
           >
@@ -221,8 +285,10 @@ export default function App() {
 
         <section className="event-rail" aria-label="Event detail and log">
           <article className="event-panel">
-            <p className="eyebrow">Current event</p>
-            <h2>{eventTitle(currentEvent)}</h2>
+            <header>
+              <h2>Current event</h2>
+            </header>
+            <div className="event-title">{eventTitle(currentEvent)}</div>
             <p>{eventDetail(currentEvent)}</p>
           </article>
 
@@ -235,7 +301,20 @@ export default function App() {
             </section>
           )}
 
-          <div className="event-list" aria-label="Event log">
+          <div
+            className="event-list"
+            aria-label="Event log"
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                stepEvent(1);
+              }
+              if (event.key === "ArrowUp") {
+                event.preventDefault();
+                stepEvent(-1);
+              }
+            }}
+          >
             {eventGroups.map((group) => {
               const isActiveGroup = group.events.some(
                 (entry) => entry.index === eventIndex,
@@ -376,7 +455,7 @@ function activeTileIds(event: GameEvent | undefined): ReadonlySet<string> {
     case "kongDeclared":
       return new Set(event.tiles.map((tile) => tile.id));
     case "roundStarted":
-    case "roundEnded":
+    case "drawDeclared":
     case "rulesError":
       return new Set();
   }
@@ -423,8 +502,8 @@ function eventTitle(event: GameEvent | undefined): ReactNode {
           {playerNames[event.player]} declared win <InlineTile tile={event.tile} />
         </>
       );
-    case "roundEnded":
-      return "Round ended";
+    case "drawDeclared":
+      return event.reason === "turnLimit" ? "Turn limit draw" : "Exhaustive draw";
     case "rulesError":
       return `Rules error for ${playerNames[event.player]}`;
   }
@@ -464,12 +543,10 @@ function eventDetail(event: GameEvent | undefined): ReactNode {
             <InlineTile tile={event.tile} />.
           </>
         );
-    case "roundEnded":
-      return event.winners?.length
-        ? `${event.winners.map((winner) => playerNames[winner]).join(", ")} won after ${event.turn} turns.`
-        : event.winner === undefined
-        ? `Ended by ${event.reason} after ${event.turn} turns.`
-        : `${playerNames[event.winner]} won after ${event.turn} turns.`;
+    case "drawDeclared":
+      return event.reason === "turnLimit"
+        ? `No winner before the turn limit after ${event.turn} turns.`
+        : `No winner after the wall was exhausted in ${event.turn} turns.`;
     case "rulesError":
       return event.message;
   }
