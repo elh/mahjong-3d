@@ -398,6 +398,10 @@ h3 {
   min-width: 0;
 }
 
+.player-tile-row > .tile-group:only-child {
+  grid-column: 1 / -1;
+}
+
 .tiles {
   display: flex;
   flex-wrap: wrap;

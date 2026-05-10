@@ -127,7 +127,7 @@ export default function App() {
 
       setGenerationError(undefined);
       setGame(event.data.result);
-      setEventIndex(0);
+      setEventIndex(firstTurnEventIndex(event.data.result.events));
       worker.terminate();
       if (workerRef.current === worker) {
         workerRef.current = null;
@@ -445,11 +445,6 @@ export default function App() {
                   tiles={player.flowers}
                   highlightedTileIds={highlightedTileIds}
                 />
-                <TileGroup
-                  title="Win"
-                  tiles={player.winningTile ? [player.winningTile] : []}
-                  highlightedTileIds={highlightedTileIds}
-                />
               </div>
             </div>
           </article>
@@ -507,25 +502,25 @@ function TileGroup({
   tiles: readonly TileInstance[];
   highlightedTileIds: ReadonlySet<string>;
 }) {
+  if (tiles.length === 0) {
+    return null;
+  }
+
   return (
     <section className="tile-group">
       <h3>{title}</h3>
       <div className="tiles">
-        {tiles.length === 0 ? (
-          <span className="empty">None</span>
-        ) : (
-          tiles.map((tile) => (
-            <span
-              className={
-                highlightedTileIds.has(tile.id) ? "tile highlighted" : "tile"
-              }
-              key={tile.id}
-              title={tile.id}
-            >
-              <img src={tileImage(tile)} alt={tileAlt(tile)} loading="lazy" />
-            </span>
-          ))
-        )}
+        {tiles.map((tile) => (
+          <span
+            className={
+              highlightedTileIds.has(tile.id) ? "tile highlighted" : "tile"
+            }
+            key={tile.id}
+            title={tile.id}
+          >
+            <img src={tileImage(tile)} alt={tileAlt(tile)} loading="lazy" />
+          </span>
+        ))}
       </div>
     </section>
   );
@@ -706,4 +701,9 @@ function groupEvents(events: readonly GameEvent[]): EventGroup[] {
     groups.set(event.groupId, group);
   });
   return [...groups.values()];
+}
+
+function firstTurnEventIndex(events: readonly GameEvent[]): number {
+  const index = events.findIndex((event) => event.phase === "turn");
+  return index === -1 ? 0 : index;
 }
