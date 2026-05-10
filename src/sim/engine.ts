@@ -1,14 +1,15 @@
 import type { MahjongBot } from "../bots/types";
-import type {
-  BotContext,
-  ClaimAction,
-  DeclareKongAction,
-  LegalAction,
-} from "./actions";
-import { claimPriority } from "./claimPriority";
+import {
+  applyAddedKong,
+  applyConcealedKong,
+  applyMeldClaim,
+  applyWinClaims,
+} from "./applyActions";
+import { botContext, chooseLegalAction } from "./botDecision";
+import { resolveClaim } from "./claims";
 import { eventMeta, type GameEvent } from "./events";
 import { validateBetweenTurns } from "./invariants";
-import { createSeededRng, shuffle } from "./rng";
+import { legalTurnActions } from "./legalActions";
 import {
   cloneRoundState,
   createPlayers,
@@ -16,13 +17,9 @@ import {
   type PlayerId,
   type RoundState,
 } from "./state";
-import {
-  createTileSet,
-  isFlower,
-  sortTiles,
-  tileKey,
-  type TileInstance,
-} from "./tiles";
+import { removeTile } from "./tileCollections";
+import { isFlower, sortTiles, type TileInstance } from "./tiles";
+import { createShuffledWalls, drawLiveTile, drawSupplementTile } from "./wall";
 import { isWinningHand } from "./win";
 
 export type SimulateRoundOptions = {
@@ -42,21 +39,15 @@ export type SimulateRoundFromStateOptions = SimulateRoundOptions & {
   events?: GameEvent[];
 };
 
-type ClaimResolution =
-  | { type: "none" }
-  | { type: "win"; winners: PlayerId[] }
-  | { type: "meld"; player: PlayerId; action: ClaimAction };
-
 export function createInitialRound(seed: string): {
   state: RoundState;
   events: GameEvent[];
 } {
-  const rng = createSeededRng(seed);
-  const shuffledTiles = shuffle(createTileSet(), rng);
+  const { wall, deadWall } = createShuffledWalls(seed);
   const state: RoundState = {
     players: createPlayers(),
-    wall: shuffledTiles.slice(0, -16),
-    deadWall: shuffledTiles.slice(-16),
+    wall,
+    deadWall,
     currentPlayer: 0,
     needsDiscard: 0,
     discardSource: "draw",
@@ -390,22 +381,6 @@ function drawSupplementTileIntoHand(
   return tile;
 }
 
-function drawLiveTile(state: RoundState): TileInstance | undefined {
-  return state.wall.shift();
-}
-
-function drawSupplementTile(state: RoundState): TileInstance | undefined {
-  const tile = state.deadWall.shift();
-  if (!tile) {
-    return undefined;
-  }
-  const replenishment = state.wall.pop();
-  if (replenishment) {
-    state.deadWall.push(replenishment);
-  }
-  return tile;
-}
-
 function drawEvent(
   state: RoundState,
   player: PlayerId,
@@ -427,372 +402,6 @@ function drawEvent(
   };
 }
 
-function legalTurnActions(
-  player: RoundState["players"][number],
-  allowKongs: boolean,
-): LegalAction[] {
-  return [
-    ...(allowKongs
-      ? [...concealedKongActions(player.hand), ...addedKongActions(player)]
-      : []),
-    ...player.hand
-      .filter((tile) => !isFlower(tile))
-      .map((tile) => ({
-        type: "discard" as const,
-        tileId: tile.id,
-      })),
-  ];
-}
-
-function concealedKongActions(
-  hand: readonly TileInstance[],
-): DeclareKongAction[] {
-  const byKind = new Map<string, TileInstance[]>();
-  for (const tile of hand) {
-    if (isFlower(tile)) {
-      continue;
-    }
-    const key = tileKey(tile.kind);
-    byKind.set(key, [...(byKind.get(key) ?? []), tile]);
-  }
-  return [...byKind.values()]
-    .filter((tiles) => tiles.length === 4)
-    .map((tiles) => ({
-      type: "declareKong",
-      kong: "concealed",
-      tileIds: sortTiles(tiles).map((tile) => tile.id) as [
-        string,
-        string,
-        string,
-        string,
-      ],
-    }));
-}
-
-function addedKongActions(
-  player: RoundState["players"][number],
-): DeclareKongAction[] {
-  return player.melds.flatMap((meld, meldIndex) => {
-    if (meld.type !== "pong") {
-      return [];
-    }
-    const key = tileKey(meld.tiles[0].kind);
-    const tile = player.hand.find(
-      (candidate) => tileKey(candidate.kind) === key,
-    );
-    return tile
-      ? [
-          {
-            type: "declareKong" as const,
-            kong: "added" as const,
-            meldIndex,
-            tileId: tile.id,
-          },
-        ]
-      : [];
-  });
-}
-
-function resolveClaim(
-  state: RoundState,
-  bots: [MahjongBot, MahjongBot, MahjongBot, MahjongBot],
-  discarder: PlayerId,
-  discarded: TileInstance,
-): ClaimResolution {
-  const contenders = claimOrder(discarder);
-  const winClaims: PlayerId[] = [];
-  const meldClaims: { player: PlayerId; action: ClaimAction }[] = [];
-
-  for (const playerId of contenders) {
-    const legalActions = legalClaimActions(
-      state,
-      playerId,
-      discarder,
-      discarded,
-    );
-    if (legalActions.length === 1) {
-      continue;
-    }
-
-    const action = chooseLegalAction(
-      bots[playerId],
-      botContext(state, playerId, legalActions),
-    );
-
-    if (action.type !== "claim") {
-      continue;
-    }
-
-    if (action.claim === "win") {
-      winClaims.push(playerId);
-    } else {
-      meldClaims.push({ player: playerId, action });
-    }
-  }
-
-  if (winClaims.length > 0) {
-    return { type: "win", winners: winClaims };
-  }
-
-  const meld = meldClaims.sort(
-    (left, right) =>
-      claimPriority(right.action.claim) - claimPriority(left.action.claim) ||
-      contenders.indexOf(left.player) - contenders.indexOf(right.player),
-  )[0];
-  return meld ? { type: "meld", ...meld } : { type: "none" };
-}
-
-function legalClaimActions(
-  state: RoundState,
-  playerId: PlayerId,
-  discarder: PlayerId,
-  discarded: TileInstance,
-): LegalAction[] {
-  const player = state.players[playerId];
-  const actions: LegalAction[] = [{ type: "pass" }];
-  const withDiscard = [...player.hand, discarded];
-
-  if (isWinningHand(withDiscard, player.melds)) {
-    actions.push({ type: "claim", claim: "win", tileId: discarded.id });
-  }
-
-  const matching = player.hand.filter(
-    (tile) => tileKey(tile.kind) === tileKey(discarded.kind),
-  );
-  if (matching.length >= 3) {
-    actions.push({ type: "claim", claim: "kong", tileId: discarded.id });
-  } else if (matching.length >= 2) {
-    actions.push({ type: "claim", claim: "pong", tileId: discarded.id });
-  }
-
-  if (
-    nextPlayer(discarder) === playerId &&
-    discarded.kind.category === "suited"
-  ) {
-    for (const chow of findChowOptions(player.hand, discarded)) {
-      actions.push({
-        type: "claim",
-        claim: "chow",
-        tileId: discarded.id,
-        consumedTileIds: [chow[0].id, chow[1].id],
-      });
-    }
-  }
-
-  return actions;
-}
-
-function applyWinClaims(
-  state: RoundState,
-  discarder: PlayerId,
-  discarded: TileInstance,
-  winners: PlayerId[],
-  events: GameEvent[],
-): void {
-  removeTile(state.players[discarder].discards, discarded.id);
-  state.winner = winners[0];
-  state.winners = winners;
-  for (const winner of winners) {
-    state.players[winner].winningTile = discarded;
-    events.push({
-      ...eventMeta("turn", state.turn),
-      type: "winDeclared",
-      player: winner,
-      from: discarder,
-      tile: discarded,
-    });
-  }
-  endRound(state, events, "win");
-}
-
-function applyMeldClaim(
-  state: RoundState,
-  playerId: PlayerId,
-  action: ClaimAction,
-  discarded: TileInstance,
-  events: GameEvent[],
-): void {
-  if (action.claim === "win") {
-    throw new Error("Win claims must be resolved through applyWinClaims.");
-  }
-  const player = state.players[playerId];
-  const from = state.currentPlayer;
-  const tiles =
-    action.claim === "chow"
-      ? (action.consumedTileIds?.map((tileId) => {
-          const tile = player.hand.find((candidate) => candidate.id === tileId);
-          if (!tile) {
-            throw new Error(
-              `Player ${playerId} tried to claim an illegal chow.`,
-            );
-          }
-          return tile;
-        }) ?? [])
-      : player.hand
-          .filter((tile) => tileKey(tile.kind) === tileKey(discarded.kind))
-          .slice(0, action.claim === "kong" ? 3 : 2);
-  if (action.claim === "chow" && tiles.length !== 2) {
-    throw new Error(`Player ${playerId} tried to claim an illegal chow.`);
-  }
-  const meldTiles = sortTiles([...tiles, discarded]);
-
-  for (const tile of tiles) {
-    removeTile(player.hand, tile.id);
-  }
-  removeTile(state.players[from].discards, discarded.id);
-
-  player.melds.push({
-    type: action.claim,
-    tiles: meldTiles,
-    claimedFrom: from,
-  });
-  state.currentPlayer = playerId;
-  state.needsDiscard = playerId;
-  state.discardSource = action.claim === "kong" ? "draw" : "claim";
-  state.needsReplacementDraw = action.claim === "kong" ? playerId : undefined;
-  if (action.claim === "kong") {
-    events.push({
-      ...eventMeta("turn", state.turn),
-      type: "kongDeclared",
-      player: playerId,
-      kong: "claimed",
-      from,
-      tile: discarded,
-      tiles: meldTiles,
-    });
-  } else {
-    events.push({
-      ...eventMeta("turn", state.turn),
-      type: "claimMade",
-      player: playerId,
-      from,
-      claim: action.claim,
-      tile: discarded,
-      tiles: meldTiles,
-    });
-  }
-}
-
-function applyConcealedKong(
-  state: RoundState,
-  playerId: PlayerId,
-  action: Extract<DeclareKongAction, { kong: "concealed" }>,
-  events: GameEvent[],
-): void {
-  const player = state.players[playerId];
-  const tiles = action.tileIds.map((tileId) => {
-    const tile = removeTile(player.hand, tileId);
-    if (!tile) {
-      throw new Error(`Player ${playerId} tried to declare an illegal kong.`);
-    }
-    return tile;
-  });
-  const meldTiles = sortTiles(tiles);
-  player.melds.push({ type: "kong", tiles: meldTiles, concealed: true });
-  events.push({
-    ...eventMeta("turn", state.turn),
-    type: "kongDeclared",
-    player: playerId,
-    kong: "concealed",
-    tiles: meldTiles,
-  });
-}
-
-function applyAddedKong(
-  state: RoundState,
-  playerId: PlayerId,
-  action: Extract<DeclareKongAction, { kong: "added" }>,
-  bots: [MahjongBot, MahjongBot, MahjongBot, MahjongBot],
-  events: GameEvent[],
-): void {
-  const player = state.players[playerId];
-  const meld = player.melds[action.meldIndex];
-  const addedTile = player.hand.find((tile) => tile.id === action.tileId);
-  if (!meld || meld.type !== "pong" || !addedTile) {
-    throw new Error(
-      `Player ${playerId} tried to declare an illegal added kong.`,
-    );
-  }
-  const kongKey = tileKey(meld.tiles[0].kind);
-  if (tileKey(addedTile.kind) !== kongKey) {
-    throw new Error(
-      `Player ${playerId} tried to declare an illegal added kong.`,
-    );
-  }
-
-  const robbers = resolveRobbingKong(state, bots, playerId, addedTile);
-  if (robbers.length > 0) {
-    removeTile(player.hand, addedTile.id);
-    applyRobbingKongWins(state, playerId, addedTile, robbers, events);
-    return;
-  }
-
-  removeTile(player.hand, addedTile.id);
-  const kongTiles = sortTiles([...meld.tiles, addedTile]);
-  player.melds[action.meldIndex] = {
-    ...meld,
-    type: "kong",
-    tiles: kongTiles,
-  };
-  events.push({
-    ...eventMeta("turn", state.turn),
-    type: "kongDeclared",
-    player: playerId,
-    kong: "added",
-    tiles: kongTiles,
-    addedTile,
-  });
-}
-
-function resolveRobbingKong(
-  state: RoundState,
-  bots: [MahjongBot, MahjongBot, MahjongBot, MahjongBot],
-  declarer: PlayerId,
-  addedTile: TileInstance,
-): PlayerId[] {
-  const winners: PlayerId[] = [];
-  for (const playerId of claimOrder(declarer)) {
-    const player = state.players[playerId];
-    if (!isWinningHand([...player.hand, addedTile], player.melds)) {
-      continue;
-    }
-    const legalActions: LegalAction[] = [
-      { type: "pass" },
-      { type: "claim", claim: "win", tileId: addedTile.id },
-    ];
-    const action = chooseLegalAction(
-      bots[playerId],
-      botContext(state, playerId, legalActions),
-    );
-    if (action.type === "claim" && action.claim === "win") {
-      winners.push(playerId);
-    }
-  }
-  return winners;
-}
-
-function applyRobbingKongWins(
-  state: RoundState,
-  declarer: PlayerId,
-  addedTile: TileInstance,
-  winners: PlayerId[],
-  events: GameEvent[],
-): void {
-  state.winner = winners[0];
-  state.winners = winners;
-  for (const winner of winners) {
-    state.players[winner].winningTile = addedTile;
-    events.push({
-      ...eventMeta("turn", state.turn),
-      type: "winDeclared",
-      player: winner,
-      from: declarer,
-      tile: addedTile,
-    });
-  }
-  endRound(state, events, "win");
-}
-
 function endRound(
   state: RoundState,
   events: GameEvent[],
@@ -810,131 +419,4 @@ function endRound(
     deadWallCount: state.deadWall.length,
     turn: state.turn,
   });
-}
-
-function botContext(
-  state: RoundState,
-  playerId: PlayerId,
-  legalActions: LegalAction[],
-): BotContext {
-  return {
-    player: playerId,
-    legalActions,
-    visibleTiles: visibleTiles(state),
-    hand: [...state.players[playerId].hand],
-    melds: state.players[playerId].melds.map((meld) => ({
-      ...meld,
-      tiles: [...meld.tiles],
-    })),
-    wallCount: state.wall.length,
-    turn: state.turn,
-  };
-}
-
-function chooseLegalAction(bot: MahjongBot, context: BotContext): LegalAction {
-  const action = bot.chooseAction(context);
-  const legal = context.legalActions.some((candidate) =>
-    actionsEqual(candidate, action),
-  );
-
-  if (!legal) {
-    return context.legalActions[0];
-  }
-  return action;
-}
-
-function actionsEqual(left: LegalAction, right: LegalAction): boolean {
-  if (left.type !== right.type) {
-    return false;
-  }
-  if (left.type === "discard" && right.type === "discard") {
-    return left.tileId === right.tileId;
-  }
-  if (left.type === "claim" && right.type === "claim") {
-    return (
-      left.tileId === right.tileId &&
-      left.claim === right.claim &&
-      (left.consumedTileIds?.join("|") ?? "") ===
-        (right.consumedTileIds?.join("|") ?? "")
-    );
-  }
-  if (left.type === "declareKong" && right.type === "declareKong") {
-    if (left.kong !== right.kong) {
-      return false;
-    }
-    return left.kong === "concealed" && right.kong === "concealed"
-      ? left.tileIds.join("|") === right.tileIds.join("|")
-      : left.kong === "added" &&
-          right.kong === "added" &&
-          left.meldIndex === right.meldIndex &&
-          left.tileId === right.tileId;
-  }
-  return true;
-}
-
-function visibleTiles(state: RoundState): TileInstance[] {
-  return state.players.flatMap((player) => [
-    ...player.discards,
-    ...player.flowers,
-    ...player.melds.flatMap((meld) => meld.tiles),
-  ]);
-}
-
-function claimOrder(discarder: PlayerId): PlayerId[] {
-  return [
-    nextPlayer(discarder),
-    nextPlayer(nextPlayer(discarder)),
-    nextPlayer(nextPlayer(nextPlayer(discarder))),
-  ];
-}
-
-function findChowOptions(
-  hand: readonly TileInstance[],
-  discarded: TileInstance,
-): [TileInstance, TileInstance][] {
-  if (discarded.kind.category !== "suited") {
-    return [];
-  }
-  const suit = discarded.kind.suit;
-  const rank = discarded.kind.rank;
-  const options = [
-    [rank - 2, rank - 1],
-    [rank - 1, rank + 1],
-    [rank + 1, rank + 2],
-  ];
-
-  const chowOptions: [TileInstance, TileInstance][] = [];
-  for (const [first, second] of options) {
-    if (first < 1 || second > 9) {
-      continue;
-    }
-    const firstTile = hand.find(
-      (tile) =>
-        tile.kind.category === "suited" &&
-        tile.kind.suit === suit &&
-        tile.kind.rank === first,
-    );
-    const secondTile = hand.find(
-      (tile) =>
-        tile.kind.category === "suited" &&
-        tile.kind.suit === suit &&
-        tile.kind.rank === second,
-    );
-    if (firstTile && secondTile && firstTile.id !== secondTile.id) {
-      chowOptions.push([firstTile, secondTile]);
-    }
-  }
-
-  return chowOptions;
-}
-
-function removeTile(
-  tiles: TileInstance[],
-  tileId: string,
-): TileInstance | undefined {
-  const index = tiles.findIndex((tile) => tile.id === tileId);
-  if (index === -1) {
-    return undefined;
-  }
-  return tiles.splice(index, 1)[0];
 }

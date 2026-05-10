@@ -1,8 +1,9 @@
 import type { GameEvent } from "./events";
-import { createSeededRng, shuffle } from "./rng";
 import type { Meld, PlayerId } from "./state";
+import { removeTile } from "./tileCollections";
 import type { TileInstance } from "./tiles";
-import { createTileSet, sortTiles } from "./tiles";
+import { sortTiles } from "./tiles";
+import { createShuffledWalls, replenishDeadWall } from "./wall";
 
 export type ReplayPlayer = {
   id: PlayerId;
@@ -180,25 +181,7 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
 }
 
 function initializeWalls(state: ReplayState, seed: string): void {
-  const shuffledTiles = shuffle(createTileSet(), createSeededRng(seed));
-  state.wall = shuffledTiles.slice(0, -16);
-  state.deadWall = shuffledTiles.slice(-16);
-}
-
-function replenishDeadWall(state: ReplayState): void {
-  const replenishment = state.wall.pop();
-  if (replenishment) {
-    state.deadWall.push(replenishment);
-  }
-}
-
-function removeTile(
-  tiles: TileInstance[],
-  tileId: string,
-): TileInstance | undefined {
-  const index = tiles.findIndex((tile) => tile.id === tileId);
-  if (index === -1) {
-    return undefined;
-  }
-  return tiles.splice(index, 1)[0];
+  const { wall, deadWall } = createShuffledWalls(seed);
+  state.wall = wall;
+  state.deadWall = deadWall;
 }
