@@ -169,20 +169,21 @@ export default function App() {
       <section className="viewer-shell" aria-label="Simulation viewer">
         <section className="wall-panel" aria-label="Wall state">
           <header>
-            <h2>Remaining tiles</h2>
+            <h2>Wall</h2>
             <span>
               {replay.wall.length} live / {replay.deadWall.length} dead
             </span>
           </header>
           <TileGroup
-            title="Live wall"
+            title="Live"
             tiles={replay.wall}
             highlightedTileIds={highlightedTileIds}
           />
           <TileGroup
-            title="Dead wall"
+            title="Dead"
             tiles={replay.deadWall}
             highlightedTileIds={highlightedTileIds}
+            className="dead-wall-group muted-tile-group"
           />
         </section>
 
@@ -243,7 +244,9 @@ export default function App() {
                     onClick={() => setEventIndex(group.events[0]?.index ?? 0)}
                   >
                     <strong>{group.label}</strong>
-                    <span>{group.events.length} events</span>
+                    {group.phase === "setup" && (
+                      <span>{group.events.length} events</span>
+                    )}
                   </button>
                   {group.phase === "turn" &&
                     group.events.map(({ event, index }) => (
@@ -274,7 +277,6 @@ export default function App() {
           <article className="player-panel" key={player.id}>
             <header>
               <h2>{playerNames[player.id]}</h2>
-              <span>{player.hand.length} tiles</span>
             </header>
             <div className="player-tile-rows">
               <div className="player-tile-row">
@@ -294,11 +296,13 @@ export default function App() {
                   title="Discards"
                   tiles={player.discards}
                   highlightedTileIds={highlightedTileIds}
+                  className="muted-tile-group"
                 />
                 <TileGroup
                   title="Flowers"
                   tiles={player.flowers}
                   highlightedTileIds={highlightedTileIds}
+                  className="flowers-group"
                 />
               </div>
             </div>

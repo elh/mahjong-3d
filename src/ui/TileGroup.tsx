@@ -5,17 +5,19 @@ export function TileGroup({
   title,
   tiles,
   highlightedTileIds,
+  className,
 }: {
   title: string;
   tiles: readonly TileInstance[];
   highlightedTileIds: ReadonlySet<string>;
+  className?: string;
 }) {
   if (tiles.length === 0) {
     return null;
   }
 
   return (
-    <section className="tile-group">
+    <section className={className ? `tile-group ${className}` : "tile-group"}>
       <h3>{title}</h3>
       <div className="tiles">
         {tiles.map((tile) => (
