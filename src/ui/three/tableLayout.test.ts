@@ -110,7 +110,7 @@ describe("3D table layout", () => {
     );
   });
 
-  test("keeps melds and flowers on one right-aligned auxiliary row", () => {
+  test("keeps melds and flowers on one fixed auxiliary row", () => {
     const tiles = createTileSet();
     const replay = emptyReplayState();
     replay.players[0].hand = tiles.slice(0, 6);
@@ -139,14 +139,23 @@ describe("3D table layout", () => {
     ).toHaveLength(1);
     expect(melds[0].position[2]).toBeLessThan(hand[0].position[2]);
     expect(flowers.at(-1)!.position[0] + tileSize.width / 2).toBeCloseTo(
-      hand.at(-1)!.position[0] + tileSize.width / 2,
+      (16 * tileSize.width) / 2,
       5,
     );
     expect(
       flowers[0].position[0] -
         tileSize.width / 2 -
         (melds.at(-1)!.position[0] + tileSize.width / 2),
-    ).toBeGreaterThan(tileSize.width);
+    ).toBeCloseTo(tileSize.width * 0.5, 5);
+
+    replay.players[0].hand = tiles.slice(0, 12);
+    const longerHandLayout = createThreeTableLayout(replay, undefined);
+    const longerHandMelds = longerHandLayout.tiles
+      .filter(
+        (placement) => placement.owner === "meld" && placement.player === 0,
+      )
+      .sort((left, right) => left.position[0] - right.position[0]);
+    expect(longerHandMelds[0].position[0]).toBeCloseTo(melds[0].position[0], 5);
   });
 });
 

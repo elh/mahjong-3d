@@ -34,7 +34,10 @@ export const tileSize = {
 const tableY = tileSize.height / 2 + 0.01;
 const handRadius = 3.45;
 const playerAuxiliaryRadius = handRadius - tileSize.depth - 0.1;
-const playerAuxiliaryGap = tileSize.width * 1.35;
+const playerAuxiliaryGap = tileSize.width * 0.5;
+const playerAuxiliaryRightInset = 0;
+const playerAuxiliaryRightEdge =
+  (16 * tileSize.width) / 2 - playerAuxiliaryRightInset;
 const discardRadius = 1.12;
 const wallSideTiles = 18;
 const wallSideLength = tileSize.width * wallSideTiles;
@@ -134,12 +137,11 @@ function layoutPlayerArea(
 ): TilePlacement[] {
   return [
     ...layoutPlayerRow(hand, player, "hand", handRadius, 0),
-    ...layoutPlayerAuxiliaryRow(hand.length, melds, flowers, player),
+    ...layoutPlayerAuxiliaryRow(melds, flowers, player),
   ];
 }
 
 function layoutPlayerAuxiliaryRow(
-  handCount: number,
   melds: readonly TileInstance[],
   flowers: readonly TileInstance[],
   player: PlayerId,
@@ -148,10 +150,9 @@ function layoutPlayerAuxiliaryRow(
     return [];
   }
 
-  const handRightEdge = (handCount * tileSize.width) / 2;
   const gap = melds.length > 0 && flowers.length > 0 ? playerAuxiliaryGap : 0;
   const auxiliaryWidth = (melds.length + flowers.length) * tileSize.width + gap;
-  const leftEdge = handRightEdge - auxiliaryWidth;
+  const leftEdge = playerAuxiliaryRightEdge - auxiliaryWidth;
   const placements: TilePlacement[] = [];
 
   for (const [index, tile] of melds.entries()) {
