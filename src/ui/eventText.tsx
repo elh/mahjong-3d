@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { GameEvent } from "../sim/events";
+import type { TileInstance } from "../sim/tiles";
 import { playerNames } from "./playerNames";
 import { InlineTile } from "./TileGroup";
 import { tileAlt } from "./tileImages";
@@ -37,15 +38,17 @@ export function eventTitle(event: GameEvent | undefined): ReactNode {
           <InlineTile tile={event.tile} />
         </>
       );
-    case "kongDeclared":
-      return (
+    case "kongDeclared": {
+      const tile = eventKongTile(event);
+      return tile ? (
         <>
-          {playerNames[event.player]} declared {event.kong} kong{" "}
-          {event.tiles.map((tile) => (
-            <InlineTile key={tile.id} tile={tile} />
-          ))}
+          {playerNames[event.player]} {eventKongAction(event)}{" "}
+          <InlineTile tile={tile} />
         </>
+      ) : (
+        `${playerNames[event.player]} ${eventKongAction(event)}`
       );
+    }
     case "winDeclared":
       return (
         <>
@@ -74,8 +77,12 @@ export function eventLogTitle(event: GameEvent): string {
       return `${playerNames[event.player]} exposed flower ${tileAlt(event.tile)}`;
     case "claimMade":
       return `${playerNames[event.player]} claimed ${event.claim} ${tileAlt(event.tile)}`;
-    case "kongDeclared":
-      return `${playerNames[event.player]} declared ${event.kong} kong ${event.tiles.map(tileAlt).join(", ")}`;
+    case "kongDeclared": {
+      const tile = eventKongTile(event);
+      return tile
+        ? `${playerNames[event.player]} ${eventKongAction(event)} ${tileAlt(tile)}`
+        : `${playerNames[event.player]} ${eventKongAction(event)}`;
+    }
     case "winDeclared":
       return `${playerNames[event.player]} declared win ${tileAlt(event.tile)}`;
     case "drawDeclared":
@@ -107,10 +114,14 @@ export function eventDetail(event: GameEvent | undefined): ReactNode {
           {playerNames[event.from]} for a {event.claim}.
         </>
       );
-    case "kongDeclared":
+    case "kongDeclared": {
+      const tile = eventKongTile(event);
       return event.kong === "claimed" && event.from !== undefined && event.tile
         ? `${playerNames[event.player]} took ${tileAlt(event.tile)} from ${playerNames[event.from]} for a claimed kong and must draw a supplement tile before discarding.`
-        : `${playerNames[event.player]} declared a ${event.kong} kong and must draw a supplement tile before discarding.`;
+        : tile
+          ? `${playerNames[event.player]} declared ${eventKongArticle(event)} ${event.kong} kong of ${tileAlt(tile)} and must draw a supplement tile before discarding.`
+          : `${playerNames[event.player]} declared a ${event.kong} kong and must draw a supplement tile before discarding.`;
+    }
     case "winDeclared":
       return event.from === undefined ? (
         <>
@@ -130,4 +141,24 @@ export function eventDetail(event: GameEvent | undefined): ReactNode {
     case "rulesError":
       return event.message;
   }
+}
+
+function eventKongTile(
+  event: Extract<GameEvent, { type: "kongDeclared" }>,
+): TileInstance | undefined {
+  return event.tile ?? event.addedTile ?? event.tiles[0];
+}
+
+function eventKongAction(
+  event: Extract<GameEvent, { type: "kongDeclared" }>,
+): string {
+  return event.kong === "claimed"
+    ? "claimed kong"
+    : `declared ${event.kong} kong`;
+}
+
+function eventKongArticle(
+  event: Extract<GameEvent, { type: "kongDeclared" }>,
+): "a" | "an" {
+  return event.kong === "added" ? "an" : "a";
 }
