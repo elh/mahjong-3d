@@ -1,4 +1,5 @@
 import type { BotContext, LegalAction } from "../sim/actions";
+import { analyzeHand, evaluateDiscard } from "../sim/handAnalysis";
 import type { TileInstance } from "../sim/tiles";
 import { isFlower, tileKey } from "../sim/tiles";
 import type { MahjongBot } from "./types";
@@ -27,7 +28,7 @@ export function createBaselineBot(name = "Baseline Bot"): MahjongBot {
           action.type === "discard",
       );
       if (discardActions.length > 0) {
-        const discard = chooseDiscard(context.hand, context.visibleTiles);
+        const discard = chooseDiscard(context);
         return (
           discardActions.find((action) => action.tileId === discard.id) ??
           discardActions[0]
@@ -57,19 +58,35 @@ export function createBaselineBots(): [MahjongBot, MahjongBot, MahjongBot, Mahjo
 }
 
 function chooseDiscard(
-  hand: readonly TileInstance[],
-  visibleTiles: readonly TileInstance[],
+  context: BotContext,
 ): TileInstance {
+  const hand = context.hand;
   const candidates = hand.filter((tile) => !isFlower(tile));
   const visibleCounts = new Map<string, number>();
-  for (const tile of visibleTiles) {
+  for (const tile of context.visibleTiles) {
     visibleCounts.set(tileKey(tile.kind), (visibleCounts.get(tileKey(tile.kind)) ?? 0) + 1);
   }
 
   return [...candidates].sort((left, right) => {
-    const leftScore = tileUsefulness(left, candidates, visibleCounts);
-    const rightScore = tileUsefulness(right, candidates, visibleCounts);
-    return leftScore - rightScore || left.id.localeCompare(right.id);
+    const leftAnalysis = evaluateDiscard(
+      hand,
+      context.melds,
+      context.visibleTiles,
+      left,
+    );
+    const rightAnalysis = evaluateDiscard(
+      hand,
+      context.melds,
+      context.visibleTiles,
+      right,
+    );
+    return (
+      leftAnalysis.shanten - rightAnalysis.shanten ||
+      rightAnalysis.liveWaits - leftAnalysis.liveWaits ||
+      tileUsefulness(left, candidates, visibleCounts) -
+        tileUsefulness(right, candidates, visibleCounts) ||
+      left.id.localeCompare(right.id)
+    );
   })[0];
 }
 
@@ -77,8 +94,11 @@ function shouldClaim(context: BotContext, claim: "chow" | "pong" | "kong"): bool
   if (claim === "kong") {
     return true;
   }
-  const pairCount = countPairs(context.hand);
-  return claim === "pong" ? pairCount <= 3 : context.wallCount < 50;
+  const current = analyzeHand(context.hand, context.melds, context.visibleTiles);
+  if (claim === "pong") {
+    return current.shanten <= 3 && current.liveWaits >= 4;
+  }
+  return current.shanten <= 2 || (context.wallCount < 50 && current.liveWaits >= 4);
 }
 
 function tileUsefulness(

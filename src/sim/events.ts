@@ -59,6 +59,13 @@ export type GameEvent =
       wallCount: number;
       deadWallCount: number;
       turn: number;
+    })
+  | (EventMeta & {
+      type: "rulesError";
+      message: string;
+      player: PlayerId;
+      handCount: number;
+      expected: number;
     });
 
 export function eventMeta(

@@ -7,6 +7,7 @@ import type {
 } from "./actions";
 import { claimPriority } from "./claimPriority";
 import { eventMeta, type GameEvent } from "./events";
+import { validateBetweenTurns } from "./invariants";
 import { createSeededRng, shuffle } from "./rng";
 import {
   cloneRoundState,
@@ -52,6 +53,7 @@ export function createInitialRound(seed: string): {
     wall: shuffledTiles.slice(0, -16),
     deadWall: shuffledTiles.slice(-16),
     currentPlayer: 0,
+    needsDiscard: 0,
     dealer: 0,
     turn: 0,
     ended: false,
@@ -97,6 +99,7 @@ export function simulateRound(options: SimulateRoundOptions): SimulateRoundResul
   }
 
   if (!state.ended) {
+    appendInvariantErrors(state, events);
     state.ended = true;
     events.push({
       ...eventMeta("turn", state.turn),
@@ -199,11 +202,28 @@ function playTurn(
       applyMeldClaim(state, claim.player, claim.action, discarded, events);
     } else {
       state.currentPlayer = nextPlayer(playerId);
+      state.needsDiscard = undefined;
+    }
+    if (!state.ended) {
+      appendInvariantErrors(state, events);
     }
     break;
   }
 
   state.turn += 1;
+}
+
+function appendInvariantErrors(state: RoundState, events: GameEvent[]): void {
+  for (const violation of validateBetweenTurns(state)) {
+    events.push({
+      ...eventMeta("turn", state.turn),
+      type: "rulesError",
+      message: violation.message,
+      player: violation.player,
+      handCount: violation.handCount,
+      expected: violation.expected,
+    });
+  }
 }
 
 function drawLiveTileIntoHand(
@@ -560,6 +580,10 @@ function botContext(
     legalActions,
     visibleTiles: visibleTiles(state),
     hand: [...state.players[playerId].hand],
+    melds: state.players[playerId].melds.map((meld) => ({
+      ...meld,
+      tiles: [...meld.tiles],
+    })),
     wallCount: state.wall.length,
     turn: state.turn,
   };

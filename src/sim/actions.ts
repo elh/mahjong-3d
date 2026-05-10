@@ -1,4 +1,5 @@
 import type { PlayerId } from "./state";
+import type { Meld } from "./state";
 import type { TileInstance } from "./tiles";
 
 export type DiscardAction = {
@@ -28,6 +29,7 @@ export type BotContext = {
   legalActions: LegalAction[];
   visibleTiles: TileInstance[];
   hand: TileInstance[];
+  melds: Meld[];
   wallCount: number;
   turn: number;
 };

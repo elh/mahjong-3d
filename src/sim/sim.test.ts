@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { createBaselineBot, createBaselineBots } from "../bots/baselineBot";
 import { claimPriority } from "./claimPriority";
 import { createInitialRound, simulateRound } from "./engine";
+import { analyzeHand, evaluateDiscard } from "./handAnalysis";
+import { validateBetweenTurns } from "./invariants";
 import { createSeededRng, shuffle } from "./rng";
 import { replayEvents } from "./replay";
 import { createTileSet, tileKey, type TileInstance } from "./tiles";
@@ -36,6 +38,7 @@ describe("round setup", () => {
     expect(state.players.map((player) => player.hand.length)).toEqual([
       17, 16, 16, 16,
     ]);
+    expect(validateBetweenTurns(state)).toEqual([]);
     expect(state.deadWall).toHaveLength(16);
     expect(state.wall.length).toBeLessThanOrEqual(63);
     expect(state.wall.length).toBeGreaterThan(40);
@@ -69,6 +72,7 @@ describe("bots", () => {
       legalActions,
       visibleTiles: [],
       hand: player.hand,
+      melds: player.melds,
       wallCount: state.wall.length,
       turn: 0,
     });
@@ -76,6 +80,47 @@ describe("bots", () => {
     expect(action.type).toBe("discard");
     if (action.type === "discard") {
       expect(legalActions).toContainEqual(action);
+    }
+  });
+
+  test("baseline bot discards the tile that preserves better shanten and waits", () => {
+    const hand = tilesByKinds([
+      ["c1", 1],
+      ["c2", 1],
+      ["c3", 1],
+      ["c4", 1],
+      ["c5", 1],
+      ["c6", 1],
+      ["d1", 1],
+      ["d2", 1],
+      ["d3", 1],
+      ["b1", 1],
+      ["b2", 1],
+      ["b3", 1],
+      ["c7", 1],
+      ["c8", 1],
+      ["dragon-red", 2],
+      ["wind-east", 1],
+    ]);
+    const legalActions = hand.map((tile) => ({
+      type: "discard" as const,
+      tileId: tile.id,
+    }));
+
+    const action = createBaselineBot().chooseAction({
+      player: 0,
+      legalActions,
+      visibleTiles: [],
+      hand,
+      melds: [],
+      wallCount: 60,
+      turn: 0,
+    });
+
+    expect(action.type).toBe("discard");
+    if (action.type === "discard") {
+      const discarded = hand.find((tile) => tile.id === action.tileId);
+      expect(discarded && tileKey(discarded.kind)).toBe("wind-east");
     }
   });
 });
@@ -87,6 +132,38 @@ describe("Taiwanese rule expectations", () => {
         claimPriority(claim as Parameters<typeof claimPriority>[0]),
       ),
     ).toEqual([4, 3, 2, 1]);
+  });
+
+  test("hand analysis counts live waits after an improving discard", () => {
+    const hand = tilesByKinds([
+      ["c1", 1],
+      ["c2", 1],
+      ["c3", 1],
+      ["c4", 1],
+      ["c5", 1],
+      ["c6", 1],
+      ["d1", 1],
+      ["d2", 1],
+      ["d3", 1],
+      ["b1", 1],
+      ["b2", 1],
+      ["b3", 1],
+      ["c7", 1],
+      ["c8", 1],
+      ["dragon-red", 2],
+      ["wind-east", 1],
+    ]);
+    const wind = hand.find((tile) => tileKey(tile.kind) === "wind-east");
+    if (!wind) {
+      throw new Error("missing wind tile");
+    }
+
+    const analysis = evaluateDiscard(hand, [], [], wind);
+
+    expect(analysis.shanten).toBe(0);
+    expect(analysis.waitKeys).toEqual(["c3", "c6", "c9"]);
+    expect(analysis.liveWaits).toBe(10);
+    expect(analyzeHand(hand, [], []).shanten).toBeGreaterThanOrEqual(analysis.shanten);
   });
 });
 
@@ -102,6 +179,36 @@ describe("simulation", () => {
       expect(player.hand.length).toBeGreaterThanOrEqual(1);
       expect(player.hand.length).toBeLessThanOrEqual(17);
     }
+    expect(result.events.filter((event) => event.type === "rulesError")).toEqual([]);
+  });
+
+  test("dealer discards on the first actual turn instead of drawing again", () => {
+    const result = simulateRound({
+      seed: "dealer-first-turn",
+      bots: createBaselineBots(),
+      maxTurns: 1,
+    });
+    const firstTurnEvents = result.events.filter(
+      (event) => event.phase === "turn" && event.turn === 0,
+    );
+
+    expect(firstTurnEvents[0]?.type).toBe("tileDiscarded");
+    if (firstTurnEvents[0]?.type === "tileDiscarded") {
+      expect(firstTurnEvents[0].player).toBe(0);
+      expect(firstTurnEvents[0].handCount).toBe(16);
+    }
+    expect(firstTurnEvents.some((event) => event.type === "tileDrawn")).toBe(false);
+    expect(firstTurnEvents.some((event) => event.type === "rulesError")).toBe(false);
+  });
+
+  test("every turn boundary keeps concealed hand counts valid", () => {
+    const result = simulateRound({
+      seed: "turn-boundaries",
+      bots: createBaselineBots(),
+      maxTurns: 120,
+    });
+
+    expect(result.events.filter((event) => event.type === "rulesError")).toEqual([]);
   });
 
   test("keeps fixed-seed event logs stable", () => {
@@ -159,37 +266,9 @@ describe("simulation", () => {
     );
   });
 
-  test("draws a replacement before discarding after an exposed kong", () => {
-    const result = simulateRound({
-      seed: "kong-6",
-      bots: createBaselineBots(),
-      maxTurns: 300,
-    });
-    const kongIndex = result.events.findIndex(
-      (event) => event.type === "claimMade" && event.claim === "kong",
-    );
-
-    expect(kongIndex).toBeGreaterThan(-1);
-    const kong = result.events[kongIndex];
-    const replacement = result.events[kongIndex + 1];
-    const discard = result.events[kongIndex + 2];
-
-    expect(kong.type).toBe("claimMade");
-    expect(replacement.type).toBe("tileDrawn");
-    if (kong.type === "claimMade" && replacement.type === "tileDrawn") {
-      expect(replacement.player).toBe(kong.player);
-      expect(replacement.replacement).toBe(true);
-      expect(replacement.source).toBe("deadWall");
-    }
-    expect(discard.type).toBe("tileDiscarded");
-    if (kong.type === "claimMade" && discard.type === "tileDiscarded") {
-      expect(discard.player).toBe(kong.player);
-    }
-  });
-
   test("declares concealed kongs and draws a supplement before discard", () => {
     const result = simulateRound({
-      seed: "concealed-10",
+      seed: "smart-concealed-4",
       bots: createBaselineBots(),
       maxTurns: 300,
     });
@@ -213,9 +292,40 @@ describe("simulation", () => {
     }
   });
 
+  test("claimed kongs wait for a supplement draw without a rules error", () => {
+    const result = simulateRound({
+      seed: "kong-bug-1",
+      bots: createBaselineBots(),
+      maxTurns: 80,
+    });
+    const kongIndex = result.events.findIndex(
+      (event) => event.type === "claimMade" && event.claim === "kong",
+    );
+
+    expect(kongIndex).toBeGreaterThan(-1);
+    expect(result.events.filter((event) => event.type === "rulesError")).toEqual([]);
+
+    const kong = result.events[kongIndex];
+    const replacement = result.events[kongIndex + 1];
+    const discard = result.events[kongIndex + 2];
+
+    expect(kong.type).toBe("claimMade");
+    expect(replacement.type).toBe("tileDrawn");
+    if (kong.type === "claimMade" && replacement.type === "tileDrawn") {
+      expect(replacement.player).toBe(kong.player);
+      expect(replacement.replacement).toBe(true);
+      expect(replacement.source).toBe("deadWall");
+    }
+    expect(discard.type).toBe("tileDiscarded");
+    if (kong.type === "claimMade" && discard.type === "tileDiscarded") {
+      expect(discard.player).toBe(kong.player);
+      expect(discard.handCount).toBe(13);
+    }
+  });
+
   test("allows multiple winners on the same discard", () => {
     const result = simulateRound({
-      seed: "multi-106",
+      seed: "smart-multi-12",
       bots: createBaselineBots(),
       maxTurns: 400,
     });
@@ -224,9 +334,9 @@ describe("simulation", () => {
     expect(finalEvent?.type).toBe("roundEnded");
     if (finalEvent?.type === "roundEnded") {
       expect(finalEvent.reason).toBe("win");
-      expect(finalEvent.winners).toEqual([1, 2]);
+      expect(finalEvent.winners?.length).toBeGreaterThan(1);
     }
-    expect(result.finalState.winners).toEqual([1, 2]);
+    expect(result.finalState.winners?.length).toBeGreaterThan(1);
   });
 
   test("recognizes Taiwanese seven pairs plus a triplet as a winning hand", () => {

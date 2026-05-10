@@ -5,12 +5,13 @@ import {
   RefreshCw,
   SkipBack,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createBaselineBots } from "./bots/baselineBot";
 import { simulateRound, type SimulateRoundResult } from "./sim/engine";
 import type { GameEvent } from "./sim/events";
 import { replayEvents } from "./sim/replay";
-import { tileLabel, type TileInstance } from "./sim/tiles";
+import type { TileInstance } from "./sim/tiles";
+import { tileAlt, tileImage } from "./ui/tileImages";
 
 const playerNames = ["East", "South", "West", "North"] as const;
 
@@ -140,8 +141,8 @@ export default function App() {
       <section className="viewer-shell" aria-label="Simulation viewer">
         <article className="event-panel">
           <p className="eyebrow">Current event</p>
-          <h2>{formatEventTitle(currentEvent)}</h2>
-          <p>{formatEventDetail(currentEvent)}</p>
+          <h2>{eventTitle(currentEvent)}</h2>
+          <p>{eventDetail(currentEvent)}</p>
           <dl>
             <div>
               <dt>Group</dt>
@@ -170,6 +171,15 @@ export default function App() {
           </dl>
         </article>
 
+        {replay.rulesErrors.length > 0 && (
+          <section className="rules-error" aria-label="Rules errors">
+            <p className="eyebrow">Rules error</p>
+            {replay.rulesErrors.map((error, index) => (
+              <p key={`${error.player}-${error.turn}-${index}`}>{error.message}</p>
+            ))}
+          </section>
+        )}
+
         <div className="event-list" aria-label="Event log">
           {eventGroups.map((group) => (
             <section className="event-group" key={group.id}>
@@ -195,7 +205,7 @@ export default function App() {
                     onClick={() => setEventIndex(index)}
                   >
                     <span>{String(index + 1).padStart(3, "0")}</span>
-                    <strong>{formatEventTitle(event)}</strong>
+                    <strong>{eventTitle(event)}</strong>
                   </button>
                 ))}
             </section>
@@ -255,6 +265,12 @@ export default function App() {
           highlightedTileIds={highlightedTileIds}
         />
       </section>
+
+      <footer className="asset-attribution">
+        Tile art adapted from{" "}
+        <a href="https://demching.itch.io/mahjong">DemChing/Cangjie6</a>,{" "}
+        <a href="/tiles/ATTRIBUTION.md">CC BY-SA 4.0</a>.
+      </footer>
     </main>
   );
 }
@@ -281,12 +297,20 @@ function TileGroup({
               key={tile.id}
               title={tile.id}
             >
-              {tileLabel(tile)}
+              <img src={tileImage(tile)} alt={tileAlt(tile)} loading="lazy" />
             </span>
           ))
         )}
       </div>
     </section>
+  );
+}
+
+function InlineTile({ tile }: { tile: TileInstance }) {
+  return (
+    <span className="inline-tile" title={tile.id}>
+      <img src={tileImage(tile)} alt={tileAlt(tile)} loading="lazy" />
+    </span>
   );
 }
 
@@ -305,11 +329,12 @@ function activeTileIds(event: GameEvent | undefined): ReadonlySet<string> {
       return new Set(event.tiles.map((tile) => tile.id));
     case "roundStarted":
     case "roundEnded":
+    case "rulesError":
       return new Set();
   }
 }
 
-function formatEventTitle(event: GameEvent | undefined): string {
+function eventTitle(event: GameEvent | undefined): ReactNode {
   if (!event) {
     return "No event";
   }
@@ -317,17 +342,43 @@ function formatEventTitle(event: GameEvent | undefined): string {
     case "roundStarted":
       return "Round started";
     case "tileDrawn":
-      return `${playerNames[event.player]} drew ${tileLabel(event.tile)}`;
+      return (
+        <>
+          {playerNames[event.player]} drew <InlineTile tile={event.tile} />
+        </>
+      );
     case "tileDiscarded":
-      return `${playerNames[event.player]} discarded ${tileLabel(event.tile)}`;
+      return (
+        <>
+          {playerNames[event.player]} discarded <InlineTile tile={event.tile} />
+        </>
+      );
     case "claimMade":
-      return `${playerNames[event.player]} claimed ${event.claim}`;
+      return (
+        <>
+          {playerNames[event.player]} claimed {event.claim}{" "}
+          <InlineTile tile={event.tile} />
+        </>
+      );
     case "kongDeclared":
-      return `${playerNames[event.player]} declared concealed kong`;
+      return (
+        <>
+          {playerNames[event.player]} declared concealed kong{" "}
+          {event.tiles.map((tile) => (
+            <InlineTile key={tile.id} tile={tile} />
+          ))}
+        </>
+      );
     case "winDeclared":
-      return `${playerNames[event.player]} declared win`;
+      return (
+        <>
+          {playerNames[event.player]} declared win <InlineTile tile={event.tile} />
+        </>
+      );
     case "roundEnded":
       return "Round ended";
+    case "rulesError":
+      return `Rules error for ${playerNames[event.player]}`;
   }
 }
 
@@ -338,7 +389,7 @@ function formatGroupLabel(event: GameEvent | undefined): string {
   return event.phase === "setup" ? "Initial deal" : `Turn ${event.turn + 1}`;
 }
 
-function formatEventDetail(event: GameEvent | undefined): string {
+function eventDetail(event: GameEvent | undefined): ReactNode {
   if (!event) {
     return "Start a game to create an event log.";
   }
@@ -350,19 +401,36 @@ function formatEventDetail(event: GameEvent | undefined): string {
     case "tileDiscarded":
       return `${playerNames[event.player]} now has ${event.handCount} concealed tiles.`;
     case "claimMade":
-      return `${playerNames[event.player]} took ${tileLabel(event.tile)} from ${playerNames[event.from]} for a ${event.claim}.`;
+      return (
+        <>
+          {playerNames[event.player]} took <InlineTile tile={event.tile} /> from{" "}
+          {playerNames[event.from]} for a {event.claim}.
+        </>
+      );
     case "kongDeclared":
       return `${playerNames[event.player]} exposed four matching concealed tiles and must draw a supplement tile before discarding.`;
     case "winDeclared":
       return event.from === undefined
-        ? `${playerNames[event.player]} won by self draw on ${tileLabel(event.tile)}.`
-        : `${playerNames[event.player]} won on ${playerNames[event.from]}'s ${tileLabel(event.tile)}.`;
+        ? (
+          <>
+            {playerNames[event.player]} won by self draw on{" "}
+            <InlineTile tile={event.tile} />.
+          </>
+        )
+        : (
+          <>
+            {playerNames[event.player]} won on {playerNames[event.from]}'s{" "}
+            <InlineTile tile={event.tile} />.
+          </>
+        );
     case "roundEnded":
       return event.winners?.length
         ? `${event.winners.map((winner) => playerNames[winner]).join(", ")} won after ${event.turn} turns.`
         : event.winner === undefined
         ? `Ended by ${event.reason} after ${event.turn} turns.`
         : `${playerNames[event.winner]} won after ${event.turn} turns.`;
+    case "rulesError":
+      return event.message;
   }
 }
 

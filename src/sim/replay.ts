@@ -24,6 +24,7 @@ export type ReplayState = {
   ended: boolean;
   winner?: PlayerId;
   winners?: PlayerId[];
+  rulesErrors: Extract<GameEvent, { type: "rulesError" }>[];
 };
 
 export function replayEvents(
@@ -45,6 +46,7 @@ export function replayEvents(
     dealer: 0,
     eventIndex: Math.min(Math.max(eventIndex, 0), Math.max(events.length - 1, 0)),
     ended: false,
+    rulesErrors: [],
   };
   if (roundStart?.type === "roundStarted") {
     initializeWalls(state, roundStart.seed);
@@ -128,6 +130,9 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
       state.winners = event.winners;
       state.wallCount = event.wallCount;
       state.deadWallCount = event.deadWallCount;
+      return;
+    case "rulesError":
+      state.rulesErrors.push(event);
       return;
   }
 }
