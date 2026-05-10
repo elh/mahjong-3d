@@ -42,6 +42,13 @@ export type TileAnimation = {
     rotation: Vec3;
     holdMs?: number;
   };
+  flick?: {
+    position: Vec3;
+    rotation: Vec3;
+    linearVelocity: Vec3;
+    angularVelocity: Vec3;
+    delayMs: number;
+  };
 };
 
 export const tileSize = {
@@ -63,6 +70,9 @@ const wallSideTiles = 18;
 const wallSideLength = tileSize.width * wallSideTiles;
 const wallRunRadius = wallSideLength / 2 - tileSize.width / 2;
 const wallPerpendicularRadius = wallSideLength / 2 + tileSize.depth / 2;
+const discardRevealRightOffset = tileSize.width * 7;
+const discardRevealForwardRadius =
+  wallPerpendicularRadius - tileSize.depth * 1.7;
 
 export function createThreeTableLayout(
   replay: ReplayState,
@@ -160,10 +170,38 @@ export function discardDropPosition(player: PlayerId): Vec3 {
 
 export function discardFallPosition(player: PlayerId): Vec3 {
   const forward = playerForward(player);
+  const right = playerRight(player);
   return [
-    forward[0] * (handRadius - tileSize.depth * 2.2),
-    tableY + 0.02,
-    forward[2] * (handRadius - tileSize.depth * 2.2),
+    forward[0] * discardRevealForwardRadius +
+      right[0] * discardRevealRightOffset,
+    tableY,
+    forward[2] * discardRevealForwardRadius +
+      right[2] * discardRevealRightOffset,
+  ];
+}
+
+export function discardFlickVelocity(
+  tile: TileInstance,
+  player: PlayerId,
+): Vec3 {
+  const reveal = discardFallPosition(player);
+  const baseAngle = Math.atan2(-reveal[2], -reveal[0]);
+  const angle = baseAngle + (stableUnit(tile.id) - 0.5) * 0.46;
+  const forceDelta = (stableUnit(`${tile.id}:force`) - 0.5) * 0.4;
+  const speed =
+    (5.6 + stableUnit(`${tile.id}:speed`) * 0.65) * (1 + forceDelta);
+  return [Math.cos(angle) * speed, 0.09, Math.sin(angle) * speed];
+}
+
+export function discardFlickAngularVelocity(
+  tile: TileInstance,
+  player: PlayerId,
+): Vec3 {
+  const spin = stableUnit(`${tile.id}:spin`) - 0.5;
+  return [
+    0.1 + spin * 0.8,
+    2.8 + stableUnit(`${tile.id}:yaw`) * 1.8,
+    (player % 2 === 0 ? 1 : -1) * (0.8 + stableUnit(`${tile.id}:roll`) * 1.2),
   ];
 }
 
@@ -416,6 +454,16 @@ function currentEventAnimations(
           rotation: playerTileRotation(event.player),
           holdMs: 500,
         },
+        flick: {
+          position: discardFallPosition(event.player),
+          rotation: playerTileRotation(event.player),
+          linearVelocity: discardFlickVelocity(event.tile, event.player),
+          angularVelocity: discardFlickAngularVelocity(
+            event.tile,
+            event.player,
+          ),
+          delayMs: 880,
+        },
       },
     ];
   }
@@ -449,6 +497,15 @@ function sourcePosition(source: "liveWall" | "deadWall"): Vec3 {
   return source === "deadWall"
     ? [-wallPerpendicularRadius, tableY + 0.28, -wallPerpendicularRadius]
     : [0, tableY + 0.28, wallPerpendicularRadius];
+}
+
+function stableUnit(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967295;
 }
 
 function previousDiscardHandPlacement(

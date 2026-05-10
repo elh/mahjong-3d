@@ -239,6 +239,7 @@ h3 {
 }
 
 .three-viewer {
+  position: relative;
   height: min(760px, calc(100vh - 96px));
   min-height: 520px;
   margin-top: 10px;
@@ -249,6 +250,67 @@ h3 {
 
 .three-viewer canvas {
   display: block;
+}
+
+.three-debug-panel {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  z-index: 5;
+  display: grid;
+  gap: 7px;
+  width: 230px;
+  padding: 9px;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 6px;
+  background: rgb(19 22 20 / 78%);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 26%);
+  color: var(--stone-100);
+  font-size: 0.72rem;
+  backdrop-filter: blur(8px);
+}
+
+.three-debug-panel header,
+.three-debug-panel label span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.three-debug-panel header {
+  color: var(--stone-100);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.three-debug-panel button {
+  min-height: 22px;
+  padding: 0 7px;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 4px;
+  background: rgb(255 255 255 / 8%);
+  color: var(--stone-100);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.three-debug-panel label {
+  display: grid;
+  gap: 3px;
+  color: var(--stone-200);
+  font-weight: 700;
+}
+
+.three-debug-panel strong {
+  color: var(--stone-50);
+  font-variant-numeric: tabular-nums;
+}
+
+.three-debug-panel input {
+  width: 100%;
+  accent-color: #d2b16f;
 }
 
 .three-viewer.loading {

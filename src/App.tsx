@@ -83,6 +83,8 @@ export default function App() {
     () => (eventIndex > 0 ? replayEvents(events, eventIndex - 1) : undefined),
     [events, eventIndex],
   );
+  const roundKey =
+    events[0]?.type === "roundStarted" ? events[0].seed : pendingSeed;
 
   useEffect(() => {
     if (!currentEvent) {
@@ -250,6 +252,7 @@ export default function App() {
             previousReplay={previousReplay}
             currentEvent={currentEvent}
             eventIndex={eventIndex}
+            roundKey={roundKey}
           />
         </Suspense>
       ) : (

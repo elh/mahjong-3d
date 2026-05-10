@@ -12,7 +12,7 @@ import {
   type RapierRigidBody,
   RigidBody,
 } from "@react-three/rapier";
-import { Suspense, useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { GameEvent } from "../../sim/events";
 import type { ReplayState } from "../../sim/replay";
@@ -28,11 +28,32 @@ import {
 const tileBackThickness = tileSize.height * 0.18;
 const tileCornerRadius = 0.035;
 
+type FlickDebugSettings = {
+  force: number;
+  lift: number;
+  spin: number;
+  tableFriction: number;
+  tileFriction: number;
+  linearDamping: number;
+  angularDamping: number;
+};
+
+const defaultFlickDebugSettings: FlickDebugSettings = {
+  force: 1.5,
+  lift: 1,
+  spin: 1,
+  tableFriction: 1.35,
+  tileFriction: 1.2,
+  linearDamping: 1.05,
+  angularDamping: 1.45,
+};
+
 type ThreeGameViewProps = {
   replay: ReplayState;
   previousReplay: ReplayState | undefined;
   currentEvent: GameEvent | undefined;
   eventIndex: number;
+  roundKey: string;
 };
 
 export function ThreeGameView({
@@ -40,7 +61,9 @@ export function ThreeGameView({
   previousReplay,
   currentEvent,
   eventIndex,
+  roundKey,
 }: ThreeGameViewProps) {
+  const [flickDebug, setFlickDebug] = useState(defaultFlickDebugSettings);
   const layout = useMemo(
     () => createThreeTableLayout(replay, currentEvent, previousReplay),
     [replay, currentEvent, previousReplay],
@@ -48,14 +71,28 @@ export function ThreeGameView({
   const animatedTileIds = new Set(
     layout.animations.map((animation) => animation.tile.id),
   );
+  const flickByTileId = new Map(
+    layout.animations
+      .filter((animation) => animation.flick)
+      .map((animation) => [animation.tile.id, animation.flick!]),
+  );
+  const nonPhysicsAnimatedTileIds = new Set(
+    layout.animations
+      .filter((animation) => !animation.flick)
+      .map((animation) => animation.tile.id),
+  );
   const visibleTiles = layout.tiles.filter(
     (placement) => !animatedTileIds.has(placement.tile.id),
   );
   const staticTiles = visibleTiles.filter((placement) => !placement.physics);
-  const discardTiles = visibleTiles.filter((placement) => placement.physics);
+  const discardTiles = layout.tiles.filter(
+    (placement) =>
+      placement.physics && !nonPhysicsAnimatedTileIds.has(placement.tile.id),
+  );
 
   return (
     <section className="three-viewer" aria-label="3D autonomous game viewer">
+      <FlickDebugPanel settings={flickDebug} onChange={setFlickDebug} />
       <Canvas
         shadows
         dpr={[1, 1.75]}
@@ -73,13 +110,29 @@ export function ThreeGameView({
         <TableSurface />
         <Suspense fallback={null}>
           <Environment preset="studio" />
-          <Physics key={`physics-${eventIndex}`} gravity={[0, -9.81, 0]}>
-            <CuboidCollider position={[0, -0.05, 0]} args={[4.8, 0.05, 4.8]} />
+          <Physics key={`physics-${roundKey}`} gravity={[0, -9.81, 0]}>
+            <CuboidCollider
+              position={[0, -0.05, 0]}
+              args={[4.8, 0.05, 4.8]}
+              friction={flickDebug.tableFriction}
+              restitution={0.02}
+            />
             {discardTiles.map((placement) => (
-              <PhysicsTile
+              <DiscardPhysicsTile
                 key={placement.tile.id}
-                placement={placement}
-                eventIndex={eventIndex}
+                placement={
+                  flickByTileId.has(placement.tile.id)
+                    ? {
+                        ...placement,
+                        position: flickByTileId.get(placement.tile.id)!
+                          .position,
+                        rotation: flickByTileId.get(placement.tile.id)!
+                          .rotation,
+                      }
+                    : placement
+                }
+                flick={flickByTileId.get(placement.tile.id)}
+                settings={flickDebug}
               />
             ))}
           </Physics>
@@ -95,6 +148,7 @@ export function ThreeGameView({
               fromRotation={animation.fromRotation}
               toRotation={animation.toRotation}
               via={animation.via}
+              hideAfterMs={animation.flick?.delayMs}
             />
           ))}
           <TableLabels />
@@ -139,48 +193,191 @@ function TableSurface() {
   );
 }
 
-function PhysicsTile({
+function FlickDebugPanel({
+  settings,
+  onChange,
+}: {
+  settings: FlickDebugSettings;
+  onChange: (settings: FlickDebugSettings) => void;
+}) {
+  return (
+    <aside className="three-debug-panel" aria-label="3D flick physics settings">
+      <header>
+        <span>Flick</span>
+        <button
+          type="button"
+          onClick={() => onChange(defaultFlickDebugSettings)}
+        >
+          Reset
+        </button>
+      </header>
+      <DebugSlider
+        label="Force"
+        value={settings.force}
+        min={0.4}
+        max={2.6}
+        step={0.05}
+        onChange={(force) => onChange({ ...settings, force })}
+      />
+      <DebugSlider
+        label="Lift"
+        value={settings.lift}
+        min={0}
+        max={2.4}
+        step={0.05}
+        onChange={(lift) => onChange({ ...settings, lift })}
+      />
+      <DebugSlider
+        label="Spin"
+        value={settings.spin}
+        min={0}
+        max={2.5}
+        step={0.05}
+        onChange={(spin) => onChange({ ...settings, spin })}
+      />
+      <DebugSlider
+        label="Table friction"
+        value={settings.tableFriction}
+        min={0.2}
+        max={3}
+        step={0.05}
+        onChange={(tableFriction) => onChange({ ...settings, tableFriction })}
+      />
+      <DebugSlider
+        label="Tile friction"
+        value={settings.tileFriction}
+        min={0.2}
+        max={3}
+        step={0.05}
+        onChange={(tileFriction) => onChange({ ...settings, tileFriction })}
+      />
+      <DebugSlider
+        label="Linear damp"
+        value={settings.linearDamping}
+        min={0}
+        max={3}
+        step={0.05}
+        onChange={(linearDamping) => onChange({ ...settings, linearDamping })}
+      />
+      <DebugSlider
+        label="Angular damp"
+        value={settings.angularDamping}
+        min={0}
+        max={3}
+        step={0.05}
+        onChange={(angularDamping) => onChange({ ...settings, angularDamping })}
+      />
+    </aside>
+  );
+}
+
+function DebugSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label>
+      <span>
+        {label}
+        <strong>{value.toFixed(2)}</strong>
+      </span>
+      <input
+        type="range"
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(event) => onChange(Number(event.currentTarget.value))}
+      />
+    </label>
+  );
+}
+
+function DiscardPhysicsTile({
   placement,
-  target,
+  flick,
+  settings,
 }: {
   placement: TilePlacement;
-  target?: Vec3;
-  eventIndex: number;
+  flick?: {
+    position: Vec3;
+    rotation: Vec3;
+    linearVelocity: Vec3;
+    angularVelocity: Vec3;
+    delayMs: number;
+  };
+  settings: FlickDebugSettings;
 }) {
+  const [isActive, setIsActive] = useState(!flick);
+  const didApplyFlickRef = useRef(false);
+  const initialPlacementRef = useRef(placement);
   const bodyRef = useRef<RapierRigidBody>(null);
 
   useEffect(() => {
-    if (!target || !bodyRef.current) {
+    if (!flick) {
+      setIsActive(true);
       return;
     }
-    const direction = new THREE.Vector3(
-      target[0] - placement.position[0],
-      0,
-      target[2] - placement.position[2],
-    ).normalize();
-    bodyRef.current.setLinvel(
-      { x: direction.x * 2.2, y: 0.15, z: direction.z * 2.2 },
+    setIsActive(false);
+    didApplyFlickRef.current = false;
+    const timeout = window.setTimeout(() => setIsActive(true), flick.delayMs);
+    return () => window.clearTimeout(timeout);
+  }, [flick]);
+
+  useFrame(() => {
+    if (!flick || !isActive || !bodyRef.current || didApplyFlickRef.current) {
+      return;
+    }
+    didApplyFlickRef.current = true;
+    bodyRef.current.setAngvel(
+      {
+        x: flick.angularVelocity[0] * settings.spin,
+        y: flick.angularVelocity[1] * settings.spin,
+        z: flick.angularVelocity[2] * settings.spin,
+      },
       true,
     );
-    bodyRef.current.setAngvel({ x: 0.3, y: 1.1, z: -0.5 }, true);
-  }, [placement.position, target]);
+    bodyRef.current.setLinvel(
+      {
+        x: flick.linearVelocity[0] * settings.force,
+        y: flick.linearVelocity[1] * settings.lift,
+        z: flick.linearVelocity[2] * settings.force,
+      },
+      true,
+    );
+  });
+
+  if (!isActive) {
+    return null;
+  }
 
   return (
     <RigidBody
       ref={bodyRef}
       colliders={false}
-      position={placement.position}
-      rotation={placement.rotation}
-      restitution={0.04}
-      friction={1.4}
-      linearDamping={1.9}
-      angularDamping={2.4}
+      position={initialPlacementRef.current.position}
+      rotation={initialPlacementRef.current.rotation}
+      restitution={0.02}
+      friction={settings.tileFriction}
+      linearDamping={settings.linearDamping}
+      angularDamping={settings.angularDamping}
       canSleep
     >
       <CuboidCollider
         args={[tileSize.width / 2, tileSize.height / 2, tileSize.depth / 2]}
       />
-      <TileBlock tile={placement.tile} faceUp={placement.faceUp} />
+      <TileBlock tile={initialPlacementRef.current.tile} faceUp />
     </RigidBody>
   );
 }
@@ -192,6 +389,7 @@ function AnimatedTile({
   fromRotation,
   toRotation,
   via,
+  hideAfterMs,
 }: {
   tile: TileInstance;
   from: Vec3;
@@ -203,9 +401,11 @@ function AnimatedTile({
     rotation: Vec3;
     holdMs?: number;
   };
+  hideAfterMs?: number;
 }) {
   const ref = useRef<THREE.Group>(null);
   const elapsedRef = useRef(0);
+  const [isVisible, setIsVisible] = useState(true);
 
   useFrame((_, delta) => {
     const holdSeconds = (via?.holdMs ?? 0) / 1000;
@@ -214,6 +414,14 @@ function AnimatedTile({
     const totalDuration = firstDuration + holdSeconds + secondDuration;
     elapsedRef.current = Math.min(elapsedRef.current + delta, totalDuration);
     const elapsed = elapsedRef.current;
+    if (
+      isVisible &&
+      hideAfterMs !== undefined &&
+      elapsed >= hideAfterMs / 1000
+    ) {
+      setIsVisible(false);
+      return;
+    }
 
     if (!via) {
       const t = easeOutCubic(elapsed / firstDuration);
@@ -271,6 +479,10 @@ function AnimatedTile({
       0,
     );
   });
+
+  if (!isVisible) {
+    return null;
+  }
 
   return (
     <group ref={ref} position={from} rotation={fromRotation}>

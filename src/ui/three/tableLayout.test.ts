@@ -7,6 +7,8 @@ import { createTileSet } from "../../sim/tiles";
 import {
   createThreeTableLayout,
   discardFallPosition,
+  discardFlickAngularVelocity,
+  discardFlickVelocity,
   discardDropPosition,
   playerHandRowPosition,
   playerHandTileRotation,
@@ -104,6 +106,30 @@ describe("3D table layout", () => {
         rotation: [0, discardEvent.player * (Math.PI / 2), 0],
         holdMs: 500,
       });
+      expect(discardAnimation.flick).toEqual({
+        position: discardFallPosition(discardEvent.player),
+        rotation: [0, discardEvent.player * (Math.PI / 2), 0],
+        linearVelocity: discardFlickVelocity(
+          discardEvent.tile,
+          discardEvent.player,
+        ),
+        angularVelocity: discardFlickAngularVelocity(
+          discardEvent.tile,
+          discardEvent.player,
+        ),
+        delayMs: 880,
+      });
+      expect(discardAnimation.flick!.linearVelocity[1]).toBeGreaterThan(0);
+      expect(
+        Math.hypot(
+          discardAnimation.flick!.linearVelocity[0],
+          discardAnimation.flick!.linearVelocity[2],
+        ),
+      ).toBeGreaterThan(5.5);
+      expect(discardAnimation.via!.position[1]).toBeCloseTo(
+        tileSize.height / 2 + 0.01,
+        5,
+      );
       expect(discardAnimation.to[1]).toBeLessThan(
         playerHandRowPosition(discardEvent.player, 0, 1, 3.45)[1],
       );
