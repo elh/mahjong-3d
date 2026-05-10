@@ -19,6 +19,9 @@ const allNonFlowerTiles = createTileSet().filter((tile) => !isFlower(tile));
 const allTileKeys = Array.from(
   new Set(allNonFlowerTiles.map((tile) => tileKey(tile.kind))),
 ).sort();
+const representativeTileByKey = new Map(
+  allNonFlowerTiles.map((tile) => [tileKey(tile.kind), tile]),
+);
 
 export function analyzeHand(
   hand: readonly TileInstance[],
@@ -32,7 +35,7 @@ export function analyzeHand(
     if ((visibleCounts.get(key) ?? 0) >= 4) {
       return false;
     }
-    const candidate = allNonFlowerTiles.find((tile) => tileKey(tile.kind) === key);
+    const candidate = representativeTileByKey.get(key);
     return candidate
       ? estimateShanten([...concealed, candidate], melds) < baseDistance
       : false;
@@ -185,4 +188,3 @@ function sortedKeys(counts: Map<string, number>): string[] {
 function decrement(counts: Map<string, number>, key: string, amount: number): void {
   counts.set(key, (counts.get(key) ?? 0) - amount);
 }
-

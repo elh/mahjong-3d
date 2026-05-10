@@ -67,24 +67,32 @@ function chooseDiscard(
     visibleCounts.set(tileKey(tile.kind), (visibleCounts.get(tileKey(tile.kind)) ?? 0) + 1);
   }
 
+  const scores = new Map(
+    candidates.map((tile) => [
+      tile.id,
+      {
+        analysis: evaluateDiscard(
+          hand,
+          context.melds,
+          context.visibleTiles,
+          tile,
+        ),
+        usefulness: tileUsefulness(tile, candidates, visibleCounts),
+      },
+    ]),
+  );
+
   return [...candidates].sort((left, right) => {
-    const leftAnalysis = evaluateDiscard(
-      hand,
-      context.melds,
-      context.visibleTiles,
-      left,
-    );
-    const rightAnalysis = evaluateDiscard(
-      hand,
-      context.melds,
-      context.visibleTiles,
-      right,
-    );
+    const leftScore = scores.get(left.id);
+    const rightScore = scores.get(right.id);
+    if (!leftScore || !rightScore) {
+      return left.id.localeCompare(right.id);
+    }
+
     return (
-      leftAnalysis.shanten - rightAnalysis.shanten ||
-      rightAnalysis.liveWaits - leftAnalysis.liveWaits ||
-      tileUsefulness(left, candidates, visibleCounts) -
-        tileUsefulness(right, candidates, visibleCounts) ||
+      leftScore.analysis.shanten - rightScore.analysis.shanten ||
+      rightScore.analysis.liveWaits - leftScore.analysis.liveWaits ||
+      leftScore.usefulness - rightScore.usefulness ||
       left.id.localeCompare(right.id)
     );
   })[0];
@@ -127,13 +135,4 @@ function tileUsefulness(
   }, 0);
 
   return matching * 4 + neighborScore + exhaustedPenalty;
-}
-
-function countPairs(hand: readonly TileInstance[]): number {
-  const counts = new Map<string, number>();
-  for (const tile of hand) {
-    const key = tileKey(tile.kind);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  return [...counts.values()].filter((count) => count >= 2).length;
 }
