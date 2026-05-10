@@ -95,7 +95,9 @@ h3 {
 
 .primary-button,
 .secondary-button,
-.step-controls button {
+.step-controls button,
+.view-toggle button,
+.three-playback button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -122,7 +124,9 @@ h3 {
 
 .controls-band {
   display: grid;
-  grid-template-columns: minmax(160px, 260px) auto auto auto minmax(220px, 1fr);
+  grid-template-columns:
+    minmax(150px, 230px) auto auto auto auto minmax(190px, 1fr)
+    auto;
   align-items: end;
   gap: 8px;
   padding: 0 0 10px;
@@ -156,9 +160,70 @@ h3 {
   gap: 5px;
 }
 
-.step-controls button {
+.step-controls button,
+.three-playback button {
   width: 32px;
   padding: 0;
+}
+
+.view-toggle {
+  display: inline-flex;
+  align-self: end;
+  overflow: hidden;
+  min-inline-size: 0;
+  min-height: 30px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--stone-300);
+  border-radius: 6px;
+  background: var(--stone-50);
+}
+
+.view-toggle button {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.view-toggle button + button {
+  border-left: 1px solid var(--stone-300);
+}
+
+.view-toggle button.active {
+  background: var(--stone-800);
+  color: var(--stone-50);
+}
+
+.three-playback {
+  display: flex;
+  align-items: end;
+  gap: 7px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.three-playback label {
+  display: grid;
+  gap: 4px;
+  color: var(--stone-600);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.three-playback select {
+  min-height: 30px;
+  padding: 0 7px;
+  border: 1px solid var(--stone-300);
+  border-radius: 6px;
+  background: var(--stone-50);
+  color: var(--stone-900);
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
 .timeline input {
@@ -202,6 +267,27 @@ h3 {
   grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
   gap: 12px;
   padding: 12px 0;
+}
+
+.three-viewer {
+  height: min(760px, calc(100vh - 96px));
+  min-height: 520px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #131614;
+}
+
+.three-viewer canvas {
+  display: block;
+}
+
+.three-viewer.loading {
+  display: grid;
+  place-items: center;
+  color: var(--stone-300);
+  font-size: 0.82rem;
+  font-weight: 700;
 }
 
 .event-rail {
@@ -543,5 +629,10 @@ h3 {
   .controls-band {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .three-viewer {
+    height: calc(100vh - 210px);
+    min-height: 420px;
   }
 }

@@ -2,16 +2,24 @@ import {
   ChevronLeft,
   ChevronRight,
   Info,
+  Pause,
+  Play,
   RefreshCw,
   SkipBack,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { EventLog } from "./ui/EventLog";
 import { eventDetail, eventTitle } from "./ui/eventText";
 import { InfoModal } from "./ui/InfoModal";
 import { playerNames } from "./ui/playerNames";
 import { TileGroup } from "./ui/TileGroup";
 import { useSimulationController } from "./ui/useSimulationController";
+
+const ThreeGameView = lazy(() =>
+  import("./ui/three/ThreeGameView").then((module) => ({
+    default: module.ThreeGameView,
+  })),
+);
 
 function scrollActiveEventIntoView(
   eventLog: HTMLElement | null,
@@ -40,6 +48,9 @@ function scrollActiveEventIntoView(
 
 export default function App() {
   const [isInfoOpen, setIsInfoOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"debug" | "three">("debug");
+  const [isThreePlaying, setIsThreePlaying] = useState(false);
+  const [threeSpeed, setThreeSpeed] = useState(1);
   const activeEventRef = useRef<HTMLButtonElement | null>(null);
   const eventLogRef = useRef<HTMLElement | null>(null);
   const eventLogScrollFrameRef = useRef<number | undefined>(undefined);
@@ -71,6 +82,26 @@ export default function App() {
     startEventHold,
     clickStepButton,
   } = simulation;
+
+  useEffect(() => {
+    if (viewMode !== "three" || !isThreePlaying || !canStepNext) {
+      if (!canStepNext) {
+        setIsThreePlaying(false);
+      }
+      return;
+    }
+
+    const interval = window.setInterval(
+      () => {
+        stepEvent(1);
+      },
+      Math.max(180, 900 / threeSpeed),
+    );
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [viewMode, isThreePlaying, canStepNext, stepEvent, threeSpeed]);
 
   useEffect(() => {
     if (!currentEvent) {
@@ -142,6 +173,25 @@ export default function App() {
           <SkipBack size={18} aria-hidden="true" />
           <span>Restart</span>
         </button>
+        <fieldset className="view-toggle" aria-label="View mode">
+          <button
+            type="button"
+            className={viewMode === "debug" ? "active" : ""}
+            onClick={() => {
+              setViewMode("debug");
+              setIsThreePlaying(false);
+            }}
+          >
+            2D
+          </button>
+          <button
+            type="button"
+            className={viewMode === "three" ? "active" : ""}
+            onClick={() => setViewMode("three")}
+          >
+            3D
+          </button>
+        </fieldset>
         <div className="step-controls">
           <button
             type="button"
@@ -191,6 +241,40 @@ export default function App() {
             onChange={(event) => scrubToEventIndex(Number(event.target.value))}
           />
         </label>
+        {viewMode === "three" && (
+          <fieldset
+            className="three-playback"
+            aria-label="3D playback controls"
+          >
+            <button
+              type="button"
+              onClick={() => setIsThreePlaying((playing) => !playing)}
+              disabled={events.length === 0 || !canStepNext}
+              aria-label={
+                isThreePlaying ? "Pause 3D playback" : "Play 3D playback"
+              }
+              title={isThreePlaying ? "Pause" : "Play"}
+            >
+              {isThreePlaying ? (
+                <Pause size={17} aria-hidden="true" />
+              ) : (
+                <Play size={17} aria-hidden="true" />
+              )}
+            </button>
+            <label>
+              <span>Speed</span>
+              <select
+                value={threeSpeed}
+                onChange={(event) => setThreeSpeed(Number(event.target.value))}
+              >
+                <option value={0.5}>0.5x</option>
+                <option value={1}>1x</option>
+                <option value={1.5}>1.5x</option>
+                <option value={2}>2x</option>
+              </select>
+            </label>
+          </fieldset>
+        )}
       </section>
 
       {(isGenerating || generationError) && (
@@ -206,98 +290,119 @@ export default function App() {
         </section>
       )}
 
-      <section className="viewer-shell" aria-label="Simulation viewer">
-        <section className="wall-panel" aria-label="Wall state">
-          <header>
-            <h2>Wall</h2>
-            <span>
-              {replay.wall.length} live / {replay.deadWall.length} dead
-            </span>
-          </header>
-          <TileGroup
-            title="Live"
-            tiles={replay.wall}
-            highlightedTileIds={highlightedTileIds}
-          />
-          <TileGroup
-            title="Dead"
-            tiles={replay.deadWall}
-            highlightedTileIds={highlightedTileIds}
-            className="dead-wall-group muted-tile-group"
-          />
-        </section>
-
-        <section className="event-rail" aria-label="Event detail and log">
-          <article className="event-panel">
-            <header>
-              <h2>Current event</h2>
-            </header>
-            <div className="event-title">{eventTitle(currentEvent)}</div>
-            <p>{eventDetail(currentEvent)}</p>
-          </article>
-
-          {replay.rulesErrors.length > 0 && (
-            <section className="rules-error" aria-label="Rules errors">
-              <p className="eyebrow">Rules error</p>
-              {replay.rulesErrors.map((error) => (
-                <p
-                  key={`${error.player}-${error.turn}-${error.handCount}-${error.expected}-${error.message}`}
-                >
-                  {error.message}
-                </p>
-              ))}
+      {viewMode === "three" ? (
+        <Suspense
+          fallback={
+            <section
+              className="three-viewer loading"
+              aria-label="Loading 3D view"
+            >
+              Loading 3D view...
             </section>
-          )}
-
-          <EventLog
-            eventGroups={eventGroups}
-            activeEvent={currentEvent}
+          }
+        >
+          <ThreeGameView
+            replay={replay}
+            currentEvent={currentEvent}
             eventIndex={eventIndex}
-            eventLogRef={eventLogRef}
-            activeEventRef={activeEventRef}
-            onJump={jumpToEventIndex}
-            onStep={stepEvent}
           />
-        </section>
-      </section>
+        </Suspense>
+      ) : (
+        <>
+          <section className="viewer-shell" aria-label="Simulation viewer">
+            <section className="wall-panel" aria-label="Wall state">
+              <header>
+                <h2>Wall</h2>
+                <span>
+                  {replay.wall.length} live / {replay.deadWall.length} dead
+                </span>
+              </header>
+              <TileGroup
+                title="Live"
+                tiles={replay.wall}
+                highlightedTileIds={highlightedTileIds}
+              />
+              <TileGroup
+                title="Dead"
+                tiles={replay.deadWall}
+                highlightedTileIds={highlightedTileIds}
+                className="dead-wall-group muted-tile-group"
+              />
+            </section>
 
-      <section className="table-grid" aria-label="Player states">
-        {replay.players.map((player) => (
-          <article className="player-panel" key={player.id}>
-            <header>
-              <h2>{playerNames[player.id]}</h2>
-            </header>
-            <div className="player-tile-rows">
-              <div className="player-tile-row">
-                <TileGroup
-                  title="Hand"
-                  tiles={player.hand}
-                  highlightedTileIds={highlightedTileIds}
-                />
-                <TileGroup
-                  title="Melds"
-                  tiles={player.melds.flatMap((meld) => meld.tiles)}
-                  highlightedTileIds={highlightedTileIds}
-                />
-              </div>
-              <div className="player-tile-row">
-                <TileGroup
-                  title="Discards"
-                  tiles={player.discards}
-                  highlightedTileIds={highlightedTileIds}
-                  className="muted-tile-group"
-                />
-                <TileGroup
-                  title="Flowers"
-                  tiles={player.flowers}
-                  highlightedTileIds={highlightedTileIds}
-                  className="flowers-group"
-                />
-              </div>
-            </div>
-          </article>
-        ))}
-      </section>
+            <section className="event-rail" aria-label="Event detail and log">
+              <article className="event-panel">
+                <header>
+                  <h2>Current event</h2>
+                </header>
+                <div className="event-title">{eventTitle(currentEvent)}</div>
+                <p>{eventDetail(currentEvent)}</p>
+              </article>
+
+              {replay.rulesErrors.length > 0 && (
+                <section className="rules-error" aria-label="Rules errors">
+                  <p className="eyebrow">Rules error</p>
+                  {replay.rulesErrors.map((error) => (
+                    <p
+                      key={`${error.player}-${error.turn}-${error.handCount}-${error.expected}-${error.message}`}
+                    >
+                      {error.message}
+                    </p>
+                  ))}
+                </section>
+              )}
+
+              <EventLog
+                eventGroups={eventGroups}
+                activeEvent={currentEvent}
+                eventIndex={eventIndex}
+                eventLogRef={eventLogRef}
+                activeEventRef={activeEventRef}
+                onJump={jumpToEventIndex}
+                onStep={stepEvent}
+              />
+            </section>
+          </section>
+
+          <section className="table-grid" aria-label="Player states">
+            {replay.players.map((player) => (
+              <article className="player-panel" key={player.id}>
+                <header>
+                  <h2>{playerNames[player.id]}</h2>
+                </header>
+                <div className="player-tile-rows">
+                  <div className="player-tile-row">
+                    <TileGroup
+                      title="Hand"
+                      tiles={player.hand}
+                      highlightedTileIds={highlightedTileIds}
+                    />
+                    <TileGroup
+                      title="Melds"
+                      tiles={player.melds.flatMap((meld) => meld.tiles)}
+                      highlightedTileIds={highlightedTileIds}
+                    />
+                  </div>
+                  <div className="player-tile-row">
+                    <TileGroup
+                      title="Discards"
+                      tiles={player.discards}
+                      highlightedTileIds={highlightedTileIds}
+                      className="muted-tile-group"
+                    />
+                    <TileGroup
+                      title="Flowers"
+                      tiles={player.flowers}
+                      highlightedTileIds={highlightedTileIds}
+                      className="flowers-group"
+                    />
+                  </div>
+                </div>
+              </article>
+            ))}
+          </section>
+        </>
+      )}
 
       <button
         type="button"
