@@ -20,7 +20,7 @@ import * as THREE from "three";
 import type { GameEvent } from "../../sim/events";
 import type { ReplayState } from "../../sim/replay";
 import type { TileInstance } from "../../sim/tiles";
-import { tileImage } from "../tileImages";
+import { allTileImageUrls, tileImage } from "../tileImages";
 import {
   createThreeTableLayout,
   type TilePlacement,
@@ -155,20 +155,7 @@ export function ThreeGameView({
     () => createThreeTableLayout(replay, currentEvent, previousReplay),
     [replay, currentEvent, previousReplay],
   );
-  const requiredTileTextureUrls = useMemo(() => {
-    const urls = new Set<string>();
-    for (const placement of layout.tiles) {
-      if (placement.faceUp) {
-        urls.add(tileImage(placement.tile));
-      }
-    }
-    for (const animation of layout.animations) {
-      if (animation.faceUp !== false) {
-        urls.add(tileImage(animation.tile));
-      }
-    }
-    return [...urls].sort();
-  }, [layout]);
+  const requiredTileTextureUrls = useMemo(() => allTileImageUrls(), []);
   const tileFacesReady = useTileTexturesReady(requiredTileTextureUrls);
   const sceneVisible =
     sceneReady && tileFacesReady && !roundChanged && !loading;
