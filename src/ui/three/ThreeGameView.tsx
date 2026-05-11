@@ -1673,7 +1673,7 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
             "vec4 diffuseColor = vec4( diffuse, opacity );",
             `
             vec3 tileIvory = vec3(0.953, 0.918, 0.839);
-            vec3 tileGreen = vec3(0.000, 0.502, 0.341);
+            vec3 tileGreen = vec3(0.024, 0.439, 0.106);
             float backMask = step(${backThreshold.toFixed(5)}, ${backDirection.toFixed(1)} * vTileLocalPosition.y);
             vec4 diffuseColor = vec4(mix(tileIvory, tileGreen, backMask), opacity);
             `,
