@@ -107,7 +107,7 @@ describe("3D table layout", () => {
       expect(discardAnimation.via).toEqual({
         position: discardFallPosition(discardEvent.player),
         rotation: [0, discardEvent.player * (Math.PI / 2), 0],
-        holdMs: 500,
+        holdMs: 10,
       });
       expect(discardAnimation.flick).toEqual({
         position: discardFallPosition(discardEvent.player),
@@ -120,8 +120,10 @@ describe("3D table layout", () => {
           discardEvent.tile,
           discardEvent.player,
         ),
-        delayMs: 880,
+        delayMs: 390,
       });
+      expect(discardAnimation.flick!.angularVelocity[0]).toBe(0);
+      expect(discardAnimation.flick!.angularVelocity[2]).toBe(0);
       expect(discardAnimation.flick!.linearVelocity[1]).toBeGreaterThan(0);
       expect(
         Math.hypot(

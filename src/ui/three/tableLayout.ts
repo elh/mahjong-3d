@@ -243,12 +243,8 @@ export function discardFlickAngularVelocity(
   tile: TileInstance,
   player: PlayerId,
 ): Vec3 {
-  const spin = stableUnit(`${tile.id}:spin`) - 0.5;
-  return [
-    0.1 + spin * 0.8,
-    2.8 + stableUnit(`${tile.id}:yaw`) * 1.8,
-    (player % 2 === 0 ? 1 : -1) * (0.8 + stableUnit(`${tile.id}:roll`) * 1.2),
-  ];
+  const yaw = (stableUnit(`${tile.id}:yaw`) - 0.5) * 7.2;
+  return [0, yaw, 0];
 }
 
 function layoutPlayerRow(
@@ -488,13 +484,13 @@ function wallSlotMap(seed: string): Map<string, number> {
 
 function physicalWallIndexFromLiveDrawIndex(index: number): number {
   const stackSize = wallSideTiles * 4;
-  const pairIndex = Math.floor(index / 2);
+  const pairIndex = stackSize - 1 - Math.floor(index / 2);
   return pairIndex + (index % 2 === 0 ? stackSize : 0);
 }
 
 function physicalWallIndexFromDeadDrawIndex(index: number): number {
   const stackSize = wallSideTiles * 4;
-  const pairIndex = stackSize - 1 - Math.floor(index / 2);
+  const pairIndex = Math.floor(index / 2);
   return pairIndex + (index % 2 === 0 ? stackSize : 0);
 }
 
@@ -566,7 +562,7 @@ function currentEventAnimations(
         via: {
           position: discardFallPosition(event.player),
           rotation: playerTileRotation(event.player),
-          holdMs: 500,
+          holdMs: 10,
         },
         flick: {
           position: discardFallPosition(event.player),
@@ -576,7 +572,7 @@ function currentEventAnimations(
             event.tile,
             event.player,
           ),
-          delayMs: 880,
+          delayMs: 390,
         },
       },
     ];
