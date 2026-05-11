@@ -1,9 +1,4 @@
-import {
-  Environment,
-  OrbitControls,
-  RoundedBox,
-  useTexture,
-} from "@react-three/drei";
+import { Environment, OrbitControls, RoundedBox } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   CuboidCollider,
@@ -40,6 +35,13 @@ const tableSlabDepth = 0.24;
 const tableRailWidth = 0.16;
 const tableRailHeight = 0.075;
 const tableRailOuterHalfSize = tableHalfSize + tableRailWidth;
+type TileTextureEntry = {
+  texture?: THREE.Texture;
+  isLoading: boolean;
+  listeners: Set<(texture: THREE.Texture) => void>;
+};
+
+const tileTextureCache = new Map<string, TileTextureEntry>();
 type FlickDebugSettings = {
   force: number;
   lift: number;
@@ -1191,30 +1193,89 @@ function FaceUpTileBlock({
   tile: TileInstance;
   faceVisible?: boolean;
 }) {
-  const texture = useTexture(tileImage(tile));
+  const texture = useTileTexture(tileImage(tile));
+  return (
+    <group>
+      <TileBody orientation="faceUp" />
+      {texture ? (
+        <mesh
+          visible={faceVisible}
+          position={[0, tileSize.height / 2 + 0.003, 0]}
+          rotation={[-Math.PI / 2, 0, 0]}
+        >
+          <planeGeometry
+            args={[tileSize.width * 0.82, tileSize.depth * 0.86]}
+          />
+          <meshBasicMaterial
+            map={texture}
+            transparent
+            alphaTest={0.02}
+            toneMapped={false}
+            side={THREE.FrontSide}
+          />
+        </mesh>
+      ) : null}
+    </group>
+  );
+}
+
+function useTileTexture(url: string): THREE.Texture | undefined {
+  const [texture, setTexture] = useState(
+    () => tileTextureCache.get(url)?.texture,
+  );
+
+  useEffect(() => {
+    let entry = tileTextureCache.get(url);
+    if (!entry) {
+      entry = { isLoading: false, listeners: new Set() };
+      tileTextureCache.set(url, entry);
+    }
+
+    if (entry.texture) {
+      setTexture(entry.texture);
+      return;
+    }
+
+    entry.listeners.add(setTexture);
+    if (!entry.isLoading) {
+      entry.isLoading = true;
+      new THREE.TextureLoader().load(
+        url,
+        (loadedTexture) => {
+          configureTileTexture(loadedTexture);
+          const loadedEntry = tileTextureCache.get(url);
+          if (!loadedEntry) {
+            return;
+          }
+          loadedEntry.texture = loadedTexture;
+          loadedEntry.isLoading = false;
+          for (const listener of loadedEntry.listeners) {
+            listener(loadedTexture);
+          }
+        },
+        undefined,
+        () => {
+          const failedEntry = tileTextureCache.get(url);
+          if (failedEntry) {
+            failedEntry.isLoading = false;
+          }
+        },
+      );
+    }
+
+    return () => {
+      entry.listeners.delete(setTexture);
+    };
+  }, [url]);
+
+  return texture;
+}
+
+function configureTileTexture(texture: THREE.Texture): void {
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 4;
   texture.minFilter = THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;
-  return (
-    <group>
-      <TileBody orientation="faceUp" />
-      <mesh
-        visible={faceVisible}
-        position={[0, tileSize.height / 2 + 0.003, 0]}
-        rotation={[-Math.PI / 2, 0, 0]}
-      >
-        <planeGeometry args={[tileSize.width * 0.82, tileSize.depth * 0.86]} />
-        <meshBasicMaterial
-          map={texture}
-          transparent
-          alphaTest={0.02}
-          toneMapped={false}
-          side={THREE.FrontSide}
-        />
-      </mesh>
-    </group>
-  );
 }
 
 function FaceDownTileBlock() {

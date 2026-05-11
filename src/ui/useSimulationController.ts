@@ -27,6 +27,8 @@ export function useSimulationController() {
   const workerRef = useRef<Worker | null>(null);
   const holdDelayRef = useRef<number | undefined>(undefined);
   const holdIntervalRef = useRef<number | undefined>(undefined);
+  const stepFrameRef = useRef<number | undefined>(undefined);
+  const pendingStepDeltaRef = useRef(0);
   const scrubFrameRef = useRef<number | undefined>(undefined);
   const scrubIdleTimeoutRef = useRef<number | undefined>(undefined);
   const scrubEventIndexRef = useRef<number | undefined>(undefined);
@@ -63,6 +65,7 @@ export function useSimulationController() {
       workerRef.current?.terminate();
       workerRef.current = null;
       clearEventHold();
+      clearPendingStep();
       clearEventScrub({ updateState: false });
     };
   }, []);
@@ -120,6 +123,7 @@ export function useSimulationController() {
     setPendingSeed(nextSeed);
     setIsGenerating(true);
     setGenerationError(undefined);
+    clearPendingStep();
     clearEventScrub();
     setEventIndex(0);
     const worker = createSimulationWorker();
@@ -160,28 +164,49 @@ export function useSimulationController() {
     [],
   );
 
+  const clearPendingStep = useCallback(() => {
+    if (stepFrameRef.current !== undefined) {
+      window.cancelAnimationFrame(stepFrameRef.current);
+      stepFrameRef.current = undefined;
+    }
+    pendingStepDeltaRef.current = 0;
+  }, []);
+
   const stepEvent = useCallback(
     (direction: -1 | 1) => {
       clearEventScrub();
-      setEventIndex((index) =>
-        Math.min(
-          Math.max(0, index + direction),
-          Math.max(events.length - 1, 0),
-        ),
-      );
+      pendingStepDeltaRef.current += direction;
+
+      if (stepFrameRef.current !== undefined) {
+        return;
+      }
+
+      stepFrameRef.current = window.requestAnimationFrame(() => {
+        stepFrameRef.current = undefined;
+        const delta = Math.sign(pendingStepDeltaRef.current);
+        pendingStepDeltaRef.current = 0;
+        if (delta === 0) {
+          return;
+        }
+        setEventIndex((index) =>
+          Math.min(Math.max(0, index + delta), Math.max(events.length - 1, 0)),
+        );
+      });
     },
     [events.length, clearEventScrub],
   );
 
   const jumpToEventIndex = useCallback(
     (index: number) => {
+      clearPendingStep();
       clearEventScrub();
       setEventIndex(clampEventIndex(index, events.length));
     },
-    [events.length, clearEventScrub],
+    [events.length, clearEventScrub, clearPendingStep],
   );
 
   function scrubToEventIndex(index: number) {
+    clearPendingStep();
     scrubEventIndexRef.current = clampEventIndex(index, events.length);
     setIsScrubbingEvent(true);
 
