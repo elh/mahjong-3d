@@ -2,8 +2,13 @@ import { tileAttributionUrl } from "./tileImages";
 
 export function InfoModal({
   modalRef,
+  routeLink,
 }: {
   modalRef: React.RefObject<HTMLElement | null>;
+  routeLink: {
+    href: string;
+    label: string;
+  };
 }) {
   return (
     <section
@@ -22,6 +27,9 @@ export function InfoModal({
       <p>
         Github:{" "}
         <a href="https://github.com/elh/concealed-gang">elh/concealed-gang</a>
+      </p>
+      <p>
+        View: <a href={routeLink.href}>{routeLink.label}</a>
       </p>
       <p>
         Tile art adapted from{" "}

@@ -14,6 +14,9 @@ import { playerNames } from "./ui/playerNames";
 import { TileGroup } from "./ui/TileGroup";
 import { useSimulationController } from "./ui/useSimulationController";
 
+const eventAdvanceDelayMs = 950;
+const turnBoundaryPauseMs = 1000;
+
 const ThreeGameView = lazy(() =>
   import("./ui/three/ThreeGameView").then((module) => ({
     default: module.ThreeGameView,
@@ -46,13 +49,15 @@ function scrollActiveEventIntoView(
 }
 
 export default function App() {
-  const [isInfoOpen, setIsInfoOpen] = useState(false);
+  const isSimRoute = window.location.pathname.replace(/\/+$/, "") === "/sim";
+  return isSimRoute ? <SimApp /> : <DebugApp />;
+}
+
+function DebugApp() {
   const [viewMode, setViewMode] = useState<"debug" | "three">("debug");
   const activeEventRef = useRef<HTMLButtonElement | null>(null);
   const eventLogRef = useRef<HTMLElement | null>(null);
   const eventLogScrollFrameRef = useRef<number | undefined>(undefined);
-  const infoButtonRef = useRef<HTMLButtonElement | null>(null);
-  const infoModalRef = useRef<HTMLElement | null>(null);
   const simulation = useSimulationController();
   const {
     seedInput,
@@ -107,32 +112,6 @@ export default function App() {
       }
     };
   }, [currentEvent]);
-
-  useEffect(() => {
-    if (!isInfoOpen) {
-      return;
-    }
-
-    function dismissInfoOnOutsideClick(event: PointerEvent) {
-      if (!(event.target instanceof Node)) {
-        return;
-      }
-
-      if (
-        infoModalRef.current?.contains(event.target) ||
-        infoButtonRef.current?.contains(event.target)
-      ) {
-        return;
-      }
-
-      setIsInfoOpen(false);
-    }
-
-    document.addEventListener("pointerdown", dismissInfoOnOutsideClick);
-    return () => {
-      document.removeEventListener("pointerdown", dismissInfoOnOutsideClick);
-    };
-  }, [isInfoOpen]);
 
   return (
     <main className="app-shell">
@@ -363,6 +342,133 @@ export default function App() {
         </>
       )}
 
+      <InfoPopover routeLink={{ href: "/sim", label: "Simulator" }} />
+    </main>
+  );
+}
+
+function SimApp() {
+  const simulation = useSimulationController();
+  const {
+    pendingSeed,
+    isGenerating,
+    generationError,
+    eventIndex,
+    events,
+    replay,
+    currentEvent,
+    stepEvent,
+  } = simulation;
+  const previousReplay = useMemo(
+    () => (eventIndex > 0 ? replayEvents(events, eventIndex - 1) : undefined),
+    [events, eventIndex],
+  );
+  const roundKey =
+    events[0]?.type === "roundStarted" ? events[0].seed : pendingSeed;
+  const isLoadingRound = isGenerating && !generationError;
+  const debugHref = `/?seed=${encodeURIComponent(roundKey)}`;
+
+  useEffect(() => {
+    if (isLoadingRound || generationError || events.length === 0) {
+      return;
+    }
+
+    const nextEvent = events[eventIndex + 1];
+    if (!nextEvent) {
+      return;
+    }
+
+    const currentEvent = events[eventIndex];
+    const isTurnBoundary =
+      currentEvent?.groupId !== nextEvent.groupId && nextEvent.phase === "turn";
+    const delay =
+      eventAdvanceDelayMs + (isTurnBoundary ? turnBoundaryPauseMs : 0);
+    const timeout = window.setTimeout(() => stepEvent(1), delay);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [eventIndex, events, generationError, isLoadingRound, stepEvent]);
+
+  return (
+    <main className="sim-shell">
+      {(isGenerating || generationError) && (
+        <section
+          className={
+            generationError ? "generation-pill error" : "generation-pill"
+          }
+          aria-live="polite"
+        >
+          {generationError
+            ? `Could not generate ${pendingSeed}: ${generationError}`
+            : `Generating ${pendingSeed}...`}
+        </section>
+      )}
+      <Suspense
+        fallback={
+          <section
+            className="three-viewer loading"
+            aria-label="Loading 3D view"
+          >
+            Loading 3D view...
+          </section>
+        }
+      >
+        <ThreeGameView
+          replay={replay}
+          previousReplay={previousReplay}
+          currentEvent={currentEvent}
+          eventIndex={eventIndex}
+          roundKey={roundKey}
+          loading={isLoadingRound}
+          simulatorMode
+        />
+      </Suspense>
+      <InfoPopover routeLink={{ href: debugHref, label: "Debug view" }} />
+    </main>
+  );
+}
+
+function InfoPopover({
+  routeLink,
+}: {
+  routeLink: {
+    href: string;
+    label: string;
+  };
+}) {
+  const [isInfoOpen, setIsInfoOpen] = useState(false);
+  const infoButtonRef = useRef<HTMLButtonElement | null>(null);
+  const infoModalRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!isInfoOpen) {
+      return;
+    }
+
+    function dismissInfoOnOutsideClick(event: PointerEvent) {
+      if (!(event.target instanceof Node)) {
+        return;
+      }
+
+      if (
+        infoModalRef.current?.contains(event.target) ||
+        infoButtonRef.current?.contains(event.target)
+      ) {
+        return;
+      }
+
+      setIsInfoOpen(false);
+    }
+
+    document.addEventListener("pointerdown", dismissInfoOnOutsideClick);
+    return () => {
+      document.removeEventListener("pointerdown", dismissInfoOnOutsideClick);
+    };
+  }, [isInfoOpen]);
+
+  return (
+    <>
       <button
         type="button"
         className="info-button"
@@ -374,8 +480,10 @@ export default function App() {
         <Info size={15} aria-hidden="true" />
       </button>
 
-      {isInfoOpen && <InfoModal modalRef={infoModalRef} />}
-    </main>
+      {isInfoOpen && (
+        <InfoModal modalRef={infoModalRef} routeLink={routeLink} />
+      )}
+    </>
   );
 }
 

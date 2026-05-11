@@ -121,6 +121,7 @@ type ThreeGameViewProps = {
   eventIndex: number;
   roundKey: string;
   loading?: boolean;
+  simulatorMode?: boolean;
 };
 
 export function ThreeGameView({
@@ -130,6 +131,7 @@ export function ThreeGameView({
   eventIndex,
   roundKey,
   loading = false,
+  simulatorMode = false,
 }: ThreeGameViewProps) {
   const [flickDebug, setFlickDebug] = useState(defaultFlickDebugSettings);
   const [lightingDebug, setLightingDebug] = useState(
@@ -137,6 +139,7 @@ export function ThreeGameView({
   );
   const [soundDebug, setSoundDebug] = useState(defaultSoundDebugSettings);
   const [sceneReady, setSceneReady] = useState(false);
+  const [isCameraUserControlled, setIsCameraUserControlled] = useState(false);
   const lastEventIndexRef = useRef(eventIndex);
   const initialEventIndexRef = useRef(eventIndex);
   const lastRoundKeyRef = useRef(roundKey);
@@ -226,6 +229,7 @@ export function ThreeGameView({
   useEffect(() => {
     void roundKey;
     setSceneReady(false);
+    setIsCameraUserControlled(false);
     let timeout: number | undefined;
     const frame = window.requestAnimationFrame(() => {
       timeout = window.setTimeout(() => setSceneReady(true), 120);
@@ -341,12 +345,15 @@ export function ThreeGameView({
           </group>
         </Suspense>
         <OrbitControls
+          autoRotate={simulatorMode && !isCameraUserControlled}
+          autoRotateSpeed={0.18}
           enablePan={false}
           enableDamping
           minDistance={5.6}
           maxDistance={7.4}
           maxPolarAngle={Math.PI / 2.35}
           minPolarAngle={Math.PI / 4.2}
+          onStart={() => setIsCameraUserControlled(true)}
         />
       </Canvas>
     </section>
