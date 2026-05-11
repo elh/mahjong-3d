@@ -122,6 +122,8 @@ type ThreeGameViewProps = {
   roundKey: string;
   loading?: boolean;
   simulatorMode?: boolean;
+  cameraAutoRotate?: boolean;
+  renderPaused?: boolean;
 };
 
 export function ThreeGameView({
@@ -132,6 +134,8 @@ export function ThreeGameView({
   roundKey,
   loading = false,
   simulatorMode = false,
+  cameraAutoRotate = true,
+  renderPaused = false,
 }: ThreeGameViewProps) {
   const [flickDebug, setFlickDebug] = useState(defaultFlickDebugSettings);
   const [lightingDebug, setLightingDebug] = useState(
@@ -247,6 +251,7 @@ export function ThreeGameView({
         </div>
       ) : null}
       <Canvas
+        frameloop={renderPaused ? "never" : "always"}
         shadows="percentage"
         dpr={[1, 1.75]}
         camera={{ position: [0, 3.05, 6.75], fov: 42, near: 0.1, far: 100 }}
@@ -332,7 +337,9 @@ export function ThreeGameView({
           </group>
         </Suspense>
         <OrbitControls
-          autoRotate={simulatorMode && !isCameraUserControlled}
+          autoRotate={
+            simulatorMode && cameraAutoRotate && !isCameraUserControlled
+          }
           autoRotateSpeed={0.18}
           enablePan={false}
           enableDamping

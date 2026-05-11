@@ -343,13 +343,18 @@ function DebugApp() {
         </>
       )}
 
-      <InfoPopover routeLink={{ href: "/", label: "Simulator" }} />
+      <InfoPopover
+        summary={{ title: "Concealed Gang", detail: `Seed: ${roundKey}` }}
+        routeLink={{ href: "/", label: "Simulator" }}
+      />
     </main>
   );
 }
 
 function SimApp() {
   const simulation = useSimulationController({ syncSeedToUrl: false });
+  const isDocumentHidden = useDocumentHidden();
+  const prefersReducedMotion = usePrefersReducedMotion();
   const {
     pendingSeed,
     isGenerating,
@@ -370,7 +375,13 @@ function SimApp() {
   const debugHref = `/debug?seed=${encodeURIComponent(roundKey)}`;
 
   useEffect(() => {
-    if (isLoadingRound || generationError || events.length === 0) {
+    if (
+      isDocumentHidden ||
+      prefersReducedMotion ||
+      isLoadingRound ||
+      generationError ||
+      events.length === 0
+    ) {
       return;
     }
 
@@ -389,7 +400,15 @@ function SimApp() {
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [eventIndex, events, generationError, isLoadingRound, stepEvent]);
+  }, [
+    eventIndex,
+    events,
+    generationError,
+    isDocumentHidden,
+    isLoadingRound,
+    prefersReducedMotion,
+    stepEvent,
+  ]);
 
   return (
     <main className="sim-shell">
@@ -423,6 +442,8 @@ function SimApp() {
           roundKey={roundKey}
           loading={isLoadingRound}
           simulatorMode
+          cameraAutoRotate={!prefersReducedMotion}
+          renderPaused={isDocumentHidden}
         />
       </Suspense>
       <InfoPopover
@@ -431,6 +452,42 @@ function SimApp() {
       />
     </main>
   );
+}
+
+function useDocumentHidden(): boolean {
+  const [isHidden, setIsHidden] = useState(() => document.hidden);
+
+  useEffect(() => {
+    function syncVisibility() {
+      setIsHidden(document.hidden);
+    }
+
+    document.addEventListener("visibilitychange", syncVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", syncVisibility);
+    };
+  }, []);
+
+  return isHidden;
+}
+
+function usePrefersReducedMotion(): boolean {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const syncPreference = () => setPrefersReducedMotion(mediaQuery.matches);
+
+    syncPreference();
+    mediaQuery.addEventListener("change", syncPreference);
+    return () => {
+      mediaQuery.removeEventListener("change", syncPreference);
+    };
+  }, []);
+
+  return prefersReducedMotion;
 }
 
 function InfoPopover({
