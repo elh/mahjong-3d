@@ -358,6 +358,34 @@ describe("simulation", () => {
     }
   });
 
+  test("test-concealed-kong demonstrates a concealed kong immediately after setup", () => {
+    const result = simulateRound({
+      seed: "test-concealed-kong",
+      bots: createBaselineBots(),
+    });
+    const kongIndex = result.events.findIndex(
+      (event) => event.type === "kongDeclared",
+    );
+    const kong = result.events[kongIndex];
+    const replacement = result.events[kongIndex + 1];
+    const discard = result.events[kongIndex + 2];
+
+    expect(result.events.some((event) => event.type === "rulesError")).toBe(
+      false,
+    );
+    expect(kong?.type).toBe("kongDeclared");
+    if (kong?.type === "kongDeclared") {
+      expect(kong.kong).toBe("concealed");
+      expect(kong.tiles).toHaveLength(4);
+    }
+    expect(replacement?.type).toBe("tileDrawn");
+    if (replacement?.type === "tileDrawn") {
+      expect(replacement.source).toBe("deadWall");
+      expect(replacement.replacement).toBe(true);
+    }
+    expect(discard?.type).toBe("tileDiscarded");
+  });
+
   test("claimed kongs wait for a supplement draw without a rules error", () => {
     const result = simulateRound({
       seed: "kong-bug-2",
@@ -695,6 +723,44 @@ describe("simulation", () => {
     }
     expect(discardEvent?.type).toBe("tileDiscarded");
     expect(result.finalState.players[0].melds[0].type).toBe("kong");
+  });
+
+  test("test-added-kong demonstrates adding a fourth tile to an exposed pong", () => {
+    const result = simulateRound({
+      seed: "test-added-kong",
+      bots: createBaselineBots(),
+    });
+    const preludeClaimIndex = result.events.findIndex(
+      (event) => event.type === "claimMade" && event.claim === "pong",
+    );
+    const drawIndex = result.events.findIndex(
+      (event) =>
+        event.type === "tileDrawn" &&
+        event.phase === "turn" &&
+        !event.replacement,
+    );
+    const kongIndex = result.events.findIndex(
+      (event) => event.type === "kongDeclared" && event.kong === "added",
+    );
+    const kong = result.events[kongIndex];
+    const replacement = result.events[kongIndex + 1];
+
+    expect(result.events.some((event) => event.type === "rulesError")).toBe(
+      false,
+    );
+    expect(preludeClaimIndex).toBeGreaterThan(-1);
+    expect(drawIndex).toBeGreaterThan(preludeClaimIndex);
+    expect(kong?.type).toBe("kongDeclared");
+    if (kong?.type === "kongDeclared") {
+      expect(kong.kong).toBe("added");
+      expect(kong.addedTile).toBeDefined();
+      expect(kong.tiles).toHaveLength(4);
+    }
+    expect(replacement?.type).toBe("tileDrawn");
+    if (replacement?.type === "tileDrawn") {
+      expect(replacement.source).toBe("deadWall");
+      expect(replacement.replacement).toBe(true);
+    }
   });
 
   test("allows opponents to rob an added kong before it is finalized", () => {

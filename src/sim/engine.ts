@@ -18,6 +18,7 @@ import {
   type RoundState,
 } from "./state";
 import { removeTile } from "./tileCollections";
+import { createTestScenarioRound } from "./testScenarios";
 import { isFlower, sortTiles, type TileInstance } from "./tiles";
 import { createShuffledWalls, drawLiveTile, drawSupplementTile } from "./wall";
 import { isWinningHand } from "./win";
@@ -90,6 +91,17 @@ export function createInitialRound(seed: string): {
 export function simulateRound(
   options: SimulateRoundOptions,
 ): SimulateRoundResult {
+  const testScenario = createTestScenarioRound(options.seed);
+  if (testScenario) {
+    return runRound({
+      seed: options.seed,
+      state: testScenario.state,
+      events: testScenario.events,
+      bots: testScenarioBots(),
+      maxTurns: options.maxTurns ?? testScenario.maxTurns,
+    });
+  }
+
   const { state, events } = createInitialRound(options.seed);
   return runRound({
     seed: options.seed,
@@ -110,6 +122,30 @@ export function simulateRoundFromState(
     bots: options.bots,
     maxTurns: options.maxTurns,
   });
+}
+
+function testScenarioBots(): [MahjongBot, MahjongBot, MahjongBot, MahjongBot] {
+  const kongThenDiscard: MahjongBot = {
+    name: "Test Kong",
+    chooseAction(context) {
+      return (
+        context.legalActions.find((action) => action.type === "declareKong") ??
+        context.legalActions.find((action) => action.type === "discard") ??
+        context.legalActions[0]
+      );
+    },
+  };
+  const passClaims: MahjongBot = {
+    name: "Test Pass",
+    chooseAction(context) {
+      return (
+        context.legalActions.find((action) => action.type === "pass") ??
+        context.legalActions.find((action) => action.type === "discard") ??
+        context.legalActions[0]
+      );
+    },
+  };
+  return [kongThenDiscard, passClaims, passClaims, passClaims];
 }
 
 function runRound({
