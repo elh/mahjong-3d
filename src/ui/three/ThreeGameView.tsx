@@ -248,6 +248,8 @@ export function ThreeGameView({
                 toRotation={animation.toRotation}
                 via={animation.via}
                 drawStaging={animation.drawStaging}
+                flipAxis={animation.flipAxis}
+                faceUp={animation.faceUp}
                 motion={animation.motion}
                 hideAfterMs={
                   animation.flick
@@ -845,6 +847,8 @@ function AnimatedTile({
   toRotation,
   via,
   drawStaging,
+  flipAxis,
+  faceUp = true,
   motion = "arc",
   hideAfterMs,
 }: {
@@ -861,7 +865,9 @@ function AnimatedTile({
   drawStaging?: {
     position: Vec3;
   };
-  motion?: "arc" | "drawConcealed" | "knockdown";
+  flipAxis?: Vec3;
+  faceUp?: boolean;
+  motion?: "arc" | "drawConcealed" | "knockdown" | "flipReveal";
   hideAfterMs?: number;
 }) {
   const ref = useRef<THREE.Group>(null);
@@ -870,6 +876,7 @@ function AnimatedTile({
   const [isDrawFaceHidden, setIsDrawFaceHidden] = useState(
     motion === "drawConcealed",
   );
+  const [isFlipFaceUp, setIsFlipFaceUp] = useState(motion !== "flipReveal");
 
   useLayoutEffect(() => {
     if (motion !== "drawConcealed") {
@@ -901,6 +908,9 @@ function AnimatedTile({
       elapsed >= firstDuration
     ) {
       setIsDrawFaceHidden(false);
+    }
+    if (motion === "flipReveal" && !isFlipFaceUp && elapsed >= 0.32) {
+      setIsFlipFaceUp(true);
     }
     if (
       isVisible &&
@@ -973,6 +983,30 @@ function AnimatedTile({
       return;
     }
 
+    if (motion === "flipReveal") {
+      const duration = 0.64;
+      const t = easeInOutCubic(elapsed / duration);
+      const firstHalf = Math.min(t / 0.5, 1);
+      const secondHalf = Math.max((t - 0.5) / 0.5, 0);
+      const axis = new THREE.Vector3(
+        ...(flipAxis ?? ([1, 0, 0] satisfies Vec3)),
+      ).normalize();
+      const baseRotation = eulerToQuaternion(toRotation);
+      const edgeRotation = new THREE.Quaternion()
+        .setFromAxisAngle(axis, Math.PI / 2)
+        .multiply(baseRotation);
+      const rotation =
+        t < 0.5
+          ? slerpQuaternions(
+              eulerToQuaternion(fromRotation),
+              edgeRotation,
+              firstHalf,
+            )
+          : slerpQuaternions(edgeRotation, baseRotation, secondHalf);
+      applyDrawTransform(ref.current, from, to, rotation, rotation, 1, 0);
+      return;
+    }
+
     if (!via) {
       const t = easeOutCubic(elapsed / firstDuration);
       const arc =
@@ -1042,8 +1076,10 @@ function AnimatedTile({
     <group ref={ref} position={from} rotation={fromRotation}>
       {motion === "drawConcealed" ? (
         <FaceUpTileBlock tile={tile} faceVisible={!isDrawFaceHidden} />
+      ) : motion === "flipReveal" ? (
+        <TileBlock tile={tile} faceUp={isFlipFaceUp} />
       ) : (
-        <TileBlock tile={tile} faceUp />
+        <TileBlock tile={tile} faceUp={faceUp} />
       )}
     </group>
   );
@@ -1109,7 +1145,7 @@ function applyAnimatedTransform(
   toRotation: Vec3,
   progress: number,
   arc: number,
-  motion: "arc" | "drawConcealed" | "knockdown" = "arc",
+  motion: "arc" | "drawConcealed" | "knockdown" | "flipReveal" = "arc",
 ) {
   if (!group) {
     return;

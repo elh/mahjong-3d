@@ -287,6 +287,8 @@ function activeTileIds(event: GameEvent | undefined): ReadonlySet<string> {
       return new Set(event.tiles.map((tile) => tile.id));
     case "kongDeclared":
       return new Set(event.tiles.map((tile) => tile.id));
+    case "addedKongDeclared":
+      return new Set(event.tiles.map((tile) => tile.id));
     case "roundStarted":
     case "drawDeclared":
     case "rulesError":

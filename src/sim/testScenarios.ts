@@ -30,6 +30,9 @@ export function createTestScenarioRound(
   if (seed === "test-added-kong") {
     return createAddedKongScenario(seed);
   }
+  if (seed === "test-rob-added-kong") {
+    return createRobAddedKongScenario(seed);
+  }
   return undefined;
 }
 
@@ -39,6 +42,9 @@ export function createTestScenarioWalls(seed: string): WallState | undefined {
   }
   if (seed === "test-added-kong") {
     return createAddedKongFixture(seed).walls;
+  }
+  if (seed === "test-rob-added-kong") {
+    return createRobAddedKongFixture(seed).walls;
   }
   return undefined;
 }
@@ -61,6 +67,17 @@ function createConcealedKongScenario(seed: string): TestScenarioRound {
 
 function createAddedKongScenario(seed: string): TestScenarioRound {
   const fixture = createAddedKongFixture(seed);
+  return createAddedKongScenarioFromFixture(fixture);
+}
+
+function createRobAddedKongScenario(seed: string): TestScenarioRound {
+  const fixture = createRobAddedKongFixture(seed);
+  return createAddedKongScenarioFromFixture(fixture);
+}
+
+function createAddedKongScenarioFromFixture(
+  fixture: Required<ScenarioFixture>,
+): TestScenarioRound {
   const { state, events } = createRoundAfterSetup(fixture);
 
   discardTile(state, events, 3, fixture.claimedTile, 1);
@@ -149,6 +166,57 @@ function createAddedKongFixture(seed: string): Required<ScenarioFixture> {
       "d3",
       "d4",
     ]),
+  ];
+  hands[3] = [claimedTile, ...pool.takeFill(16, new Set([kongKey]))];
+  fillHands(pool, hands, 3);
+
+  return {
+    seed,
+    dealer: 3,
+    hands,
+    walls: createOrderedWalls(pool, hands, 3, [addedTile]),
+    claimedTile,
+    pongHandTiles,
+    addedTile,
+    eastDiscardAfterClaim,
+  };
+}
+
+function createRobAddedKongFixture(seed: string): Required<ScenarioFixture> {
+  const pool = createTilePool();
+  const kongKey = "b2";
+  const hands = emptyHands();
+  const pongHandTiles = pool.take(kongKey, 2);
+  const claimedTile = pool.take(kongKey, 1)[0];
+  const addedTile = pool.take(kongKey, 1)[0];
+  const eastDiscardAfterClaim = pool.takeFill(1, new Set([kongKey]))[0];
+
+  hands[0] = [
+    ...pongHandTiles,
+    eastDiscardAfterClaim,
+    ...pool.takeOneEach([
+      "c4",
+      "c5",
+      "c6",
+      "c7",
+      "c8",
+      "c9",
+      "d7",
+      "d8",
+      "d9",
+      "wind-south",
+      "wind-west",
+      "wind-north",
+      "dragon-green",
+    ]),
+  ];
+  hands[1] = [
+    ...pool.takeOneEach(["b3", "b4", "c1", "c2", "c3", "d1", "d2", "d3"]),
+    ...pool.take("d4", 1),
+    ...pool.take("d5", 1),
+    ...pool.take("d6", 1),
+    ...pool.take("wind-east", 3),
+    ...pool.take("dragon-red", 2),
   ];
   hands[3] = [claimedTile, ...pool.takeFill(16, new Set([kongKey]))];
   fillHands(pool, hands, 3);

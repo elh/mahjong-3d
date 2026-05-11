@@ -97,7 +97,7 @@ export function simulateRound(
       seed: options.seed,
       state: testScenario.state,
       events: testScenario.events,
-      bots: testScenarioBots(),
+      bots: testScenarioBots(options.seed),
       maxTurns: options.maxTurns ?? testScenario.maxTurns,
     });
   }
@@ -124,7 +124,9 @@ export function simulateRoundFromState(
   });
 }
 
-function testScenarioBots(): [MahjongBot, MahjongBot, MahjongBot, MahjongBot] {
+function testScenarioBots(
+  seed: string,
+): [MahjongBot, MahjongBot, MahjongBot, MahjongBot] {
   const kongThenDiscard: MahjongBot = {
     name: "Test Kong",
     chooseAction(context) {
@@ -145,7 +147,21 @@ function testScenarioBots(): [MahjongBot, MahjongBot, MahjongBot, MahjongBot] {
       );
     },
   };
-  return [kongThenDiscard, passClaims, passClaims, passClaims];
+  const winClaims: MahjongBot = {
+    name: "Test Win",
+    chooseAction(context) {
+      return (
+        context.legalActions.find(
+          (action) => action.type === "claim" && action.claim === "win",
+        ) ??
+        context.legalActions.find((action) => action.type === "pass") ??
+        context.legalActions[0]
+      );
+    },
+  };
+  return seed === "test-rob-added-kong"
+    ? [kongThenDiscard, winClaims, passClaims, passClaims]
+    : [kongThenDiscard, passClaims, passClaims, passClaims];
 }
 
 function runRound({

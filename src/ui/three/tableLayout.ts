@@ -1,6 +1,6 @@
 import type { GameEvent } from "../../sim/events";
 import type { ReplayState } from "../../sim/replay";
-import type { PlayerId } from "../../sim/state";
+import type { Meld, PlayerId } from "../../sim/state";
 import { sortTiles, type TileInstance } from "../../sim/tiles";
 import { createShuffledWalls } from "../../sim/wall";
 
@@ -33,7 +33,9 @@ export type TileAnimation = {
         | "flowerExposed"
         | "claimMade"
         | "kongDeclared"
-        | "winDeclared";
+        | "addedKongDeclared"
+        | "winDeclared"
+        | "drawDeclared";
     }
   >;
   from: Vec3;
@@ -48,7 +50,9 @@ export type TileAnimation = {
   drawStaging?: {
     position: Vec3;
   };
-  motion?: "arc" | "drawConcealed" | "knockdown";
+  flipAxis?: Vec3;
+  faceUp?: boolean;
+  motion?: "arc" | "drawConcealed" | "knockdown" | "flipReveal";
   flick?: {
     position: Vec3;
     rotation: Vec3;
@@ -116,16 +120,18 @@ function createStaticThreeTableLayout(
               player.id,
             ),
             ...layoutPlayerAuxiliaryRow(
-              player.melds.flatMap((meld) => meld.tiles),
+              player.melds,
               player.flowers,
               player.id,
+              replay.ended,
             ),
           ]
         : layoutPlayerArea(
             player.hand,
-            player.melds.flatMap((meld) => meld.tiles),
+            player.melds,
             player.flowers,
             player.id,
+            replay.ended,
           )),
       ...layoutDiscards(player.discards, player.id),
     ]),
@@ -288,13 +294,14 @@ function layoutPlayerRow(
 
 function layoutPlayerArea(
   hand: readonly TileInstance[],
-  melds: readonly TileInstance[],
+  melds: readonly Meld[],
   flowers: readonly TileInstance[],
   player: PlayerId,
+  revealConcealedKongs: boolean,
 ): TilePlacement[] {
   return [
     ...layoutPlayerRow(hand, player, "hand", handRadius, 0),
-    ...layoutPlayerAuxiliaryRow(melds, flowers, player),
+    ...layoutPlayerAuxiliaryRow(melds, flowers, player, revealConcealedKongs),
   ];
 }
 
@@ -327,31 +334,42 @@ function layoutWinningPlayerArea(
 }
 
 function layoutPlayerAuxiliaryRow(
-  melds: readonly TileInstance[],
+  melds: readonly Meld[],
   flowers: readonly TileInstance[],
   player: PlayerId,
+  revealConcealedKongs: boolean,
 ): TilePlacement[] {
-  if (melds.length === 0 && flowers.length === 0) {
+  const meldTiles = melds.flatMap((meld) =>
+    meld.tiles.map((tile) => ({
+      tile,
+      faceUp: !meld.concealed || revealConcealedKongs,
+    })),
+  );
+
+  if (meldTiles.length === 0 && flowers.length === 0) {
     return [];
   }
 
-  const gap = melds.length > 0 && flowers.length > 0 ? playerAuxiliaryGap : 0;
-  const auxiliaryWidth = (melds.length + flowers.length) * tileSize.width + gap;
+  const gap =
+    meldTiles.length > 0 && flowers.length > 0 ? playerAuxiliaryGap : 0;
+  const auxiliaryWidth =
+    (meldTiles.length + flowers.length) * tileSize.width + gap;
   const leftEdge = playerAuxiliaryRightEdge - auxiliaryWidth;
   const placements: TilePlacement[] = [];
 
-  for (const [index, tile] of melds.entries()) {
+  for (const [index, meldTile] of meldTiles.entries()) {
     placements.push(
       playerAuxiliaryPlacement(
-        tile,
+        meldTile.tile,
         "meld",
         player,
         leftEdge + tileSize.width / 2 + index * tileSize.width,
+        meldTile.faceUp,
       ),
     );
   }
 
-  const flowerLeftEdge = leftEdge + melds.length * tileSize.width + gap;
+  const flowerLeftEdge = leftEdge + meldTiles.length * tileSize.width + gap;
   for (const [index, tile] of flowers.entries()) {
     placements.push(
       playerAuxiliaryPlacement(
@@ -359,6 +377,7 @@ function layoutPlayerAuxiliaryRow(
         "flower",
         player,
         flowerLeftEdge + tileSize.width / 2 + index * tileSize.width,
+        true,
       ),
     );
   }
@@ -371,6 +390,7 @@ function playerAuxiliaryPlacement(
   owner: "meld" | "flower",
   player: PlayerId,
   rightOffset: number,
+  faceUp: boolean,
 ): TilePlacement {
   const right = playerRight(player);
   const forward = playerForward(player);
@@ -384,7 +404,7 @@ function playerAuxiliaryPlacement(
       forward[2] * playerAuxiliaryRadius + right[2] * rightOffset,
     ],
     rotation: playerTileRotation(player),
-    faceUp: true,
+    faceUp,
     physics: false,
   };
 }
@@ -614,6 +634,12 @@ function currentEventAnimations(
     );
   }
 
+  if (event?.type === "addedKongDeclared") {
+    return event.tiles.flatMap((tile) =>
+      meldTileAnimation(tile, event, tiles, previousTiles, event.player),
+    );
+  }
+
   if (event?.type === "kongDeclared") {
     return event.tiles.flatMap((tile) =>
       meldTileAnimation(tile, event, tiles, previousTiles, event.player),
@@ -621,7 +647,14 @@ function currentEventAnimations(
   }
 
   if (event?.type === "winDeclared") {
-    return winningTileAnimations(event, tiles, previousTiles);
+    return [
+      ...winningTileAnimations(event, tiles, previousTiles),
+      ...concealedKongRevealAnimations(event, tiles, previousTiles),
+    ];
+  }
+
+  if (event?.type === "drawDeclared") {
+    return concealedKongRevealAnimations(event, tiles, previousTiles);
   }
 
   return [];
@@ -669,7 +702,13 @@ function meldTileAnimation(
   tile: TileInstance,
   event: Extract<
     GameEvent,
-    { type: "flowerExposed" | "claimMade" | "kongDeclared" }
+    {
+      type:
+        | "flowerExposed"
+        | "claimMade"
+        | "kongDeclared"
+        | "addedKongDeclared";
+    }
   >,
   tiles: readonly TilePlacement[],
   previousTiles: readonly TilePlacement[],
@@ -697,8 +736,44 @@ function meldTileAnimation(
       fromRotation:
         previousPlacement?.rotation ?? playerHandTileRotation(player),
       toRotation: finalPlacement.rotation,
+      faceUp: finalPlacement.faceUp,
     },
   ];
+}
+
+function concealedKongRevealAnimations(
+  event: Extract<GameEvent, { type: "winDeclared" | "drawDeclared" }>,
+  tiles: readonly TilePlacement[],
+  previousTiles: readonly TilePlacement[],
+): TileAnimation[] {
+  return tiles
+    .filter((placement) => {
+      const previousPlacement = previousTiles.find(
+        (candidate) => candidate.tile.id === placement.tile.id,
+      );
+      return (
+        placement.owner === "meld" &&
+        placement.faceUp &&
+        previousPlacement?.owner === "meld" &&
+        previousPlacement.faceUp === false
+      );
+    })
+    .map((placement) => {
+      const previousPlacement = previousTiles.find(
+        (candidate) => candidate.tile.id === placement.tile.id,
+      );
+      return {
+        tile: placement.tile,
+        event,
+        from: previousPlacement?.position ?? placement.position,
+        to: placement.position,
+        fromRotation: previousPlacement?.rotation ?? placement.rotation,
+        toRotation: placement.rotation,
+        flipAxis: playerRight(placement.player ?? 0),
+        faceUp: true,
+        motion: "flipReveal",
+      };
+    });
 }
 
 function winningTileAnimations(

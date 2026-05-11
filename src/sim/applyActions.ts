@@ -144,6 +144,15 @@ export function applyAddedKong(
     );
   }
 
+  const kongTiles = sortTiles([...meld.tiles, addedTile]);
+  events.push({
+    ...eventMeta("turn", state.turn),
+    type: "addedKongDeclared",
+    player: playerId,
+    tiles: kongTiles,
+    addedTile,
+  });
+
   const robbers = resolveRobbingKong(state, bots, playerId, addedTile);
   if (robbers.length > 0) {
     removeTile(player.hand, addedTile.id);
@@ -152,7 +161,6 @@ export function applyAddedKong(
   }
 
   removeTile(player.hand, addedTile.id);
-  const kongTiles = sortTiles([...meld.tiles, addedTile]);
   player.melds[action.meldIndex] = {
     ...meld,
     type: "kong",

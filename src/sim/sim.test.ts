@@ -707,10 +707,12 @@ describe("simulation", () => {
       ],
       maxTurns: 1,
     });
-    const kong = result.events[0];
-    const draw = result.events[1];
-    const discardEvent = result.events[2];
+    const intent = result.events[0];
+    const kong = result.events[1];
+    const draw = result.events[2];
+    const discardEvent = result.events[3];
 
+    expect(intent?.type).toBe("addedKongDeclared");
     expect(kong?.type).toBe("kongDeclared");
     if (kong?.type === "kongDeclared") {
       expect(kong.kong).toBe("added");
@@ -742,6 +744,10 @@ describe("simulation", () => {
     const kongIndex = result.events.findIndex(
       (event) => event.type === "kongDeclared" && event.kong === "added",
     );
+    const intentIndex = result.events.findIndex(
+      (event) => event.type === "addedKongDeclared",
+    );
+    const intent = result.events[intentIndex];
     const kong = result.events[kongIndex];
     const replacement = result.events[kongIndex + 1];
 
@@ -750,6 +756,9 @@ describe("simulation", () => {
     );
     expect(preludeClaimIndex).toBeGreaterThan(-1);
     expect(drawIndex).toBeGreaterThan(preludeClaimIndex);
+    expect(intent?.type).toBe("addedKongDeclared");
+    expect(intentIndex).toBeGreaterThan(drawIndex);
+    expect(kongIndex).toBeGreaterThan(intentIndex);
     expect(kong?.type).toBe("kongDeclared");
     if (kong?.type === "kongDeclared") {
       expect(kong.kong).toBe("added");
@@ -811,6 +820,10 @@ describe("simulation", () => {
       maxTurns: 1,
     });
 
+    const intent = result.events.find(
+      (event) => event.type === "addedKongDeclared",
+    );
+    expect(intent?.type).toBe("addedKongDeclared");
     expect(result.events.some((event) => event.type === "kongDeclared")).toBe(
       false,
     );
@@ -822,6 +835,48 @@ describe("simulation", () => {
       expect(win.tile.id).toBe(robbedTile.id);
     }
     expect(result.finalState.players[1].winningTile?.id).toBe(robbedTile.id);
+  });
+
+  test("test-rob-added-kong demonstrates robbing an added kong", () => {
+    const result = simulateRound({
+      seed: "test-rob-added-kong",
+      bots: createBaselineBots(),
+    });
+    const preludeClaimIndex = result.events.findIndex(
+      (event) => event.type === "claimMade" && event.claim === "pong",
+    );
+    const drawIndex = result.events.findIndex(
+      (event) =>
+        event.type === "tileDrawn" &&
+        event.phase === "turn" &&
+        !event.replacement,
+    );
+    const winIndex = result.events.findIndex(
+      (event) => event.type === "winDeclared",
+    );
+    const intentIndex = result.events.findIndex(
+      (event) => event.type === "addedKongDeclared",
+    );
+    const intent = result.events[intentIndex];
+    const win = result.events[winIndex];
+
+    expect(result.events.some((event) => event.type === "rulesError")).toBe(
+      false,
+    );
+    expect(result.events.some((event) => event.type === "kongDeclared")).toBe(
+      false,
+    );
+    expect(preludeClaimIndex).toBeGreaterThan(-1);
+    expect(drawIndex).toBeGreaterThan(preludeClaimIndex);
+    expect(intent?.type).toBe("addedKongDeclared");
+    expect(intentIndex).toBeGreaterThan(drawIndex);
+    expect(winIndex).toBeGreaterThan(intentIndex);
+    expect(win?.type).toBe("winDeclared");
+    if (win?.type === "winDeclared") {
+      expect(win.player).toBe(1);
+      expect(win.from).toBe(0);
+    }
+    expect(result.finalState.players[1].winningTile).toBeDefined();
   });
 
   test("records flower exposure explicitly and replays it", () => {

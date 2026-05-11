@@ -62,6 +62,12 @@ export type GameEvent =
       addedTile?: TileInstance;
     })
   | (EventMeta & {
+      type: "addedKongDeclared";
+      player: PlayerId;
+      tiles: TileInstance[];
+      addedTile: TileInstance;
+    })
+  | (EventMeta & {
       type: "winDeclared";
       player: PlayerId;
       from?: PlayerId;

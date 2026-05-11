@@ -413,10 +413,49 @@ describe("3D table layout", () => {
 
         expect(previousPlacement?.owner).toBe("hand");
         expect(finalPlacement?.owner).toBe("meld");
+        expect(finalPlacement?.faceUp).toBe(false);
         expect(animation?.from).toEqual(previousPlacement?.position);
         expect(animation?.to).toEqual(finalPlacement?.position);
+        expect(animation?.faceUp).toBe(false);
       }
     }
+  });
+
+  test("reveals concealed kong melds when a test fixture ends in a draw", () => {
+    const result = simulateRound({
+      seed: "test-concealed-kong",
+      bots: createBaselineBots(),
+    });
+    const drawIndex = result.events.findIndex(
+      (event) => event.type === "drawDeclared",
+    );
+    const previousReplay = replayEvents(result.events, drawIndex - 1);
+    const replay = replayEvents(result.events, drawIndex);
+    const drawEvent = result.events[drawIndex];
+    const previousLayout = createThreeTableLayout(previousReplay, undefined);
+    const layout = createThreeTableLayout(replay, drawEvent, previousReplay);
+    const previousConcealedMelds = previousLayout.tiles.filter(
+      (placement) => placement.owner === "meld" && !placement.faceUp,
+    );
+    const revealedMelds = layout.tiles.filter(
+      (placement) =>
+        placement.owner === "meld" &&
+        previousConcealedMelds.some(
+          (tile) => tile.tile.id === placement.tile.id,
+        ),
+    );
+
+    expect(previousConcealedMelds).toHaveLength(4);
+    expect(revealedMelds.every((placement) => placement.faceUp)).toBe(true);
+    expect(layout.animations).toHaveLength(4);
+    expect(
+      layout.animations.every(
+        (animation) =>
+          animation.motion === "flipReveal" &&
+          animation.faceUp === true &&
+          animation.flipAxis !== undefined,
+      ),
+    ).toBe(true);
   });
 
   test("animates a test-seed added kong by moving the fourth tile from hand", () => {
@@ -424,29 +463,29 @@ describe("3D table layout", () => {
       seed: "test-added-kong",
       bots: createBaselineBots(),
     });
-    const kongIndex = result.events.findIndex(
-      (event) => event.type === "kongDeclared" && event.kong === "added",
+    const intentIndex = result.events.findIndex(
+      (event) => event.type === "addedKongDeclared",
     );
-    const kongEvent = result.events[kongIndex];
-    const previousReplay = replayEvents(result.events, kongIndex - 1);
-    const replay = replayEvents(result.events, kongIndex);
+    const intentEvent = result.events[intentIndex];
+    const previousReplay = replayEvents(result.events, intentIndex - 1);
+    const replay = replayEvents(result.events, intentIndex);
     const previousLayout = createThreeTableLayout(previousReplay, undefined);
-    const layout = createThreeTableLayout(replay, kongEvent, previousReplay);
+    const layout = createThreeTableLayout(replay, intentEvent, previousReplay);
 
-    expect(kongEvent?.type).toBe("kongDeclared");
+    expect(intentEvent?.type).toBe("addedKongDeclared");
     expect(layout.animations).toHaveLength(4);
-    if (kongEvent?.type === "kongDeclared" && kongEvent.addedTile) {
+    if (intentEvent?.type === "addedKongDeclared") {
       const addedAnimation = layout.animations.find(
-        (animation) => animation.tile.id === kongEvent.addedTile?.id,
+        (animation) => animation.tile.id === intentEvent.addedTile.id,
       );
       const previousAddedPlacement = previousLayout.tiles.find(
-        (placement) => placement.tile.id === kongEvent.addedTile?.id,
+        (placement) => placement.tile.id === intentEvent.addedTile.id,
       );
       const finalAddedPlacement = layout.tiles.find(
-        (placement) => placement.tile.id === kongEvent.addedTile?.id,
+        (placement) => placement.tile.id === intentEvent.addedTile.id,
       );
-      const existingMeldTiles = kongEvent.tiles.filter(
-        (tile) => tile.id !== kongEvent.addedTile?.id,
+      const existingMeldTiles = intentEvent.tiles.filter(
+        (tile) => tile.id !== intentEvent.addedTile.id,
       );
 
       expect(previousAddedPlacement?.owner).toBe("hand");
@@ -522,6 +561,103 @@ describe("3D table layout", () => {
     expect(winningAnimation?.from).toEqual(previousDiscard!.position);
     expect(winningAnimation?.to).toEqual(winningPlacement?.position);
     expect(winningAnimation?.motion).toBe("knockdown");
+  });
+
+  test("reveals concealed kong melds when a player wins", () => {
+    const tiles = createTileSet();
+    const concealedKongTiles = tiles.slice(20, 24);
+    const previousReplay = emptyReplayState();
+    previousReplay.players[0].hand = tiles.slice(0, 3);
+    previousReplay.players[1].discards = [tiles[3]];
+    previousReplay.players[2].melds = [
+      { type: "kong", tiles: concealedKongTiles, concealed: true },
+    ];
+
+    const replay = emptyReplayState();
+    replay.ended = true;
+    replay.players[0].hand = tiles.slice(0, 4);
+    replay.players[2].melds = [
+      { type: "kong", tiles: concealedKongTiles, concealed: true },
+    ];
+    const event: GameEvent = {
+      type: "winDeclared",
+      phase: "turn",
+      groupId: "turn-1",
+      turn: 1,
+      player: 0,
+      from: 1,
+      tile: tiles[3],
+    };
+
+    const previousLayout = createThreeTableLayout(previousReplay, undefined);
+    const layout = createThreeTableLayout(replay, event, previousReplay);
+    const previousConcealedMelds = previousLayout.tiles.filter(
+      (placement) =>
+        placement.owner === "meld" &&
+        concealedKongTiles.some((tile) => tile.id === placement.tile.id),
+    );
+    const revealedMelds = layout.tiles.filter(
+      (placement) =>
+        placement.owner === "meld" &&
+        concealedKongTiles.some((tile) => tile.id === placement.tile.id),
+    );
+    const revealAnimations = layout.animations.filter(
+      (animation) => animation.motion === "flipReveal",
+    );
+
+    expect(previousConcealedMelds.every((placement) => !placement.faceUp)).toBe(
+      true,
+    );
+    expect(revealedMelds.every((placement) => placement.faceUp)).toBe(true);
+    expect(revealAnimations).toHaveLength(4);
+    expect(revealAnimations.map((animation) => animation.flipAxis)).toEqual(
+      Array.from({ length: 4 }, () => playerRight(2)),
+    );
+  });
+
+  test("animates a test-seed robbed kong as a win from the declarer hand", () => {
+    const result = simulateRound({
+      seed: "test-rob-added-kong",
+      bots: createBaselineBots(),
+    });
+    const winIndex = result.events.findIndex(
+      (event) => event.type === "winDeclared",
+    );
+    const intentIndex = result.events.findIndex(
+      (event) => event.type === "addedKongDeclared",
+    );
+    const winEvent = result.events[winIndex];
+    const previousReplay = replayEvents(result.events, winIndex - 1);
+    const replay = replayEvents(result.events, winIndex);
+    const previousLayout = createThreeTableLayout(previousReplay, undefined);
+    const layout = createThreeTableLayout(replay, winEvent, previousReplay);
+
+    expect(result.events.some((event) => event.type === "kongDeclared")).toBe(
+      false,
+    );
+    expect(intentIndex).toBe(winIndex - 1);
+    expect(winEvent?.type).toBe("winDeclared");
+    if (winEvent?.type === "winDeclared") {
+      const previousRobbedTile = previousLayout.tiles.find(
+        (placement) => placement.tile.id === winEvent.tile.id,
+      );
+      const winningPlacement = layout.tiles.find(
+        (placement) =>
+          placement.owner === "hand" &&
+          placement.player === winEvent.player &&
+          placement.tile.id === winEvent.tile.id,
+      );
+      const winningAnimation = layout.animations.find(
+        (animation) => animation.tile.id === winEvent.tile.id,
+      );
+
+      expect(previousRobbedTile?.owner).toBe("meld");
+      expect(previousRobbedTile?.player).toBe(winEvent.from);
+      expect(winningPlacement).toBeDefined();
+      expect(winningAnimation?.from).toEqual(previousRobbedTile?.position);
+      expect(winningAnimation?.to).toEqual(winningPlacement?.position);
+      expect(winningAnimation?.motion).toBe("knockdown");
+    }
   });
 
   test("keeps melds and flowers on one fixed auxiliary row", () => {
