@@ -43,7 +43,8 @@ const tableRailOuterHalfSize = tableHalfSize + tableRailWidth;
 type TileTextureEntry = {
   texture?: THREE.Texture;
   isLoading: boolean;
-  listeners: Set<(texture: THREE.Texture) => void>;
+  didFail?: boolean;
+  listeners: Set<(texture: THREE.Texture | undefined) => void>;
 };
 
 const tileTextureCache = new Map<string, TileTextureEntry>();
@@ -147,15 +148,31 @@ export function ThreeGameView({
     lastEventIndexRef.current = eventIndex;
     didMountRef.current = false;
   }
-  const sceneVisible = sceneReady && !roundChanged && !loading;
-  const shouldAnimateEvent =
-    didMountRef.current && eventIndex !== lastEventIndexRef.current;
-  const shouldAnimateInitialEvent =
-    sceneVisible && eventIndex === initialEventIndexRef.current;
   const layout = useMemo(
     () => createThreeTableLayout(replay, currentEvent, previousReplay),
     [replay, currentEvent, previousReplay],
   );
+  const requiredTileTextureUrls = useMemo(() => {
+    const urls = new Set<string>();
+    for (const placement of layout.tiles) {
+      if (placement.faceUp) {
+        urls.add(tileImage(placement.tile));
+      }
+    }
+    for (const animation of layout.animations) {
+      if (animation.faceUp !== false) {
+        urls.add(tileImage(animation.tile));
+      }
+    }
+    return [...urls].sort();
+  }, [layout]);
+  const tileFacesReady = useTileTexturesReady(requiredTileTextureUrls);
+  const sceneVisible =
+    sceneReady && tileFacesReady && !roundChanged && !loading;
+  const shouldAnimateEvent =
+    didMountRef.current && eventIndex !== lastEventIndexRef.current;
+  const shouldAnimateInitialEvent =
+    sceneVisible && eventIndex === initialEventIndexRef.current;
   const animations =
     shouldAnimateEvent || shouldAnimateInitialEvent ? layout.animations : [];
   const animatedTileIds = new Set(
@@ -1578,50 +1595,117 @@ function useTileTexture(url: string): THREE.Texture | undefined {
   );
 
   useEffect(() => {
-    let entry = tileTextureCache.get(url);
-    if (!entry) {
-      entry = { isLoading: false, listeners: new Set() };
-      tileTextureCache.set(url, entry);
-    }
-
+    const entry = ensureTileTextureLoading(url);
     if (entry.texture) {
       setTexture(entry.texture);
       return;
     }
-
-    entry.listeners.add(setTexture);
-    if (!entry.isLoading) {
-      entry.isLoading = true;
-      new THREE.TextureLoader().load(
-        url,
-        (loadedTexture) => {
-          configureTileTexture(loadedTexture);
-          const loadedEntry = tileTextureCache.get(url);
-          if (!loadedEntry) {
-            return;
-          }
-          loadedEntry.texture = loadedTexture;
-          loadedEntry.isLoading = false;
-          for (const listener of loadedEntry.listeners) {
-            listener(loadedTexture);
-          }
-        },
-        undefined,
-        () => {
-          const failedEntry = tileTextureCache.get(url);
-          if (failedEntry) {
-            failedEntry.isLoading = false;
-          }
-        },
-      );
+    if (entry.didFail) {
+      setTexture(undefined);
+      return;
     }
 
+    setTexture(undefined);
+    const listener = (loadedTexture: THREE.Texture | undefined) =>
+      setTexture(loadedTexture);
+    entry.listeners.add(listener);
+
     return () => {
-      entry.listeners.delete(setTexture);
+      entry.listeners.delete(listener);
     };
   }, [url]);
 
   return texture;
+}
+
+function useTileTexturesReady(urls: string[]): boolean {
+  const [isReady, setIsReady] = useState(() => areTileTexturesReady(urls));
+
+  useEffect(() => {
+    if (urls.length === 0) {
+      setIsReady(true);
+      return;
+    }
+
+    let isMounted = true;
+    const updateReady = () => {
+      if (isMounted) {
+        setIsReady(areTileTexturesReady(urls));
+      }
+    };
+    const subscriptions: Array<{
+      entry: TileTextureEntry;
+      listener: (texture: THREE.Texture | undefined) => void;
+    }> = [];
+
+    for (const url of urls) {
+      const entry = ensureTileTextureLoading(url);
+      if (!entry.texture && !entry.didFail) {
+        entry.listeners.add(updateReady);
+        subscriptions.push({ entry, listener: updateReady });
+      }
+    }
+
+    updateReady();
+    return () => {
+      isMounted = false;
+      for (const { entry, listener } of subscriptions) {
+        entry.listeners.delete(listener);
+      }
+    };
+  }, [urls]);
+
+  return isReady;
+}
+
+function areTileTexturesReady(urls: string[]): boolean {
+  return urls.every((url) => {
+    const entry = tileTextureCache.get(url);
+    return Boolean(entry?.texture || entry?.didFail);
+  });
+}
+
+function ensureTileTextureLoading(url: string): TileTextureEntry {
+  let entry = tileTextureCache.get(url);
+  if (!entry) {
+    entry = { isLoading: false, listeners: new Set() };
+    tileTextureCache.set(url, entry);
+  }
+
+  if (entry.texture || entry.didFail || entry.isLoading) {
+    return entry;
+  }
+
+  entry.isLoading = true;
+  new THREE.TextureLoader().load(
+    url,
+    (loadedTexture) => {
+      configureTileTexture(loadedTexture);
+      const loadedEntry = tileTextureCache.get(url);
+      if (!loadedEntry) {
+        return;
+      }
+      loadedEntry.texture = loadedTexture;
+      loadedEntry.isLoading = false;
+      for (const listener of loadedEntry.listeners) {
+        listener(loadedTexture);
+      }
+    },
+    undefined,
+    () => {
+      const failedEntry = tileTextureCache.get(url);
+      if (!failedEntry) {
+        return;
+      }
+      failedEntry.isLoading = false;
+      failedEntry.didFail = true;
+      for (const listener of failedEntry.listeners) {
+        listener(undefined);
+      }
+    },
+  );
+
+  return entry;
 }
 
 function configureTileTexture(texture: THREE.Texture): void {
