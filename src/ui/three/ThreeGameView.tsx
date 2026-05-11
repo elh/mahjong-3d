@@ -1180,6 +1180,7 @@ function DiscardPhysicsTile({
       friction={settings.tileFriction}
       linearDamping={settings.linearDamping}
       angularDamping={settings.angularDamping}
+      enabledRotations={[false, true, false]}
       onContactForce={onContactSound}
       canSleep
     >
