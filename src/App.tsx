@@ -23,6 +23,26 @@ const ThreeGameView = lazy(() =>
   })),
 );
 
+function appRoutePath(pathname: string): string {
+  const basePath = appBasePath();
+  const pathWithoutBase = pathname.startsWith(basePath)
+    ? pathname.slice(basePath.length - 1)
+    : pathname;
+  const normalizedPath = pathWithoutBase.replace(/\/+$/, "");
+  return normalizedPath || "/";
+}
+
+function appHref(path: "/" | "/debug", search = ""): string {
+  const basePath = appBasePath();
+  const relativePath = path === "/" ? "" : path.slice(1);
+  return `${basePath}${relativePath}${search}`;
+}
+
+function appBasePath(): string {
+  const base = import.meta.env.BASE_URL || "/";
+  return base.endsWith("/") ? base : `${base}/`;
+}
+
 function scrollActiveEventIntoView(
   eventLog: HTMLElement | null,
   activeEvent: HTMLElement | null,
@@ -49,8 +69,7 @@ function scrollActiveEventIntoView(
 }
 
 export default function App() {
-  const isDebugRoute =
-    window.location.pathname.replace(/\/+$/, "") === "/debug";
+  const isDebugRoute = appRoutePath(window.location.pathname) === "/debug";
   return isDebugRoute ? <DebugApp /> : <SimApp />;
 }
 
@@ -345,7 +364,7 @@ function DebugApp() {
 
       <InfoPopover
         summary={{ title: "Concealed Gang", detail: `Seed: ${roundKey}` }}
-        routeLink={{ href: "/", label: "Simulator" }}
+        routeLink={{ href: appHref("/"), label: "Simulator" }}
       />
     </main>
   );
@@ -372,7 +391,7 @@ function SimApp() {
   const roundKey =
     events[0]?.type === "roundStarted" ? events[0].seed : pendingSeed;
   const isLoadingRound = isGenerating && !generationError;
-  const debugHref = `/debug?seed=${encodeURIComponent(roundKey)}`;
+  const debugHref = appHref("/debug", `?seed=${encodeURIComponent(roundKey)}`);
 
   useEffect(() => {
     if (
