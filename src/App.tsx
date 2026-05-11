@@ -14,8 +14,8 @@ import { playerNames } from "./ui/playerNames";
 import { TileGroup } from "./ui/TileGroup";
 import { useSimulationController } from "./ui/useSimulationController";
 
-const eventAdvanceDelayMs = 950;
-const turnBoundaryPauseMs = 1000;
+const eventAdvanceDelayMs = 1200;
+const turnBoundaryPauseMs = 100;
 
 const ThreeGameView = lazy(() =>
   import("./ui/three/ThreeGameView").then((module) => ({
