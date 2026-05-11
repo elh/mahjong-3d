@@ -1,5 +1,6 @@
 import type { GameEvent } from "./events";
 import type { Meld, PlayerId } from "./state";
+import { createTestScenarioWalls, isTestScenarioSeed } from "./testScenarios";
 import { removeTile } from "./tileCollections";
 import type { TileInstance } from "./tiles";
 import { sortTiles } from "./tiles";
@@ -208,7 +209,9 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
 }
 
 function initializeWalls(state: ReplayState, seed: string): void {
-  const { wall, deadWall } = createShuffledWalls(seed);
+  const { wall, deadWall } = isTestScenarioSeed(seed)
+    ? (createTestScenarioWalls(seed) ?? createShuffledWalls(seed))
+    : createShuffledWalls(seed);
   state.wall = wall;
   state.deadWall = deadWall;
 }

@@ -17,8 +17,11 @@ import {
   type PlayerId,
   type RoundState,
 } from "./state";
+import {
+  createTestScenarioRound,
+  type TestScenarioSeed,
+} from "./testScenarios";
 import { removeTile } from "./tileCollections";
-import { createTestScenarioRound } from "./testScenarios";
 import { isFlower, sortTiles, type TileInstance } from "./tiles";
 import { createShuffledWalls, drawLiveTile, drawSupplementTile } from "./wall";
 import { isWinningHand } from "./win";
@@ -91,17 +94,6 @@ export function createInitialRound(seed: string): {
 export function simulateRound(
   options: SimulateRoundOptions,
 ): SimulateRoundResult {
-  const testScenario = createTestScenarioRound(options.seed);
-  if (testScenario) {
-    return runRound({
-      seed: options.seed,
-      state: testScenario.state,
-      events: testScenario.events,
-      bots: testScenarioBots(options.seed),
-      maxTurns: options.maxTurns ?? testScenario.maxTurns,
-    });
-  }
-
   const { state, events } = createInitialRound(options.seed);
   return runRound({
     seed: options.seed,
@@ -109,6 +101,24 @@ export function simulateRound(
     events,
     bots: options.bots,
     maxTurns: options.maxTurns,
+  });
+}
+
+export function simulateTestScenarioRound(
+  seed: TestScenarioSeed,
+  options: { maxTurns?: number } = {},
+): SimulateRoundResult {
+  const testScenario = createTestScenarioRound(seed);
+  if (!testScenario) {
+    throw new Error(`Unknown test scenario seed: ${seed}`);
+  }
+
+  return runRound({
+    seed,
+    state: testScenario.state,
+    events: testScenario.events,
+    bots: testScenarioBots(seed),
+    maxTurns: options.maxTurns ?? testScenario.maxTurns,
   });
 }
 

@@ -1,5 +1,4 @@
 import { createSeededRng, shuffle } from "./rng";
-import { createTestScenarioWalls } from "./testScenarios";
 import type { TileInstance } from "./tiles";
 import { createTileSet } from "./tiles";
 
@@ -9,11 +8,6 @@ export type WallState = {
 };
 
 export function createShuffledWalls(seed: string): WallState {
-  const testScenarioWalls = createTestScenarioWalls(seed);
-  if (testScenarioWalls) {
-    return testScenarioWalls;
-  }
-
   const shuffledTiles = shuffle(createTileSet(), createSeededRng(seed));
   return {
     wall: shuffledTiles.slice(0, -16),

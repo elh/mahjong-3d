@@ -1,6 +1,10 @@
 import type { GameEvent } from "../../sim/events";
 import type { ReplayState } from "../../sim/replay";
 import type { Meld, PlayerId } from "../../sim/state";
+import {
+  createTestScenarioWalls,
+  isTestScenarioSeed,
+} from "../../sim/testScenarios";
 import { sortTiles, type TileInstance } from "../../sim/tiles";
 import { createShuffledWalls } from "../../sim/wall";
 
@@ -505,7 +509,9 @@ function wallSlotMap(seed: string): Map<string, number> {
     return cached;
   }
 
-  const shuffledWalls = createShuffledWalls(seed);
+  const shuffledWalls = isTestScenarioSeed(seed)
+    ? (createTestScenarioWalls(seed) ?? createShuffledWalls(seed))
+    : createShuffledWalls(seed);
   const slots = new Map<string, number>();
   for (const [index, tile] of shuffledWalls.wall.entries()) {
     slots.set(tile.id, physicalWallIndexFromLiveDrawIndex(index));

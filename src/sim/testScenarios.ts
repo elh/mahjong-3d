@@ -10,8 +10,8 @@ import {
   createTileSet,
   isFlower,
   sortTiles,
-  tileKey,
   type TileInstance,
+  tileKey,
 } from "./tiles";
 import type { WallState } from "./wall";
 
@@ -21,8 +21,27 @@ export type TestScenarioRound = {
   maxTurns: number;
 };
 
+/**
+ * Scripted demonstration fixture seeds for replay/UI testing.
+ *
+ * These are not normal RNG seeds. Callers that want these scenarios must opt
+ * into the fixture path explicitly; the normal simulation API should continue
+ * to respect caller-provided bots for every seed string.
+ */
+export const testScenarioSeeds = [
+  "test-concealed-kong",
+  "test-added-kong",
+  "test-rob-added-kong",
+] as const;
+
+export type TestScenarioSeed = (typeof testScenarioSeeds)[number];
+
+export function isTestScenarioSeed(seed: string): seed is TestScenarioSeed {
+  return testScenarioSeeds.includes(seed as TestScenarioSeed);
+}
+
 export function createTestScenarioRound(
-  seed: string,
+  seed: TestScenarioSeed,
 ): TestScenarioRound | undefined {
   if (seed === "test-concealed-kong") {
     return createConcealedKongScenario(seed);
@@ -36,7 +55,9 @@ export function createTestScenarioRound(
   return undefined;
 }
 
-export function createTestScenarioWalls(seed: string): WallState | undefined {
+export function createTestScenarioWalls(
+  seed: TestScenarioSeed,
+): WallState | undefined {
   if (seed === "test-concealed-kong") {
     return createConcealedKongFixture(seed).walls;
   }

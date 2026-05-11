@@ -1,21 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import { createBaselineBots } from "../../bots/baselineBot";
-import { simulateRound } from "../../sim/engine";
+import { simulateRound, simulateTestScenarioRound } from "../../sim/engine";
 import type { GameEvent } from "../../sim/events";
-import { replayEvents, type ReplayState } from "../../sim/replay";
+import { type ReplayState, replayEvents } from "../../sim/replay";
 import { createTileSet } from "../../sim/tiles";
 import { createShuffledWalls } from "../../sim/wall";
 import {
   createThreeTableLayout,
+  discardDropPosition,
   discardFallPosition,
   discardFlickAngularVelocity,
   discardFlickVelocity,
-  discardDropPosition,
+  playerDrawStagingPosition,
   playerHandRowPosition,
   playerHandTileRotation,
-  playerDrawStagingPosition,
-  playerRight,
   playerRevealedHandPosition,
+  playerRight,
   playerWinningTilePosition,
   tileSize,
 } from "./tableLayout";
@@ -384,10 +384,7 @@ describe("3D table layout", () => {
   });
 
   test("animates a test-seed concealed kong from hand into melds", () => {
-    const result = simulateRound({
-      seed: "test-concealed-kong",
-      bots: createBaselineBots(),
-    });
+    const result = simulateTestScenarioRound("test-concealed-kong");
     const kongIndex = result.events.findIndex(
       (event) => event.type === "kongDeclared" && event.kong === "concealed",
     );
@@ -422,10 +419,7 @@ describe("3D table layout", () => {
   });
 
   test("reveals concealed kong melds when a test fixture ends in a draw", () => {
-    const result = simulateRound({
-      seed: "test-concealed-kong",
-      bots: createBaselineBots(),
-    });
+    const result = simulateTestScenarioRound("test-concealed-kong");
     const drawIndex = result.events.findIndex(
       (event) => event.type === "drawDeclared",
     );
@@ -459,10 +453,7 @@ describe("3D table layout", () => {
   });
 
   test("animates a test-seed added kong by moving the fourth tile from hand", () => {
-    const result = simulateRound({
-      seed: "test-added-kong",
-      bots: createBaselineBots(),
-    });
+    const result = simulateTestScenarioRound("test-added-kong");
     const intentIndex = result.events.findIndex(
       (event) => event.type === "addedKongDeclared",
     );
@@ -616,10 +607,7 @@ describe("3D table layout", () => {
   });
 
   test("animates a test-seed robbed kong as a win from the declarer hand", () => {
-    const result = simulateRound({
-      seed: "test-rob-added-kong",
-      bots: createBaselineBots(),
-    });
+    const result = simulateTestScenarioRound("test-rob-added-kong");
     const winIndex = result.events.findIndex(
       (event) => event.type === "winDeclared",
     );

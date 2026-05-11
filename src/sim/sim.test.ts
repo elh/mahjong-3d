@@ -6,13 +6,14 @@ import {
   createInitialRound,
   simulateRound,
   simulateRoundFromState,
+  simulateTestScenarioRound,
 } from "./engine";
 import { analyzeHand, evaluateDiscard } from "./handAnalysis";
 import { validateBetweenTurns } from "./invariants";
+import { replayEvents } from "./replay";
 import { createSeededRng, shuffle } from "./rng";
 import type { RoundState } from "./state";
-import { replayEvents } from "./replay";
-import { createTileSet, tileKey, type TileInstance } from "./tiles";
+import { createTileSet, type TileInstance, tileKey } from "./tiles";
 import { isWinningHand } from "./win";
 
 describe("tile set", () => {
@@ -359,10 +360,7 @@ describe("simulation", () => {
   });
 
   test("test-concealed-kong demonstrates a concealed kong immediately after setup", () => {
-    const result = simulateRound({
-      seed: "test-concealed-kong",
-      bots: createBaselineBots(),
-    });
+    const result = simulateTestScenarioRound("test-concealed-kong");
     const kongIndex = result.events.findIndex(
       (event) => event.type === "kongDeclared",
     );
@@ -428,6 +426,28 @@ describe("simulation", () => {
       expect(discard.player).toBe(kong.player);
       expect(discard.handCount).toBe(10);
     }
+  });
+
+  test("simulateRound treats test scenario names as normal seeds", () => {
+    const discardOnlyBot: MahjongBot = {
+      name: "Discard only",
+      chooseAction(context) {
+        return (
+          context.legalActions.find((action) => action.type === "discard") ??
+          context.legalActions.find((action) => action.type === "pass") ??
+          context.legalActions[0]
+        );
+      },
+    };
+    const result = simulateRound({
+      seed: "test-concealed-kong",
+      bots: [discardOnlyBot, discardOnlyBot, discardOnlyBot, discardOnlyBot],
+      maxTurns: 1,
+    });
+
+    expect(result.events.some((event) => event.type === "kongDeclared")).toBe(
+      false,
+    );
   });
 
   test("allows multiple winners on the same discard", () => {
@@ -728,10 +748,7 @@ describe("simulation", () => {
   });
 
   test("test-added-kong demonstrates adding a fourth tile to an exposed pong", () => {
-    const result = simulateRound({
-      seed: "test-added-kong",
-      bots: createBaselineBots(),
-    });
+    const result = simulateTestScenarioRound("test-added-kong");
     const preludeClaimIndex = result.events.findIndex(
       (event) => event.type === "claimMade" && event.claim === "pong",
     );
@@ -838,10 +855,7 @@ describe("simulation", () => {
   });
 
   test("test-rob-added-kong demonstrates robbing an added kong", () => {
-    const result = simulateRound({
-      seed: "test-rob-added-kong",
-      bots: createBaselineBots(),
-    });
+    const result = simulateTestScenarioRound("test-rob-added-kong");
     const preludeClaimIndex = result.events.findIndex(
       (event) => event.type === "claimMade" && event.claim === "pong",
     );
