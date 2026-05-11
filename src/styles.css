@@ -55,6 +55,13 @@ button:disabled {
   padding: 10px 0 24px;
 }
 
+.sim-shell {
+  width: 100vw;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #131614;
+}
+
 .eyebrow {
   margin: 0 0 4px;
   color: var(--stone-600);
@@ -243,6 +250,14 @@ h3 {
   overflow: hidden;
   border-radius: 6px;
   background: #131614;
+}
+
+.sim-shell .three-viewer {
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  margin: 0;
+  border-radius: 0;
 }
 
 .three-viewer canvas {
@@ -697,6 +712,36 @@ h3 {
 .info-modal a {
   color: inherit;
   text-underline-offset: 2px;
+}
+
+.sim-shell .info-button {
+  border-color: rgb(245 245 244 / 18%);
+  background: rgb(19 22 20 / 72%);
+  box-shadow: 0 8px 22px rgb(0 0 0 / 28%);
+  color: rgb(245 245 244 / 72%);
+}
+
+.sim-shell .info-button:hover,
+.sim-shell .info-button:focus-visible {
+  border-color: rgb(245 245 244 / 32%);
+  background: rgb(29 34 31 / 86%);
+  color: rgb(245 245 244 / 90%);
+}
+
+.sim-shell .info-modal {
+  border-color: rgb(245 245 244 / 16%);
+  background: rgb(19 22 20 / 88%);
+  box-shadow: 0 12px 34px rgb(0 0 0 / 36%);
+  color: rgb(245 245 244 / 74%);
+  backdrop-filter: blur(10px);
+}
+
+.sim-shell .info-modal h2 {
+  color: rgb(245 245 244 / 88%);
+}
+
+.sim-shell .info-modal a {
+  color: rgb(245 245 244 / 88%);
 }
 
 @media (max-width: 860px) {

@@ -20,7 +20,7 @@ import * as THREE from "three";
 import type { GameEvent } from "../../sim/events";
 import type { ReplayState } from "../../sim/replay";
 import type { TileInstance } from "../../sim/tiles";
-import { tileImage } from "../tileImages";
+import { allTileImageUrls, tileImage } from "../tileImages";
 import {
   createThreeTableLayout,
   type TilePlacement,
@@ -121,6 +121,9 @@ type ThreeGameViewProps = {
   eventIndex: number;
   roundKey: string;
   loading?: boolean;
+  simulatorMode?: boolean;
+  cameraAutoRotate?: boolean;
+  renderPaused?: boolean;
 };
 
 export function ThreeGameView({
@@ -130,6 +133,9 @@ export function ThreeGameView({
   eventIndex,
   roundKey,
   loading = false,
+  simulatorMode = false,
+  cameraAutoRotate = true,
+  renderPaused = false,
 }: ThreeGameViewProps) {
   const [flickDebug, setFlickDebug] = useState(defaultFlickDebugSettings);
   const [lightingDebug, setLightingDebug] = useState(
@@ -137,6 +143,7 @@ export function ThreeGameView({
   );
   const [soundDebug, setSoundDebug] = useState(defaultSoundDebugSettings);
   const [sceneReady, setSceneReady] = useState(false);
+  const [isCameraUserControlled, setIsCameraUserControlled] = useState(false);
   const lastEventIndexRef = useRef(eventIndex);
   const initialEventIndexRef = useRef(eventIndex);
   const lastRoundKeyRef = useRef(roundKey);
@@ -152,20 +159,7 @@ export function ThreeGameView({
     () => createThreeTableLayout(replay, currentEvent, previousReplay),
     [replay, currentEvent, previousReplay],
   );
-  const requiredTileTextureUrls = useMemo(() => {
-    const urls = new Set<string>();
-    for (const placement of layout.tiles) {
-      if (placement.faceUp) {
-        urls.add(tileImage(placement.tile));
-      }
-    }
-    for (const animation of layout.animations) {
-      if (animation.faceUp !== false) {
-        urls.add(tileImage(animation.tile));
-      }
-    }
-    return [...urls].sort();
-  }, [layout]);
+  const requiredTileTextureUrls = useMemo(() => allTileImageUrls(), []);
   const tileFacesReady = useTileTexturesReady(requiredTileTextureUrls);
   const sceneVisible =
     sceneReady && tileFacesReady && !roundChanged && !loading;
@@ -226,6 +220,7 @@ export function ThreeGameView({
   useEffect(() => {
     void roundKey;
     setSceneReady(false);
+    setIsCameraUserControlled(false);
     let timeout: number | undefined;
     const frame = window.requestAnimationFrame(() => {
       timeout = window.setTimeout(() => setSceneReady(true), 120);
@@ -256,6 +251,7 @@ export function ThreeGameView({
         </div>
       ) : null}
       <Canvas
+        frameloop={renderPaused ? "never" : "always"}
         shadows="percentage"
         dpr={[1, 1.75]}
         camera={{ position: [0, 3.05, 6.75], fov: 42, near: 0.1, far: 100 }}
@@ -341,12 +337,17 @@ export function ThreeGameView({
           </group>
         </Suspense>
         <OrbitControls
+          autoRotate={
+            simulatorMode && cameraAutoRotate && !isCameraUserControlled
+          }
+          autoRotateSpeed={0.18}
           enablePan={false}
           enableDamping
           minDistance={5.6}
           maxDistance={7.4}
           maxPolarAngle={Math.PI / 2.35}
           minPolarAngle={Math.PI / 4.2}
+          onStart={() => setIsCameraUserControlled(true)}
         />
       </Canvas>
     </section>

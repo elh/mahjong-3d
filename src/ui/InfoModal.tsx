@@ -2,8 +2,18 @@ import { tileAttributionUrl } from "./tileImages";
 
 export function InfoModal({
   modalRef,
+  summary,
+  routeLink,
 }: {
   modalRef: React.RefObject<HTMLElement | null>;
+  summary?: {
+    title: string;
+    detail: string;
+  };
+  routeLink: {
+    href: string;
+    label: string;
+  };
 }) {
   return (
     <section
@@ -13,7 +23,8 @@ export function InfoModal({
       aria-labelledby="info-modal-title"
     >
       <header>
-        <h2 id="info-modal-title">About</h2>
+        <h2 id="info-modal-title">{summary?.title ?? "About"}</h2>
+        {summary ? <p>{summary.detail}</p> : null}
       </header>
       <p>
         A Taiwanese Mahjong 3d viz, game debug UI, rules implementation, and
@@ -22,6 +33,9 @@ export function InfoModal({
       <p>
         Github:{" "}
         <a href="https://github.com/elh/concealed-gang">elh/concealed-gang</a>
+      </p>
+      <p>
+        Alternative view: <a href={routeLink.href}>{routeLink.label}</a>
       </p>
       <p>
         Tile art adapted from{" "}

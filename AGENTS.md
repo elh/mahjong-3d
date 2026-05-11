@@ -69,6 +69,7 @@ Baseline bots should be legal and plausible, not optimal.
 - Rank discards using hand shape, shanten-ish progress, live waits, and visible tile counts.
 - Claim only with basic hand-shape justification; kongs are currently accepted.
 - Avoid deep search and opponent modeling until explicitly requested.
+- Keep bot implementation doc comments current when strategy assumptions or supported/unsupported behavior change.
 
 ## UI Scope
 
