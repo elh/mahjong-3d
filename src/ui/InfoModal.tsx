@@ -16,8 +16,7 @@ export function InfoModal({
         <h2 id="info-modal-title">About</h2>
       </header>
       <p>
-        This is a basic rules implementation, baseline bot, and debug UI for
-        Taiwanese Mahjong.
+        A Taiwanese Mahjong 3d viz, game debug UI, rules implementation, and basic bot.
       </p>
       <p>
         Github:{" "}
