@@ -123,10 +123,7 @@ h3 {
 
 .controls-band {
   display: grid;
-  grid-template-columns: minmax(150px, 230px) auto auto auto auto minmax(
-      190px,
-      1fr
-    );
+  grid-template-columns: minmax(150px, 230px) auto auto auto minmax(190px, 1fr);
   align-items: end;
   gap: 8px;
   padding: 0 0 10px;
@@ -353,6 +350,20 @@ h3 {
   color: var(--stone-300);
   font-size: 0.82rem;
   font-weight: 700;
+}
+
+.round-loading {
+  display: grid;
+  min-height: 420px;
+  margin-top: 12px;
+  place-items: center;
+  border: 1px solid var(--stone-300);
+  border-radius: 6px;
+  background: var(--stone-50);
+  color: var(--stone-600);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .event-rail {

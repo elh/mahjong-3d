@@ -85,6 +85,7 @@ export default function App() {
   );
   const roundKey =
     events[0]?.type === "roundStarted" ? events[0].seed : pendingSeed;
+  const isLoadingRound = isGenerating && !generationError;
 
   useEffect(() => {
     if (!currentEvent) {
@@ -141,9 +142,11 @@ export default function App() {
           <input
             value={seedInput}
             onChange={(event) => setSeedInput(event.target.value)}
+            onBlur={startTypedSeed}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 startTypedSeed();
+                event.currentTarget.blur();
               }
             }}
           />
@@ -151,10 +154,6 @@ export default function App() {
         <button type="button" className="primary-button" onClick={newSeed}>
           <RefreshCw size={18} aria-hidden="true" />
           <span>New Seed</span>
-        </button>
-        <button type="button" className="secondary-button" onClick={restart}>
-          <SkipBack size={18} aria-hidden="true" />
-          <span>Restart</span>
         </button>
         <fieldset className="view-toggle" aria-label="View mode">
           <button
@@ -175,6 +174,15 @@ export default function App() {
         <div className="step-controls">
           <button
             type="button"
+            onClick={restart}
+            disabled={isLoadingRound}
+            aria-label="Restart"
+            title="Restart"
+          >
+            <SkipBack size={18} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
             onClick={() => clickStepButton(-1)}
             onPointerDown={(event) => {
               if (event.button === 0) {
@@ -184,7 +192,7 @@ export default function App() {
             onPointerUp={clearEventHold}
             onPointerCancel={cancelEventHold}
             onPointerLeave={cancelEventHold}
-            disabled={!canStepPrevious}
+            disabled={isLoadingRound || !canStepPrevious}
             aria-label="Previous event"
             title="Previous event"
           >
@@ -201,7 +209,7 @@ export default function App() {
             onPointerUp={clearEventHold}
             onPointerCancel={cancelEventHold}
             onPointerLeave={cancelEventHold}
-            disabled={!canStepNext}
+            disabled={isLoadingRound || !canStepNext}
             aria-label="Next event"
             title="Next event"
           >
@@ -217,7 +225,7 @@ export default function App() {
             min={0}
             max={Math.max(events.length - 1, 0)}
             value={eventIndex}
-            disabled={events.length === 0}
+            disabled={isLoadingRound || events.length === 0}
             onChange={(event) => scrubToEventIndex(Number(event.target.value))}
           />
         </label>
@@ -236,7 +244,9 @@ export default function App() {
         </section>
       )}
 
-      {viewMode === "three" ? (
+      {isLoadingRound && viewMode === "debug" ? (
+        <RoundLoadingView mode={viewMode} />
+      ) : viewMode === "three" ? (
         <Suspense
           fallback={
             <section
@@ -253,6 +263,7 @@ export default function App() {
             currentEvent={currentEvent}
             eventIndex={eventIndex}
             roundKey={roundKey}
+            loading={isLoadingRound}
           />
         </Suspense>
       ) : (
@@ -365,5 +376,17 @@ export default function App() {
 
       {isInfoOpen && <InfoModal modalRef={infoModalRef} />}
     </main>
+  );
+}
+
+function RoundLoadingView({ mode }: { mode: "debug" | "three" }) {
+  return (
+    <section
+      className={mode === "three" ? "three-viewer loading" : "round-loading"}
+      aria-label="Loading round"
+      aria-live="polite"
+    >
+      Loading...
+    </section>
   );
 }

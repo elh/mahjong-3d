@@ -96,6 +96,7 @@ type ThreeGameViewProps = {
   currentEvent: GameEvent | undefined;
   eventIndex: number;
   roundKey: string;
+  loading?: boolean;
 };
 
 export function ThreeGameView({
@@ -104,6 +105,7 @@ export function ThreeGameView({
   currentEvent,
   eventIndex,
   roundKey,
+  loading = false,
 }: ThreeGameViewProps) {
   const flickDebug = defaultFlickDebugSettings;
   const lightingDebug = defaultLightingDebugSettings;
@@ -112,16 +114,18 @@ export function ThreeGameView({
   const initialEventIndexRef = useRef(eventIndex);
   const lastRoundKeyRef = useRef(roundKey);
   const didMountRef = useRef(false);
-  if (roundKey !== lastRoundKeyRef.current) {
+  const roundChanged = roundKey !== lastRoundKeyRef.current;
+  if (roundChanged) {
     lastRoundKeyRef.current = roundKey;
     initialEventIndexRef.current = eventIndex;
     lastEventIndexRef.current = eventIndex;
     didMountRef.current = false;
   }
+  const sceneVisible = sceneReady && !roundChanged && !loading;
   const shouldAnimateEvent =
     didMountRef.current && eventIndex !== lastEventIndexRef.current;
   const shouldAnimateInitialEvent =
-    sceneReady && eventIndex === initialEventIndexRef.current;
+    sceneVisible && eventIndex === initialEventIndexRef.current;
   const layout = useMemo(
     () => createThreeTableLayout(replay, currentEvent, previousReplay),
     [replay, currentEvent, previousReplay],
@@ -172,13 +176,13 @@ export function ThreeGameView({
 
   return (
     <section className="three-viewer" aria-label="3D autonomous game viewer">
-      {!sceneReady ? (
+      {!sceneVisible ? (
         <div className="three-loading-overlay" aria-live="polite">
           Loading...
         </div>
       ) : null}
       <Canvas
-        shadows
+        shadows="percentage"
         dpr={[1, 1.75]}
         camera={{ position: [0, 3.05, 6.75], fov: 42, near: 0.1, far: 100 }}
       >
@@ -208,7 +212,7 @@ export function ThreeGameView({
         <TableSurface />
         <Suspense fallback={null}>
           {lightingDebug.environment ? <Environment preset="studio" /> : null}
-          <Physics key={`physics-${roundKey}`} gravity={[0, -9.81, 0]}>
+          <Physics gravity={[0, -9.81, 0]}>
             <CuboidCollider
               position={[0, -tableSlabDepth / 2, 0]}
               args={[tableHalfSize, tableSlabDepth / 2, tableHalfSize]}
@@ -232,11 +236,11 @@ export function ThreeGameView({
                 flick={flickByTileId.get(placement.tile.id)}
                 settings={flickDebug}
                 startsDynamic={flickByTileId.has(placement.tile.id)}
-                visible={sceneReady}
+                visible={sceneVisible}
               />
             ))}
           </Physics>
-          <group visible={sceneReady}>
+          <group visible={sceneVisible}>
             {staticTiles.map((placement) => (
               <TileMesh key={placement.tile.id} placement={placement} />
             ))}

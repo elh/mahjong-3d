@@ -83,8 +83,8 @@ export function useSimulationController() {
         return;
       }
 
-      setIsGenerating(false);
       if (event.data.status === "error") {
+        setIsGenerating(false);
         setGenerationError(event.data.message);
         return;
       }
@@ -92,6 +92,7 @@ export function useSimulationController() {
       setGenerationError(undefined);
       setGame(event.data.result);
       setEventIndex(firstTurnEventIndex(event.data.result.events));
+      setIsGenerating(false);
       worker.terminate();
       if (workerRef.current === worker) {
         workerRef.current = null;
@@ -125,7 +126,6 @@ export function useSimulationController() {
     setGenerationError(undefined);
     clearPendingStep();
     clearEventScrub();
-    setEventIndex(0);
     const worker = createSimulationWorker();
     worker.postMessage({
       requestId,
@@ -142,8 +142,14 @@ export function useSimulationController() {
   }
 
   function startTypedSeed() {
-    const seed = seedInput.trim() || randomSeed();
-    queueSimulation(seed);
+    const seed = seedInput.trim();
+    if (!seed) {
+      queueSimulation(randomSeed());
+      return;
+    }
+    if (seed !== pendingSeed) {
+      queueSimulation(seed);
+    }
   }
 
   const clearEventScrub = useCallback(
