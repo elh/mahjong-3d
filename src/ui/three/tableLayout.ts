@@ -241,7 +241,7 @@ export function discardFlickVelocity(
 
 export function discardFlickAngularVelocity(
   tile: TileInstance,
-  player: PlayerId,
+  _player: PlayerId,
 ): Vec3 {
   const yaw = (stableUnit(`${tile.id}:yaw`) - 0.5) * 7.2;
   return [0, yaw, 0];

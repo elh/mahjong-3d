@@ -4,7 +4,7 @@ import {
   RoundedBox,
   useTexture,
 } from "@react-three/drei";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   CuboidCollider,
   Physics,
@@ -39,6 +39,20 @@ type FlickDebugSettings = {
   angularDamping: number;
 };
 
+type LightingDebugSettings = {
+  ambientIntensity: number;
+  fillIntensity: number;
+  keyIntensity: number;
+  keyX: number;
+  keyY: number;
+  keyZ: number;
+  cameraFillIntensity: number;
+  handFaceFillIntensity: number;
+  fogNear: number;
+  fogFar: number;
+  environment: boolean;
+};
+
 const defaultFlickDebugSettings: FlickDebugSettings = {
   force: 1.5,
   lift: 1,
@@ -47,6 +61,20 @@ const defaultFlickDebugSettings: FlickDebugSettings = {
   tileFriction: 1.2,
   linearDamping: 1.05,
   angularDamping: 1.45,
+};
+
+const defaultLightingDebugSettings: LightingDebugSettings = {
+  ambientIntensity: 0.42,
+  fillIntensity: 0.32,
+  keyIntensity: 3.4,
+  keyX: -2.8,
+  keyY: 5.2,
+  keyZ: 3.1,
+  cameraFillIntensity: 0.28,
+  handFaceFillIntensity: 0.48,
+  fogNear: 8.5,
+  fogFar: 13,
+  environment: false,
 };
 
 type ThreeGameViewProps = {
@@ -64,7 +92,8 @@ export function ThreeGameView({
   eventIndex,
   roundKey,
 }: ThreeGameViewProps) {
-  const [flickDebug, setFlickDebug] = useState(defaultFlickDebugSettings);
+  const flickDebug = defaultFlickDebugSettings;
+  const lightingDebug = defaultLightingDebugSettings;
   const [sceneReady, setSceneReady] = useState(false);
   const lastEventIndexRef = useRef(eventIndex);
   const initialEventIndexRef = useRef(eventIndex);
@@ -130,24 +159,42 @@ export function ThreeGameView({
 
   return (
     <section className="three-viewer" aria-label="3D autonomous game viewer">
-      <FlickDebugPanel settings={flickDebug} onChange={setFlickDebug} />
+      {!sceneReady ? (
+        <div className="three-loading-overlay" aria-live="polite">
+          Loading...
+        </div>
+      ) : null}
       <Canvas
         shadows
         dpr={[1, 1.75]}
         camera={{ position: [0, 3.05, 6.75], fov: 42, near: 0.1, far: 100 }}
       >
         <color attach="background" args={["#131614"]} />
-        <fog attach="fog" args={["#131614", 6.5, 11]} />
-        <ambientLight intensity={0.9} />
+        <fog
+          attach="fog"
+          args={["#131614", lightingDebug.fogNear, lightingDebug.fogFar]}
+        />
+        <ambientLight intensity={lightingDebug.ambientIntensity} />
+        <hemisphereLight
+          intensity={lightingDebug.fillIntensity}
+          color="#d9f0e5"
+          groundColor="#0b1713"
+        />
         <directionalLight
           castShadow
-          intensity={2.4}
-          position={[2.5, 5, 3.2]}
+          intensity={lightingDebug.keyIntensity}
+          position={[
+            lightingDebug.keyX,
+            lightingDebug.keyY,
+            lightingDebug.keyZ,
+          ]}
           shadow-mapSize={[1024, 1024]}
         />
+        <CameraShoulderFill intensity={lightingDebug.cameraFillIntensity} />
+        <HandFaceFill intensity={lightingDebug.handFaceFillIntensity} />
         <TableSurface />
         <Suspense fallback={null}>
-          <Environment preset="studio" />
+          {lightingDebug.environment ? <Environment preset="studio" /> : null}
           <Physics key={`physics-${roundKey}`} gravity={[0, -9.81, 0]}>
             <CuboidCollider
               position={[0, -0.05, 0]}
@@ -220,16 +267,117 @@ function TableSurface() {
       position={[0, -0.01, 0]}
     >
       <planeGeometry args={[tableHalfSize * 2, tableHalfSize * 2]} />
-      <meshStandardMaterial
-        color="#1c493f"
-        roughness={0.86}
-        metalness={0.02}
-      />
+      <meshStandardMaterial color="#1c493f" roughness={0.86} metalness={0.02} />
     </mesh>
   );
 }
 
-function FlickDebugPanel({
+function CameraShoulderFill({ intensity }: { intensity: number }) {
+  const lightRef = useRef<THREE.DirectionalLight>(null);
+  const { camera } = useThree();
+
+  useFrame(() => {
+    if (!lightRef.current) {
+      return;
+    }
+    const cameraRight = new THREE.Vector3(1, 0, 0)
+      .applyQuaternion(camera.quaternion)
+      .multiplyScalar(-0.85);
+    const cameraUp = new THREE.Vector3(0, 1, 0)
+      .applyQuaternion(camera.quaternion)
+      .multiplyScalar(0.45);
+    lightRef.current.position
+      .copy(camera.position)
+      .add(cameraRight)
+      .add(cameraUp);
+    lightRef.current.target.position.set(0, 0, 0);
+    lightRef.current.target.updateMatrixWorld();
+  });
+
+  return (
+    <directionalLight ref={lightRef} intensity={intensity} color="#e8fff4" />
+  );
+}
+
+function HandFaceFill({ intensity }: { intensity: number }) {
+  const lightPositions: Vec3[] = [
+    [0, 1.3, 4.2],
+    [4.2, 1.3, 0],
+    [0, 1.3, -4.2],
+    [-4.2, 1.3, 0],
+  ];
+
+  return (
+    <>
+      {lightPositions.map((position) => (
+        <directionalLight
+          key={position.join(",")}
+          intensity={intensity}
+          position={position}
+          color="#fff8e6"
+        />
+      ))}
+    </>
+  );
+}
+
+export function ThreeDebugPanel({
+  flickSettings,
+  lightingSettings,
+  onFlickChange,
+  onLightingChange,
+}: {
+  flickSettings: FlickDebugSettings;
+  lightingSettings: LightingDebugSettings;
+  onFlickChange: (settings: FlickDebugSettings) => void;
+  onLightingChange: (settings: LightingDebugSettings) => void;
+}) {
+  const [mode, setMode] = useState<"flick" | "lighting">("lighting");
+
+  return (
+    <aside className="three-debug-panel" aria-label="3D debug settings">
+      <header>
+        <span>Debug</span>
+        <button
+          type="button"
+          onClick={() =>
+            mode === "flick"
+              ? onFlickChange(defaultFlickDebugSettings)
+              : onLightingChange(defaultLightingDebugSettings)
+          }
+        >
+          Reset
+        </button>
+      </header>
+      <div className="three-debug-tabs" role="tablist" aria-label="Debug mode">
+        <button
+          type="button"
+          className={mode === "flick" ? "active" : ""}
+          onClick={() => setMode("flick")}
+        >
+          Flick
+        </button>
+        <button
+          type="button"
+          className={mode === "lighting" ? "active" : ""}
+          onClick={() => setMode("lighting")}
+        >
+          Lighting
+        </button>
+      </div>
+      {mode === "flick" ? (
+        <FlickDebugControls settings={flickSettings} onChange={onFlickChange} />
+      ) : (
+        <LightingDebugControls
+          settings={lightingSettings}
+          onChange={onLightingChange}
+        />
+      )}
+    </aside>
+  );
+}
+
+function FlickDebugControls({
   settings,
   onChange,
 }: {
@@ -237,16 +385,7 @@ function FlickDebugPanel({
   onChange: (settings: FlickDebugSettings) => void;
 }) {
   return (
-    <aside className="three-debug-panel" aria-label="3D flick physics settings">
-      <header>
-        <span>Flick</span>
-        <button
-          type="button"
-          onClick={() => onChange(defaultFlickDebugSettings)}
-        >
-          Reset
-        </button>
-      </header>
+    <>
       <DebugSlider
         label="Force"
         value={settings.force}
@@ -303,7 +442,111 @@ function FlickDebugPanel({
         step={0.05}
         onChange={(angularDamping) => onChange({ ...settings, angularDamping })}
       />
-    </aside>
+    </>
+  );
+}
+
+function LightingDebugControls({
+  settings,
+  onChange,
+}: {
+  settings: LightingDebugSettings;
+  onChange: (settings: LightingDebugSettings) => void;
+}) {
+  return (
+    <>
+      <DebugToggle
+        label="Studio environment"
+        checked={settings.environment}
+        onChange={(environment) => onChange({ ...settings, environment })}
+      />
+      <DebugSlider
+        label="Ambient"
+        value={settings.ambientIntensity}
+        min={0}
+        max={1.2}
+        step={0.02}
+        onChange={(ambientIntensity) =>
+          onChange({ ...settings, ambientIntensity })
+        }
+      />
+      <DebugSlider
+        label="Fill"
+        value={settings.fillIntensity}
+        min={0}
+        max={1}
+        step={0.02}
+        onChange={(fillIntensity) => onChange({ ...settings, fillIntensity })}
+      />
+      <DebugSlider
+        label="Key"
+        value={settings.keyIntensity}
+        min={0}
+        max={6}
+        step={0.05}
+        onChange={(keyIntensity) => onChange({ ...settings, keyIntensity })}
+      />
+      <DebugSlider
+        label="Key X"
+        value={settings.keyX}
+        min={-6}
+        max={6}
+        step={0.1}
+        onChange={(keyX) => onChange({ ...settings, keyX })}
+      />
+      <DebugSlider
+        label="Key Y"
+        value={settings.keyY}
+        min={1}
+        max={8}
+        step={0.1}
+        onChange={(keyY) => onChange({ ...settings, keyY })}
+      />
+      <DebugSlider
+        label="Key Z"
+        value={settings.keyZ}
+        min={-6}
+        max={6}
+        step={0.1}
+        onChange={(keyZ) => onChange({ ...settings, keyZ })}
+      />
+      <DebugSlider
+        label="Camera fill"
+        value={settings.cameraFillIntensity}
+        min={0}
+        max={1.5}
+        step={0.02}
+        onChange={(cameraFillIntensity) =>
+          onChange({ ...settings, cameraFillIntensity })
+        }
+      />
+      <DebugSlider
+        label="Hand face fill"
+        value={settings.handFaceFillIntensity}
+        min={0}
+        max={1.2}
+        step={0.02}
+        onChange={(handFaceFillIntensity) =>
+          onChange({ ...settings, handFaceFillIntensity })
+        }
+      />
+      <DebugSlider
+        label="Fog near"
+        value={settings.fogNear}
+        min={4}
+        max={14}
+        step={0.1}
+        onChange={(fogNear) => onChange({ ...settings, fogNear })}
+      />
+      <DebugSlider
+        label="Fog far"
+        value={settings.fogFar}
+        min={7}
+        max={20}
+        step={0.1}
+        onChange={(fogFar) => onChange({ ...settings, fogFar })}
+      />
+    </>
   );
 }
 
@@ -335,6 +578,27 @@ function DebugSlider({
         max={max}
         step={step}
         onChange={(event) => onChange(Number(event.currentTarget.value))}
+      />
+    </label>
+  );
+}
+
+function DebugToggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="three-debug-toggle">
+      <span>{label}</span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.currentTarget.checked)}
       />
     </label>
   );

@@ -252,6 +252,20 @@ h3 {
   display: block;
 }
 
+.three-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  background: #131614;
+  color: var(--stone-300);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
 .three-debug-panel {
   position: absolute;
   right: 10px;
@@ -285,6 +299,12 @@ h3 {
   text-transform: uppercase;
 }
 
+.three-debug-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
 .three-debug-panel button {
   min-height: 22px;
   padding: 0 7px;
@@ -294,6 +314,11 @@ h3 {
   color: var(--stone-100);
   font-size: 0.68rem;
   font-weight: 700;
+}
+
+.three-debug-tabs button.active {
+  background: var(--stone-100);
+  color: var(--stone-900);
 }
 
 .three-debug-panel label {
@@ -311,6 +336,15 @@ h3 {
 .three-debug-panel input {
   width: 100%;
   accent-color: #d2b16f;
+}
+
+.three-debug-toggle {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.three-debug-toggle input {
+  width: auto;
 }
 
 .three-viewer.loading {
