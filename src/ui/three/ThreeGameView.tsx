@@ -36,6 +36,10 @@ const tileBackThickness = tileSize.height * 0.18;
 const tileCornerRadius = 0.035;
 const flickHandoffOverlapMs = 48;
 const tableHalfSize = 3.24;
+const tableSlabDepth = 0.24;
+const tableRailWidth = 0.16;
+const tableRailHeight = 0.075;
+const tableRailOuterHalfSize = tableHalfSize + tableRailWidth;
 type FlickDebugSettings = {
   force: number;
   lift: number;
@@ -204,8 +208,8 @@ export function ThreeGameView({
           {lightingDebug.environment ? <Environment preset="studio" /> : null}
           <Physics key={`physics-${roundKey}`} gravity={[0, -9.81, 0]}>
             <CuboidCollider
-              position={[0, -0.05, 0]}
-              args={[tableHalfSize, 0.05, tableHalfSize]}
+              position={[0, -tableSlabDepth / 2, 0]}
+              args={[tableHalfSize, tableSlabDepth / 2, tableHalfSize]}
               friction={flickDebug.tableFriction}
               restitution={0.02}
             />
@@ -269,14 +273,120 @@ export function ThreeGameView({
 
 function TableSurface() {
   return (
-    <mesh
-      receiveShadow
-      rotation={[-Math.PI / 2, 0, 0]}
-      position={[0, -0.01, 0]}
-    >
-      <planeGeometry args={[tableHalfSize * 2, tableHalfSize * 2]} />
-      <meshStandardMaterial color="#1c493f" roughness={0.86} metalness={0.02} />
+    <group>
+      <RoundedBox
+        receiveShadow
+        args={[tableHalfSize * 2, tableSlabDepth, tableHalfSize * 2]}
+        radius={0.055}
+        smoothness={8}
+        position={[0, -tableSlabDepth / 2, 0]}
+      >
+        <meshStandardMaterial
+          color="#173e35"
+          roughness={0.94}
+          metalness={0.01}
+        />
+      </RoundedBox>
+      <CenterTableMark />
+      <TableRail />
+    </group>
+  );
+}
+
+function CenterTableMark() {
+  const texture = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 512;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return undefined;
+    }
+
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "rgba(255, 255, 244, 0.22)";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.font =
+      '410px "Kaiti TC", "Songti TC", "STKaiti", "PMingLiU", "MingLiU", serif';
+    context.fillText("黃", canvas.width / 2, canvas.height / 2 + 8);
+
+    const canvasTexture = new THREE.CanvasTexture(canvas);
+    canvasTexture.colorSpace = THREE.SRGBColorSpace;
+    canvasTexture.anisotropy = 4;
+    canvasTexture.needsUpdate = true;
+    return canvasTexture;
+  }, []);
+
+  useEffect(() => () => texture?.dispose(), [texture]);
+
+  if (!texture) {
+    return null;
+  }
+
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, -0.28]}>
+      <planeGeometry args={[3.12, 3.12]} />
+      <meshBasicMaterial
+        map={texture}
+        transparent
+        depthWrite={false}
+        toneMapped={false}
+      />
     </mesh>
+  );
+}
+
+function TableRail() {
+  const railY = tableRailHeight / 2;
+  const railLength = tableRailOuterHalfSize * 2;
+  const railMaterial = (
+    <meshStandardMaterial color="#102d28" roughness={0.9} metalness={0.01} />
+  );
+
+  return (
+    <group>
+      <RoundedBox
+        castShadow
+        receiveShadow
+        args={[railLength, tableRailHeight, tableRailWidth]}
+        radius={0.035}
+        smoothness={6}
+        position={[0, railY, tableRailOuterHalfSize - tableRailWidth / 2]}
+      >
+        {railMaterial}
+      </RoundedBox>
+      <RoundedBox
+        castShadow
+        receiveShadow
+        args={[railLength, tableRailHeight, tableRailWidth]}
+        radius={0.035}
+        smoothness={6}
+        position={[0, railY, -tableRailOuterHalfSize + tableRailWidth / 2]}
+      >
+        {railMaterial}
+      </RoundedBox>
+      <RoundedBox
+        castShadow
+        receiveShadow
+        args={[tableRailWidth, tableRailHeight, railLength]}
+        radius={0.035}
+        smoothness={6}
+        position={[tableRailOuterHalfSize - tableRailWidth / 2, railY, 0]}
+      >
+        {railMaterial}
+      </RoundedBox>
+      <RoundedBox
+        castShadow
+        receiveShadow
+        args={[tableRailWidth, tableRailHeight, railLength]}
+        radius={0.035}
+        smoothness={6}
+        position={[-tableRailOuterHalfSize + tableRailWidth / 2, railY, 0]}
+      >
+        {railMaterial}
+      </RoundedBox>
+    </group>
   );
 }
 
