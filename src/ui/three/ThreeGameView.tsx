@@ -2,7 +2,6 @@ import {
   Environment,
   OrbitControls,
   RoundedBox,
-  Text,
   useTexture,
 } from "@react-three/drei";
 import { Canvas, useFrame } from "@react-three/fiber";
@@ -29,6 +28,7 @@ import {
 const tileBackThickness = tileSize.height * 0.18;
 const tileCornerRadius = 0.035;
 const flickHandoffOverlapMs = 48;
+const tableHalfSize = 3.24;
 type FlickDebugSettings = {
   force: number;
   lift: number;
@@ -134,7 +134,7 @@ export function ThreeGameView({
       <Canvas
         shadows
         dpr={[1, 1.75]}
-        camera={{ position: [0, 5.4, 5.15], fov: 42, near: 0.1, far: 100 }}
+        camera={{ position: [0, 3.05, 6.75], fov: 42, near: 0.1, far: 100 }}
       >
         <color attach="background" args={["#131614"]} />
         <fog attach="fog" args={["#131614", 6.5, 11]} />
@@ -151,7 +151,7 @@ export function ThreeGameView({
           <Physics key={`physics-${roundKey}`} gravity={[0, -9.81, 0]}>
             <CuboidCollider
               position={[0, -0.05, 0]}
-              args={[4.8, 0.05, 4.8]}
+              args={[tableHalfSize, 0.05, tableHalfSize]}
               friction={flickDebug.tableFriction}
               restitution={0.02}
             />
@@ -197,7 +197,6 @@ export function ThreeGameView({
                 }
               />
             ))}
-            <TableLabels />
           </group>
         </Suspense>
         <OrbitControls
@@ -215,28 +214,18 @@ export function ThreeGameView({
 
 function TableSurface() {
   return (
-    <>
-      <mesh
-        receiveShadow
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, -0.01, 0]}
-      >
-        <planeGeometry args={[9.6, 9.6]} />
-        <meshStandardMaterial
-          color="#1c493f"
-          roughness={0.86}
-          metalness={0.02}
-        />
-      </mesh>
-      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
-        <ringGeometry args={[1.46, 1.51, 96]} />
-        <meshStandardMaterial
-          color="#d2b16f"
-          roughness={0.62}
-          metalness={0.1}
-        />
-      </mesh>
-    </>
+    <mesh
+      receiveShadow
+      rotation={[-Math.PI / 2, 0, 0]}
+      position={[0, -0.01, 0]}
+    >
+      <planeGeometry args={[tableHalfSize * 2, tableHalfSize * 2]} />
+      <meshStandardMaterial
+        color="#1c493f"
+        roughness={0.86}
+        metalness={0.02}
+      />
+    </mesh>
   );
 }
 
@@ -705,28 +694,6 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
       />
     </RoundedBox>
   );
-}
-
-function TableLabels() {
-  const labels: { label: string; position: Vec3; rotation: Vec3 }[] = [
-    { label: "E", position: [0, 0.03, 4.05], rotation: [-Math.PI / 2, 0, 0] },
-    { label: "S", position: [4.05, 0.03, 0], rotation: [-Math.PI / 2, 0, 0] },
-    { label: "W", position: [0, 0.03, -4.05], rotation: [-Math.PI / 2, 0, 0] },
-    { label: "N", position: [-4.05, 0.03, 0], rotation: [-Math.PI / 2, 0, 0] },
-  ];
-  return labels.map((label) => (
-    <Text
-      key={label.label}
-      position={label.position}
-      rotation={label.rotation}
-      fontSize={0.18}
-      color="#d2b16f"
-      anchorX="center"
-      anchorY="middle"
-    >
-      {label.label}
-    </Text>
-  ));
 }
 
 function easeOutCubic(value: number): number {

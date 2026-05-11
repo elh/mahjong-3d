@@ -62,7 +62,7 @@ export const tileSize = {
 };
 
 const tableY = tileSize.height / 2 + 0.01;
-const handRadius = 3.45;
+const handRadius = 3.12;
 const playerAuxiliaryRadius = handRadius - tileSize.depth - 0.1;
 const playerAuxiliaryGap = tileSize.width * 0.5;
 const playerAuxiliaryRightInset = 0;
