@@ -19,12 +19,17 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.1",
+    "@react-three/rapier": "^2.2.0",
+    "@types/three": "^0.184.1",
     "@vitejs/plugin-react": "^5.0.0",
-    "vite": "^7.0.0",
-    "typescript": "^5.8.0",
+    "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "lucide-react": "^0.468.0"
+    "three": "^0.184.0",
+    "typescript": "^5.8.0",
+    "vite": "^7.0.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",

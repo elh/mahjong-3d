@@ -1,5 +1,6 @@
 import type { GameEvent } from "./events";
 import type { Meld, PlayerId } from "./state";
+import { createTestScenarioWalls, isTestScenarioSeed } from "./testScenarios";
 import { removeTile } from "./tileCollections";
 import type { TileInstance } from "./tiles";
 import { sortTiles } from "./tiles";
@@ -15,6 +16,7 @@ export type ReplayPlayer = {
 };
 
 export type ReplayState = {
+  seed?: string;
   players: [ReplayPlayer, ReplayPlayer, ReplayPlayer, ReplayPlayer];
   wall: TileInstance[];
   deadWall: TileInstance[];
@@ -54,6 +56,7 @@ export function replayEvents(
     rulesErrors: [],
   };
   if (roundStart?.type === "roundStarted") {
+    state.seed = roundStart.seed;
     initializeWalls(state, roundStart.seed);
   }
 
@@ -91,6 +94,17 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
         event.tile,
       ]);
       return;
+    case "tilesDrawn":
+      for (const tile of event.tiles) {
+        removeTile(state.wall, tile.id);
+      }
+      state.wallCount = event.wallCount;
+      state.deadWallCount = event.deadWallCount;
+      state.players[event.player].hand = sortTiles([
+        ...state.players[event.player].hand,
+        ...event.tiles,
+      ]);
+      return;
     case "flowerExposed": {
       const exposed =
         removeTile(state.players[event.player].hand, event.tile.id) ??
@@ -111,7 +125,7 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
       }
       state.players[event.player].melds.push({
         type: event.claim,
-        tiles: event.tiles,
+        tiles: [...event.tiles],
         claimedFrom: event.from,
       });
       return;
@@ -127,7 +141,7 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
         }
         state.players[event.player].melds.push({
           type: "kong",
-          tiles: event.tiles,
+          tiles: [...event.tiles],
           claimedFrom: event.from,
         });
         return;
@@ -138,7 +152,7 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
         }
         state.players[event.player].melds.push({
           type: "kong",
-          tiles: event.tiles,
+          tiles: [...event.tiles],
           concealed: true,
         });
         return;
@@ -148,11 +162,23 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
       }
       state.players[event.player].melds = state.players[event.player].melds.map(
         (meld) =>
+          (meld.type === "pong" || meld.type === "kong") &&
+          meld.tiles.every((tile) =>
+            event.tiles.some((eventTile) => eventTile.id === tile.id),
+          )
+            ? { ...meld, type: "kong", tiles: [...event.tiles] }
+            : meld,
+      );
+      return;
+    case "addedKongDeclared":
+      removeTile(state.players[event.player].hand, event.addedTile.id);
+      state.players[event.player].melds = state.players[event.player].melds.map(
+        (meld) =>
           meld.type === "pong" &&
           meld.tiles.every((tile) =>
             event.tiles.some((eventTile) => eventTile.id === tile.id),
           )
-            ? { ...meld, type: "kong", tiles: event.tiles }
+            ? { ...meld, type: "kong", tiles: [...event.tiles] }
             : meld,
       );
       return;
@@ -163,9 +189,7 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
         new Set([...(state.winners ?? []), event.player]),
       );
       if (event.from !== undefined) {
-        const wonTile =
-          removeTile(state.players[event.from].discards, event.tile.id) ??
-          event.tile;
+        const wonTile = removeWonTileFromSource(state, event.from, event.tile);
         state.players[event.player].hand = sortTiles([
           ...state.players[event.player].hand,
           wonTile,
@@ -185,7 +209,38 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
 }
 
 function initializeWalls(state: ReplayState, seed: string): void {
-  const { wall, deadWall } = createShuffledWalls(seed);
+  const { wall, deadWall } = isTestScenarioSeed(seed)
+    ? (createTestScenarioWalls(seed) ?? createShuffledWalls(seed))
+    : createShuffledWalls(seed);
   state.wall = wall;
   state.deadWall = deadWall;
+}
+
+function removeWonTileFromSource(
+  state: ReplayState,
+  player: PlayerId,
+  tile: TileInstance,
+): TileInstance {
+  const discarded = removeTile(state.players[player].discards, tile.id);
+  if (discarded) {
+    return discarded;
+  }
+
+  const concealed = removeTile(state.players[player].hand, tile.id);
+  if (concealed) {
+    return concealed;
+  }
+
+  for (const meld of state.players[player].melds) {
+    const meldTile = removeTile(meld.tiles, tile.id);
+    if (!meldTile) {
+      continue;
+    }
+    if (meld.type === "kong" && meld.tiles.length === 3) {
+      meld.type = "pong";
+    }
+    return meldTile;
+  }
+
+  return tile;
 }

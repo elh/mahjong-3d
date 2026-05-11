@@ -6,13 +6,14 @@ import {
   createInitialRound,
   simulateRound,
   simulateRoundFromState,
+  simulateTestScenarioRound,
 } from "./engine";
 import { analyzeHand, evaluateDiscard } from "./handAnalysis";
 import { validateBetweenTurns } from "./invariants";
+import { replayEvents } from "./replay";
 import { createSeededRng, shuffle } from "./rng";
 import type { RoundState } from "./state";
-import { replayEvents } from "./replay";
-import { createTileSet, tileKey, type TileInstance } from "./tiles";
+import { createTileSet, type TileInstance, tileKey } from "./tiles";
 import { isWinningHand } from "./win";
 
 describe("tile set", () => {
@@ -246,23 +247,54 @@ describe("simulation", () => {
       if ("tile" in event && event.tile) {
         return `${event.type}:${event.player}:${tileKey(event.tile.kind)}`;
       }
+      if (event.type === "tilesDrawn") {
+        return `${event.type}:${event.player}:${event.tiles.map((tile) => tileKey(tile.kind)).join(",")}`;
+      }
       return "wallCount" in event
         ? `${event.type}:${event.wallCount}`
         : event.type;
     });
 
     expect(compactLog).toEqual([
-      "tileDrawn:0:d5",
-      "tileDrawn:1:b1",
-      "tileDrawn:2:c3",
-      "tileDrawn:3:dragon-green",
-      "tileDrawn:0:d4",
-      "tileDrawn:1:wind-east",
-      "tileDrawn:2:b3",
-      "tileDrawn:3:c2",
-      "tileDrawn:0:d9",
-      "tileDrawn:1:d6",
+      "tilesDrawn:0:d5,b1,c3,dragon-green",
+      "tilesDrawn:1:d4,wind-east,b3,c2",
+      "tilesDrawn:2:d9,d6,c7,c5",
+      "tilesDrawn:3:d6,wind-west,d4,b7",
+      "tilesDrawn:0:b8,b9,b3,b1",
+      "tilesDrawn:1:d8,d5,b7,c6",
+      "tilesDrawn:2:b4,c2,d2,b9",
+      "tilesDrawn:3:wind-north,c5,b7,wind-west",
+      "tilesDrawn:0:wind-south,d9,b2,wind-north",
+      "tilesDrawn:1:d6,c7,d1,b4",
     ]);
+  });
+
+  test("deals setup tiles in four-tile packets plus East opening tile", () => {
+    const { events } = createInitialRound("setup-packets");
+    const setupDraws = events.filter(
+      (event) => event.type === "tilesDrawn" || event.type === "tileDrawn",
+    );
+    const packets = setupDraws.filter((event) => event.type === "tilesDrawn");
+    const openingDraw = [...setupDraws]
+      .reverse()
+      .find(
+        (event) => event.type === "tileDrawn" && event.source === "liveWall",
+      );
+
+    expect(packets).toHaveLength(16);
+    expect(
+      packets.every(
+        (event) => event.type === "tilesDrawn" && event.tiles.length === 4,
+      ),
+    ).toBe(true);
+    expect(packets.map((event) => event.player)).toEqual([
+      0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3,
+    ]);
+    expect(openingDraw?.type).toBe("tileDrawn");
+    if (openingDraw?.type === "tileDrawn") {
+      expect(openingDraw.player).toBe(0);
+      expect(openingDraw.replacement).toBe(false);
+    }
   });
 
   test("runs to a meaningful terminal event", () => {
@@ -301,7 +333,7 @@ describe("simulation", () => {
 
   test("declares concealed kongs and draws a supplement before discard", () => {
     const result = simulateRound({
-      seed: "smart-concealed-4",
+      seed: "smart-concealed-9",
       bots: createBaselineBots(),
       maxTurns: 300,
     });
@@ -327,9 +359,34 @@ describe("simulation", () => {
     }
   });
 
+  test("test-concealed-kong demonstrates a concealed kong immediately after setup", () => {
+    const result = simulateTestScenarioRound("test-concealed-kong");
+    const kongIndex = result.events.findIndex(
+      (event) => event.type === "kongDeclared",
+    );
+    const kong = result.events[kongIndex];
+    const replacement = result.events[kongIndex + 1];
+    const discard = result.events[kongIndex + 2];
+
+    expect(result.events.some((event) => event.type === "rulesError")).toBe(
+      false,
+    );
+    expect(kong?.type).toBe("kongDeclared");
+    if (kong?.type === "kongDeclared") {
+      expect(kong.kong).toBe("concealed");
+      expect(kong.tiles).toHaveLength(4);
+    }
+    expect(replacement?.type).toBe("tileDrawn");
+    if (replacement?.type === "tileDrawn") {
+      expect(replacement.source).toBe("deadWall");
+      expect(replacement.replacement).toBe(true);
+    }
+    expect(discard?.type).toBe("tileDiscarded");
+  });
+
   test("claimed kongs wait for a supplement draw without a rules error", () => {
     const result = simulateRound({
-      seed: "kong-bug-1",
+      seed: "kong-bug-2",
       bots: createBaselineBots(),
       maxTurns: 80,
     });
@@ -344,25 +401,53 @@ describe("simulation", () => {
 
     const kong = result.events[kongIndex];
     const replacement = result.events[kongIndex + 1];
-    const discard = result.events[kongIndex + 2];
-
     expect(kong.type).toBe("kongDeclared");
-    if (kong.type === "kongDeclared") {
-      expect(kong.kong).toBe("claimed");
-      expect(kong.from).toBeDefined();
-      expect(kong.tile).toBeDefined();
+    if (kong.type !== "kongDeclared") {
+      throw new Error("missing claimed kong event");
     }
+    const discard = result.events.find(
+      (event, index) =>
+        index > kongIndex &&
+        event.type === "tileDiscarded" &&
+        event.player === kong.player,
+    );
+
+    expect(kong.kong).toBe("claimed");
+    expect(kong.from).toBeDefined();
+    expect(kong.tile).toBeDefined();
     expect(replacement.type).toBe("tileDrawn");
     if (kong.type === "kongDeclared" && replacement.type === "tileDrawn") {
       expect(replacement.player).toBe(kong.player);
       expect(replacement.replacement).toBe(true);
       expect(replacement.source).toBe("deadWall");
     }
-    expect(discard.type).toBe("tileDiscarded");
-    if (kong.type === "kongDeclared" && discard.type === "tileDiscarded") {
+    expect(discard?.type).toBe("tileDiscarded");
+    if (kong.type === "kongDeclared" && discard?.type === "tileDiscarded") {
       expect(discard.player).toBe(kong.player);
-      expect(discard.handCount).toBe(13);
+      expect(discard.handCount).toBe(10);
     }
+  });
+
+  test("simulateRound treats test scenario names as normal seeds", () => {
+    const discardOnlyBot: MahjongBot = {
+      name: "Discard only",
+      chooseAction(context) {
+        return (
+          context.legalActions.find((action) => action.type === "discard") ??
+          context.legalActions.find((action) => action.type === "pass") ??
+          context.legalActions[0]
+        );
+      },
+    };
+    const result = simulateRound({
+      seed: "test-concealed-kong",
+      bots: [discardOnlyBot, discardOnlyBot, discardOnlyBot, discardOnlyBot],
+      maxTurns: 1,
+    });
+
+    expect(result.events.some((event) => event.type === "kongDeclared")).toBe(
+      false,
+    );
   });
 
   test("allows multiple winners on the same discard", () => {
@@ -642,10 +727,12 @@ describe("simulation", () => {
       ],
       maxTurns: 1,
     });
-    const kong = result.events[0];
-    const draw = result.events[1];
-    const discardEvent = result.events[2];
+    const intent = result.events[0];
+    const kong = result.events[1];
+    const draw = result.events[2];
+    const discardEvent = result.events[3];
 
+    expect(intent?.type).toBe("addedKongDeclared");
     expect(kong?.type).toBe("kongDeclared");
     if (kong?.type === "kongDeclared") {
       expect(kong.kong).toBe("added");
@@ -658,6 +745,48 @@ describe("simulation", () => {
     }
     expect(discardEvent?.type).toBe("tileDiscarded");
     expect(result.finalState.players[0].melds[0].type).toBe("kong");
+  });
+
+  test("test-added-kong demonstrates adding a fourth tile to an exposed pong", () => {
+    const result = simulateTestScenarioRound("test-added-kong");
+    const preludeClaimIndex = result.events.findIndex(
+      (event) => event.type === "claimMade" && event.claim === "pong",
+    );
+    const drawIndex = result.events.findIndex(
+      (event) =>
+        event.type === "tileDrawn" &&
+        event.phase === "turn" &&
+        !event.replacement,
+    );
+    const kongIndex = result.events.findIndex(
+      (event) => event.type === "kongDeclared" && event.kong === "added",
+    );
+    const intentIndex = result.events.findIndex(
+      (event) => event.type === "addedKongDeclared",
+    );
+    const intent = result.events[intentIndex];
+    const kong = result.events[kongIndex];
+    const replacement = result.events[kongIndex + 1];
+
+    expect(result.events.some((event) => event.type === "rulesError")).toBe(
+      false,
+    );
+    expect(preludeClaimIndex).toBeGreaterThan(-1);
+    expect(drawIndex).toBeGreaterThan(preludeClaimIndex);
+    expect(intent?.type).toBe("addedKongDeclared");
+    expect(intentIndex).toBeGreaterThan(drawIndex);
+    expect(kongIndex).toBeGreaterThan(intentIndex);
+    expect(kong?.type).toBe("kongDeclared");
+    if (kong?.type === "kongDeclared") {
+      expect(kong.kong).toBe("added");
+      expect(kong.addedTile).toBeDefined();
+      expect(kong.tiles).toHaveLength(4);
+    }
+    expect(replacement?.type).toBe("tileDrawn");
+    if (replacement?.type === "tileDrawn") {
+      expect(replacement.source).toBe("deadWall");
+      expect(replacement.replacement).toBe(true);
+    }
   });
 
   test("allows opponents to rob an added kong before it is finalized", () => {
@@ -708,6 +837,10 @@ describe("simulation", () => {
       maxTurns: 1,
     });
 
+    const intent = result.events.find(
+      (event) => event.type === "addedKongDeclared",
+    );
+    expect(intent?.type).toBe("addedKongDeclared");
     expect(result.events.some((event) => event.type === "kongDeclared")).toBe(
       false,
     );
@@ -719,6 +852,45 @@ describe("simulation", () => {
       expect(win.tile.id).toBe(robbedTile.id);
     }
     expect(result.finalState.players[1].winningTile?.id).toBe(robbedTile.id);
+  });
+
+  test("test-rob-added-kong demonstrates robbing an added kong", () => {
+    const result = simulateTestScenarioRound("test-rob-added-kong");
+    const preludeClaimIndex = result.events.findIndex(
+      (event) => event.type === "claimMade" && event.claim === "pong",
+    );
+    const drawIndex = result.events.findIndex(
+      (event) =>
+        event.type === "tileDrawn" &&
+        event.phase === "turn" &&
+        !event.replacement,
+    );
+    const winIndex = result.events.findIndex(
+      (event) => event.type === "winDeclared",
+    );
+    const intentIndex = result.events.findIndex(
+      (event) => event.type === "addedKongDeclared",
+    );
+    const intent = result.events[intentIndex];
+    const win = result.events[winIndex];
+
+    expect(result.events.some((event) => event.type === "rulesError")).toBe(
+      false,
+    );
+    expect(result.events.some((event) => event.type === "kongDeclared")).toBe(
+      false,
+    );
+    expect(preludeClaimIndex).toBeGreaterThan(-1);
+    expect(drawIndex).toBeGreaterThan(preludeClaimIndex);
+    expect(intent?.type).toBe("addedKongDeclared");
+    expect(intentIndex).toBeGreaterThan(drawIndex);
+    expect(winIndex).toBeGreaterThan(intentIndex);
+    expect(win?.type).toBe("winDeclared");
+    if (win?.type === "winDeclared") {
+      expect(win.player).toBe(1);
+      expect(win.from).toBe(0);
+    }
+    expect(result.finalState.players[1].winningTile).toBeDefined();
   });
 
   test("records flower exposure explicitly and replays it", () => {

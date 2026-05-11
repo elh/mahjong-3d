@@ -95,7 +95,8 @@ h3 {
 
 .primary-button,
 .secondary-button,
-.step-controls button {
+.step-controls button,
+.view-toggle button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -122,7 +123,7 @@ h3 {
 
 .controls-band {
   display: grid;
-  grid-template-columns: minmax(160px, 260px) auto auto auto minmax(220px, 1fr);
+  grid-template-columns: minmax(150px, 230px) auto auto auto minmax(190px, 1fr);
   align-items: end;
   gap: 8px;
   padding: 0 0 10px;
@@ -159,6 +160,36 @@ h3 {
 .step-controls button {
   width: 32px;
   padding: 0;
+}
+
+.view-toggle {
+  display: inline-flex;
+  align-self: end;
+  overflow: hidden;
+  min-inline-size: 0;
+  min-height: 30px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--stone-300);
+  border-radius: 6px;
+  background: var(--stone-50);
+}
+
+.view-toggle button {
+  min-height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.view-toggle button + button {
+  border-left: 1px solid var(--stone-300);
+}
+
+.view-toggle button.active {
+  background: var(--stone-800);
+  color: var(--stone-50);
 }
 
 .timeline input {
@@ -202,6 +233,137 @@ h3 {
   grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
   gap: 12px;
   padding: 12px 0;
+}
+
+.three-viewer {
+  position: relative;
+  height: min(760px, calc(100vh - 96px));
+  min-height: 520px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #131614;
+}
+
+.three-viewer canvas {
+  display: block;
+}
+
+.three-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  background: #131614;
+  color: var(--stone-300);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.three-debug-panel {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  z-index: 5;
+  display: grid;
+  gap: 7px;
+  width: 230px;
+  padding: 9px;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 6px;
+  background: rgb(19 22 20 / 78%);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 26%);
+  color: var(--stone-100);
+  font-size: 0.72rem;
+  backdrop-filter: blur(8px);
+}
+
+.three-debug-panel header,
+.three-debug-panel label span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.three-debug-panel header {
+  color: var(--stone-100);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.three-debug-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.three-debug-panel button {
+  min-height: 22px;
+  padding: 0 7px;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 4px;
+  background: rgb(255 255 255 / 8%);
+  color: var(--stone-100);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.three-debug-tabs button.active {
+  background: var(--stone-100);
+  color: var(--stone-900);
+}
+
+.three-debug-panel label {
+  display: grid;
+  gap: 3px;
+  color: var(--stone-200);
+  font-weight: 700;
+}
+
+.three-debug-panel strong {
+  color: var(--stone-50);
+  font-variant-numeric: tabular-nums;
+}
+
+.three-debug-panel input {
+  width: 100%;
+  accent-color: #d2b16f;
+}
+
+.three-debug-toggle {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.three-debug-toggle input {
+  width: auto;
+}
+
+.three-viewer.loading {
+  display: grid;
+  place-items: center;
+  color: var(--stone-300);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.round-loading {
+  display: grid;
+  min-height: 420px;
+  margin-top: 12px;
+  place-items: center;
+  border: 1px solid var(--stone-300);
+  border-radius: 6px;
+  background: var(--stone-50);
+  color: var(--stone-600);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .event-rail {
@@ -543,5 +705,10 @@ h3 {
   .controls-band {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .three-viewer {
+    height: calc(100vh - 210px);
+    min-height: 420px;
   }
 }
