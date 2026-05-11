@@ -1,11 +1,12 @@
 import { Environment, OrbitControls, RoundedBox } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
+  type ContactForcePayload,
   CuboidCollider,
   Physics,
-  type RigidBodyProps,
   type RapierRigidBody,
   RigidBody,
+  type RigidBodyProps,
 } from "@react-three/rapier";
 import {
   Suspense,
@@ -30,6 +31,10 @@ import {
 const tileBackThickness = tileSize.height * 0.18;
 const tileCornerRadius = 0.035;
 const flickHandoffOverlapMs = 48;
+const loadedDiscardSettlingMs = 180;
+const enableTileCollisionSound = false;
+const showThreeDebugPanel = false;
+const tileSoundCooldownMs = 62;
 const tableHalfSize = 3.24;
 const tableSlabDepth = 0.24;
 const tableRailWidth = 0.16;
@@ -42,6 +47,8 @@ type TileTextureEntry = {
 };
 
 const tileTextureCache = new Map<string, TileTextureEntry>();
+let tileAudioContext: AudioContext | undefined;
+let lastTileSoundAt = 0;
 type FlickDebugSettings = {
   force: number;
   lift: number;
@@ -66,14 +73,22 @@ type LightingDebugSettings = {
   environment: boolean;
 };
 
+type SoundDebugSettings = {
+  volume: number;
+  chink: number;
+  ring: number;
+  sustain: number;
+  minSpeed: number;
+};
+
 const defaultFlickDebugSettings: FlickDebugSettings = {
   force: 1.5,
   lift: 1,
-  spin: 1,
+  spin: 5.4,
   tableFriction: 1.35,
   tileFriction: 1.2,
   linearDamping: 1.05,
-  angularDamping: 1.45,
+  angularDamping: 0.85,
 };
 
 const defaultLightingDebugSettings: LightingDebugSettings = {
@@ -88,6 +103,14 @@ const defaultLightingDebugSettings: LightingDebugSettings = {
   fogNear: 8.5,
   fogFar: 13,
   environment: false,
+};
+
+const defaultSoundDebugSettings: SoundDebugSettings = {
+  volume: 17,
+  chink: 1.45,
+  ring: 1.55,
+  sustain: 1.25,
+  minSpeed: 0.04,
 };
 
 type ThreeGameViewProps = {
@@ -107,8 +130,11 @@ export function ThreeGameView({
   roundKey,
   loading = false,
 }: ThreeGameViewProps) {
-  const flickDebug = defaultFlickDebugSettings;
-  const lightingDebug = defaultLightingDebugSettings;
+  const [flickDebug, setFlickDebug] = useState(defaultFlickDebugSettings);
+  const [lightingDebug, setLightingDebug] = useState(
+    defaultLightingDebugSettings,
+  );
+  const [soundDebug, setSoundDebug] = useState(defaultSoundDebugSettings);
   const [sceneReady, setSceneReady] = useState(false);
   const lastEventIndexRef = useRef(eventIndex);
   const initialEventIndexRef = useRef(eventIndex);
@@ -153,6 +179,27 @@ export function ThreeGameView({
     (placement) =>
       placement.physics && !nonPhysicsAnimatedTileIds.has(placement.tile.id),
   );
+  const playContactSound = useMemo(
+    () => createContactSoundHandler(soundDebug),
+    [soundDebug],
+  );
+
+  useEffect(() => {
+    if (!enableTileCollisionSound) {
+      return;
+    }
+
+    function unlockAudio() {
+      void ensureTileAudioContext()?.resume();
+    }
+
+    window.addEventListener("pointerdown", unlockAudio, { once: true });
+    window.addEventListener("keydown", unlockAudio, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+    };
+  }, []);
 
   useEffect(() => {
     didMountRef.current = true;
@@ -176,6 +223,16 @@ export function ThreeGameView({
 
   return (
     <section className="three-viewer" aria-label="3D autonomous game viewer">
+      {showThreeDebugPanel ? (
+        <ThreeDebugPanel
+          flickSettings={flickDebug}
+          lightingSettings={lightingDebug}
+          soundSettings={soundDebug}
+          onFlickChange={setFlickDebug}
+          onLightingChange={setLightingDebug}
+          onSoundChange={setSoundDebug}
+        />
+      ) : null}
       {!sceneVisible ? (
         <div className="three-loading-overlay" aria-live="polite">
           Loading...
@@ -235,7 +292,7 @@ export function ThreeGameView({
                 }
                 flick={flickByTileId.get(placement.tile.id)}
                 settings={flickDebug}
-                startsDynamic={flickByTileId.has(placement.tile.id)}
+                onContactSound={playContactSound}
                 visible={sceneVisible}
               />
             ))}
@@ -450,15 +507,19 @@ function HandFaceFill({ intensity }: { intensity: number }) {
 export function ThreeDebugPanel({
   flickSettings,
   lightingSettings,
+  soundSettings,
   onFlickChange,
   onLightingChange,
+  onSoundChange,
 }: {
   flickSettings: FlickDebugSettings;
   lightingSettings: LightingDebugSettings;
+  soundSettings: SoundDebugSettings;
   onFlickChange: (settings: FlickDebugSettings) => void;
   onLightingChange: (settings: LightingDebugSettings) => void;
+  onSoundChange: (settings: SoundDebugSettings) => void;
 }) {
-  const [mode, setMode] = useState<"flick" | "lighting">("lighting");
+  const [mode, setMode] = useState<"flick" | "lighting" | "sound">("sound");
 
   return (
     <aside className="three-debug-panel" aria-label="3D debug settings">
@@ -469,7 +530,9 @@ export function ThreeDebugPanel({
           onClick={() =>
             mode === "flick"
               ? onFlickChange(defaultFlickDebugSettings)
-              : onLightingChange(defaultLightingDebugSettings)
+              : mode === "lighting"
+                ? onLightingChange(defaultLightingDebugSettings)
+                : onSoundChange(defaultSoundDebugSettings)
           }
         >
           Reset
@@ -490,14 +553,23 @@ export function ThreeDebugPanel({
         >
           Lighting
         </button>
+        <button
+          type="button"
+          className={mode === "sound" ? "active" : ""}
+          onClick={() => setMode("sound")}
+        >
+          Sound
+        </button>
       </div>
       {mode === "flick" ? (
         <FlickDebugControls settings={flickSettings} onChange={onFlickChange} />
-      ) : (
+      ) : mode === "lighting" ? (
         <LightingDebugControls
           settings={lightingSettings}
           onChange={onLightingChange}
         />
+      ) : (
+        <SoundDebugControls settings={soundSettings} onChange={onSoundChange} />
       )}
     </aside>
   );
@@ -676,6 +748,59 @@ function LightingDebugControls({
   );
 }
 
+function SoundDebugControls({
+  settings,
+  onChange,
+}: {
+  settings: SoundDebugSettings;
+  onChange: (settings: SoundDebugSettings) => void;
+}) {
+  return (
+    <>
+      <DebugSlider
+        label="Volume"
+        value={settings.volume}
+        min={0}
+        max={30}
+        step={0.05}
+        onChange={(volume) => onChange({ ...settings, volume })}
+      />
+      <DebugSlider
+        label="Chink"
+        value={settings.chink}
+        min={0}
+        max={2.5}
+        step={0.05}
+        onChange={(chink) => onChange({ ...settings, chink })}
+      />
+      <DebugSlider
+        label="Ring"
+        value={settings.ring}
+        min={0}
+        max={2.5}
+        step={0.05}
+        onChange={(ring) => onChange({ ...settings, ring })}
+      />
+      <DebugSlider
+        label="Sustain"
+        value={settings.sustain}
+        min={0.4}
+        max={2.2}
+        step={0.05}
+        onChange={(sustain) => onChange({ ...settings, sustain })}
+      />
+      <DebugSlider
+        label="Min speed"
+        value={settings.minSpeed}
+        min={0}
+        max={0.2}
+        step={0.01}
+        onChange={(minSpeed) => onChange({ ...settings, minSpeed })}
+      />
+    </>
+  );
+}
+
 function DebugSlider({
   label,
   value,
@@ -730,11 +855,227 @@ function DebugToggle({
   );
 }
 
+function ensureTileAudioContext(): AudioContext | undefined {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+  if (!tileAudioContext) {
+    tileAudioContext = new window.AudioContext();
+  }
+  return tileAudioContext;
+}
+
+function createContactSoundHandler(settings: SoundDebugSettings) {
+  return (payload: ContactForcePayload) => {
+    if (!enableTileCollisionSound) {
+      return;
+    }
+
+    if (!isTileContact(payload)) {
+      return;
+    }
+    const targetVelocity = payload.target.rigidBody?.linvel();
+    const otherVelocity = payload.other.rigidBody?.linvel();
+    const relativeSpeed =
+      targetVelocity && otherVelocity
+        ? Math.hypot(
+            targetVelocity.x - otherVelocity.x,
+            targetVelocity.y - otherVelocity.y,
+            targetVelocity.z - otherVelocity.z,
+          )
+        : 0;
+    playTileContactSound(payload.maxForceMagnitude, relativeSpeed, settings);
+  };
+}
+
+function isTileContact(payload: ContactForcePayload): boolean {
+  return (
+    isDiscardTileUserData(payload.target.rigidBody?.userData) &&
+    isDiscardTileUserData(payload.other.rigidBody?.userData)
+  );
+}
+
+function isDiscardTileUserData(
+  value: unknown,
+): value is { kind: "discardTile"; tileId: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "kind" in value &&
+    value.kind === "discardTile"
+  );
+}
+
+function playTileContactSound(
+  forceMagnitude: number,
+  relativeSpeed: number,
+  settings: SoundDebugSettings,
+): void {
+  const now = performance.now();
+  if (
+    now - lastTileSoundAt < tileSoundCooldownMs ||
+    forceMagnitude < 0.18 ||
+    relativeSpeed < settings.minSpeed
+  ) {
+    return;
+  }
+
+  const context = ensureTileAudioContext();
+  if (!context || context.state !== "running") {
+    return;
+  }
+
+  lastTileSoundAt = now;
+  const impact = Math.min(1, Math.max(0, (forceMagnitude - 0.18) / 3.2));
+  const start = context.currentTime;
+  const duration = (0.16 + impact * 0.08) * settings.sustain;
+  const output = context.createDynamicsCompressor();
+  output.threshold.setValueAtTime(-10, start);
+  output.knee.setValueAtTime(8, start);
+  output.ratio.setValueAtTime(8, start);
+  output.attack.setValueAtTime(0.001, start);
+  output.release.setValueAtTime(0.08, start);
+  const browserGain = context.createGain();
+  const outputVolume = Math.max(0, settings.volume / 3.5);
+  browserGain.gain.setValueAtTime(outputVolume * outputVolume, start);
+  output.connect(browserGain);
+  browserGain.connect(context.destination);
+
+  const master = context.createGain();
+  const driveVolume = Math.min(settings.volume, 12);
+  master.gain.setValueAtTime(0.0001, start);
+  master.gain.exponentialRampToValueAtTime(
+    driveVolume * (0.055 + impact * 0.08),
+    start + 0.001,
+  );
+  master.gain.exponentialRampToValueAtTime(
+    driveVolume * (0.018 + impact * 0.025),
+    start + 0.026,
+  );
+  master.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+  master.connect(output);
+
+  const noise = context.createBufferSource();
+  noise.buffer = acrylicNoiseBuffer(context);
+  const highpass = context.createBiquadFilter();
+  highpass.type = "highpass";
+  highpass.frequency.value = 1250;
+  const bandpass = context.createBiquadFilter();
+  bandpass.type = "bandpass";
+  bandpass.frequency.value =
+    (2050 + impact * 1150) * (0.8 + settings.chink * 0.2);
+  bandpass.Q.value = 6.5;
+  const noiseGain = context.createGain();
+  noiseGain.gain.setValueAtTime(settings.chink * (0.12 + impact * 0.18), start);
+  noiseGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.008);
+  noise.connect(highpass);
+  highpass.connect(bandpass);
+  bandpass.connect(noiseGain);
+  noiseGain.connect(master);
+  noise.start(start);
+  noise.stop(start + 0.012);
+
+  for (const [frequency, gain, decay] of [
+    [240, 0.092, 0.44],
+    [480, 0.076, 0.36],
+    [960, 0.036, 0.26],
+  ] satisfies [number, number, number][]) {
+    const body = context.createOscillator();
+    const bodyGain = context.createGain();
+    body.type = "sine";
+    body.frequency.setValueAtTime(frequency * (0.96 + impact * 0.08), start);
+    bodyGain.gain.setValueAtTime(gain * (0.8 + impact * 0.8), start);
+    bodyGain.gain.exponentialRampToValueAtTime(
+      0.0001,
+      start + duration * decay,
+    );
+    body.connect(bodyGain);
+    bodyGain.connect(master);
+    body.start(start);
+    body.stop(start + duration * decay * 1.2);
+  }
+
+  for (const [frequency, gain, decay] of [
+    [860, 0.054, 1.1],
+    [1420, 0.09, 1.0],
+    [2240, 0.12, 0.88],
+    [3300, 0.098, 0.74],
+    [4650, 0.06, 0.56],
+    [6200, 0.024, 0.38],
+  ] satisfies [number, number, number][]) {
+    const resonance = context.createBiquadFilter();
+    resonance.type = "bandpass";
+    resonance.frequency.setValueAtTime(
+      frequency * (0.99 + impact * 0.025),
+      start,
+    );
+    resonance.Q.setValueAtTime(13 + impact * 7, start);
+    const impulse = context.createBufferSource();
+    impulse.buffer = ceramicImpulseBuffer(context);
+    const impulseGain = context.createGain();
+    impulseGain.gain.setValueAtTime(
+      settings.ring * gain * (0.9 + impact * 0.7),
+      start,
+    );
+    impulseGain.gain.exponentialRampToValueAtTime(
+      0.0001,
+      start + duration * decay,
+    );
+    impulse.connect(resonance);
+    resonance.connect(impulseGain);
+    impulseGain.connect(master);
+    impulse.start(start);
+    impulse.stop(start + 0.018);
+  }
+
+  for (const [offset, frequency, gain] of [
+    [0, 3200, 0.18],
+    [0.004, 4700, 0.105],
+  ] satisfies [number, number, number][]) {
+    const click = context.createOscillator();
+    const clickGain = context.createGain();
+    click.type = "sine";
+    click.frequency.setValueAtTime(frequency + impact * 1200, start + offset);
+    clickGain.gain.setValueAtTime(
+      settings.chink * gain * (0.95 + impact * 0.7),
+      start + offset,
+    );
+    clickGain.gain.exponentialRampToValueAtTime(0.0001, start + offset + 0.014);
+    click.connect(clickGain);
+    clickGain.connect(master);
+    click.start(start + offset);
+    click.stop(start + offset + 0.018);
+  }
+}
+
+function acrylicNoiseBuffer(context: AudioContext): AudioBuffer {
+  const sampleCount = Math.max(1, Math.floor(context.sampleRate * 0.08));
+  const buffer = context.createBuffer(1, sampleCount, context.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let index = 0; index < sampleCount; index += 1) {
+    const envelope = 1 - index / sampleCount;
+    data[index] = (Math.random() * 2 - 1) * envelope * envelope;
+  }
+  return buffer;
+}
+
+function ceramicImpulseBuffer(context: AudioContext): AudioBuffer {
+  const sampleCount = Math.max(1, Math.floor(context.sampleRate * 0.018));
+  const buffer = context.createBuffer(1, sampleCount, context.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let index = 0; index < sampleCount; index += 1) {
+    const envelope = Math.exp(-index / (sampleCount * 0.14));
+    const brightGrain = index % 2 === 0 ? 1 : -1;
+    data[index] = brightGrain * envelope * (0.65 + Math.random() * 0.35);
+  }
+  return buffer;
+}
+
 function DiscardPhysicsTile({
   placement,
   flick,
   settings,
-  startsDynamic,
+  onContactSound,
   visible,
 }: {
   placement: TilePlacement;
@@ -746,12 +1087,12 @@ function DiscardPhysicsTile({
     delayMs: number;
   };
   settings: FlickDebugSettings;
-  startsDynamic: boolean;
+  onContactSound: (payload: ContactForcePayload) => void;
   visible: boolean;
 }) {
   const [isActive, setIsActive] = useState(!flick);
   const [bodyType, setBodyType] = useState<RigidBodyProps["type"]>(
-    startsDynamic ? "dynamic" : "fixed",
+    flick ? "dynamic" : "kinematicPosition",
   );
   const didApplyFlickRef = useRef(false);
   const pendingFlickRef = useRef(flick);
@@ -783,8 +1124,13 @@ function DiscardPhysicsTile({
     if (!didApplyFlickRef.current) {
       initialPlacementRef.current = latestPlacementRef.current;
     }
+    setBodyType("kinematicPosition");
     setIsActive(true);
-    return;
+    const timeout = window.setTimeout(
+      () => setBodyType("dynamic"),
+      loadedDiscardSettlingMs,
+    );
+    return () => window.clearTimeout(timeout);
   }, [flick]);
 
   useFrame(() => {
@@ -826,6 +1172,7 @@ function DiscardPhysicsTile({
     <RigidBody
       ref={bodyRef}
       type={bodyType}
+      userData={{ kind: "discardTile", tileId: placement.tile.id }}
       colliders={false}
       position={initialPlacementRef.current.position}
       rotation={initialPlacementRef.current.rotation}
@@ -833,6 +1180,7 @@ function DiscardPhysicsTile({
       friction={settings.tileFriction}
       linearDamping={settings.linearDamping}
       angularDamping={settings.angularDamping}
+      onContactForce={onContactSound}
       canSleep
     >
       <CuboidCollider
