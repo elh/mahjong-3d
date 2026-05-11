@@ -14,7 +14,11 @@ export type EventGroup = {
   events: { event: GameEvent; index: number }[];
 };
 
-export function useSimulationController() {
+export function useSimulationController({
+  syncSeedToUrl = true,
+}: {
+  syncSeedToUrl?: boolean;
+} = {}) {
   const initialSeed = useMemo(() => seedFromUrlOrRandom(), []);
   const [seedInput, setSeedInput] = useState(initialSeed);
   const [pendingSeed, setPendingSeed] = useState(initialSeed);
@@ -119,7 +123,9 @@ export function useSimulationController() {
     const nextSeed = seed.trim() || randomSeed();
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
-    syncSeedQueryParam(nextSeed, options.replaceUrl ? "replace" : "push");
+    if (syncSeedToUrl) {
+      syncSeedQueryParam(nextSeed, options.replaceUrl ? "replace" : "push");
+    }
     setSeedInput(nextSeed);
     setPendingSeed(nextSeed);
     setIsGenerating(true);

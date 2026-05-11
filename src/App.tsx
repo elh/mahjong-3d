@@ -49,8 +49,9 @@ function scrollActiveEventIntoView(
 }
 
 export default function App() {
-  const isSimRoute = window.location.pathname.replace(/\/+$/, "") === "/sim";
-  return isSimRoute ? <SimApp /> : <DebugApp />;
+  const isDebugRoute =
+    window.location.pathname.replace(/\/+$/, "") === "/debug";
+  return isDebugRoute ? <DebugApp /> : <SimApp />;
 }
 
 function DebugApp() {
@@ -342,13 +343,13 @@ function DebugApp() {
         </>
       )}
 
-      <InfoPopover routeLink={{ href: "/sim", label: "Simulator" }} />
+      <InfoPopover routeLink={{ href: "/", label: "Simulator" }} />
     </main>
   );
 }
 
 function SimApp() {
-  const simulation = useSimulationController();
+  const simulation = useSimulationController({ syncSeedToUrl: false });
   const {
     pendingSeed,
     isGenerating,
@@ -366,7 +367,7 @@ function SimApp() {
   const roundKey =
     events[0]?.type === "roundStarted" ? events[0].seed : pendingSeed;
   const isLoadingRound = isGenerating && !generationError;
-  const debugHref = `/?seed=${encodeURIComponent(roundKey)}`;
+  const debugHref = `/debug?seed=${encodeURIComponent(roundKey)}`;
 
   useEffect(() => {
     if (isLoadingRound || generationError || events.length === 0) {
@@ -424,14 +425,22 @@ function SimApp() {
           simulatorMode
         />
       </Suspense>
-      <InfoPopover routeLink={{ href: debugHref, label: "Debug view" }} />
+      <InfoPopover
+        summary={{ title: "Concealed Gang", detail: `Seed: ${roundKey}` }}
+        routeLink={{ href: debugHref, label: "Debug view" }}
+      />
     </main>
   );
 }
 
 function InfoPopover({
+  summary,
   routeLink,
 }: {
+  summary?: {
+    title: string;
+    detail: string;
+  };
   routeLink: {
     href: string;
     label: string;
@@ -481,7 +490,11 @@ function InfoPopover({
       </button>
 
       {isInfoOpen && (
-        <InfoModal modalRef={infoModalRef} routeLink={routeLink} />
+        <InfoModal
+          modalRef={infoModalRef}
+          summary={summary}
+          routeLink={routeLink}
+        />
       )}
     </>
   );
