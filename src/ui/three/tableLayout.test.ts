@@ -13,6 +13,7 @@ import {
   discardDropPosition,
   playerHandRowPosition,
   playerHandTileRotation,
+  playerDrawStagingPosition,
   playerRight,
   playerRevealedHandPosition,
   playerWinningTilePosition,
@@ -76,6 +77,16 @@ describe("3D table layout", () => {
       ).tiles.find((placement) => placement.tile.id === drawEvent.tile.id);
       expect(previousWallPlacement).toBeDefined();
       expect(drawAnimation?.from).toEqual(previousWallPlacement!.position);
+      expect(drawAnimation?.fromRotation).toEqual(
+        previousWallPlacement!.rotation,
+      );
+      expect(drawAnimation?.motion).toBe("drawConcealed");
+      expect(drawAnimation?.drawStaging).toEqual({
+        position: playerDrawStagingPosition(
+          drawEvent.player,
+          drawAnimation!.to,
+        ),
+      });
       expect(drawAnimation?.to).toEqual(
         expect.arrayContaining([expect.any(Number)]),
       );

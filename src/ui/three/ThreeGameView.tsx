@@ -12,7 +12,14 @@ import {
   type RapierRigidBody,
   RigidBody,
 } from "@react-three/rapier";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import * as THREE from "three";
 import type { GameEvent } from "../../sim/events";
 import type { ReplayState } from "../../sim/replay";
@@ -236,6 +243,7 @@ export function ThreeGameView({
                 fromRotation={animation.fromRotation}
                 toRotation={animation.toRotation}
                 via={animation.via}
+                drawStaging={animation.drawStaging}
                 motion={animation.motion}
                 hideAfterMs={
                   animation.flick
@@ -726,6 +734,7 @@ function AnimatedTile({
   fromRotation,
   toRotation,
   via,
+  drawStaging,
   motion = "arc",
   hideAfterMs,
 }: {
@@ -739,26 +748,118 @@ function AnimatedTile({
     rotation: Vec3;
     holdMs?: number;
   };
-  motion?: "arc" | "knockdown";
+  drawStaging?: {
+    position: Vec3;
+  };
+  motion?: "arc" | "drawConcealed" | "knockdown";
   hideAfterMs?: number;
 }) {
   const ref = useRef<THREE.Group>(null);
   const elapsedRef = useRef(0);
   const [isVisible, setIsVisible] = useState(true);
+  const [isDrawFaceHidden, setIsDrawFaceHidden] = useState(
+    motion === "drawConcealed",
+  );
+
+  useLayoutEffect(() => {
+    if (motion !== "drawConcealed") {
+      return;
+    }
+    applyDrawTransform(
+      ref.current,
+      from,
+      from,
+      drawFaceDownWallRotation(fromRotation),
+      drawFaceDownWallRotation(fromRotation),
+      0,
+      0,
+    );
+  }, [from, fromRotation, motion]);
 
   useFrame((_, delta) => {
     const holdSeconds = (via?.holdMs ?? 0) / 1000;
-    const firstDuration = via ? 0.38 : 0.64;
-    const secondDuration = via ? 0.46 : 0;
+    const firstDuration = via ? 0.38 : motion === "drawConcealed" ? 0.42 : 0.64;
+    const secondDuration = via ? 0.46 : motion === "drawConcealed" ? 0.26 : 0;
+    const thirdDuration = motion === "drawConcealed" ? 0.08 : 0;
     const totalDuration = firstDuration + holdSeconds + secondDuration;
-    elapsedRef.current = Math.min(elapsedRef.current + delta, totalDuration);
+    const fullDuration = totalDuration + thirdDuration;
+    elapsedRef.current = Math.min(elapsedRef.current + delta, fullDuration);
     const elapsed = elapsedRef.current;
+    if (
+      motion === "drawConcealed" &&
+      isDrawFaceHidden &&
+      elapsed >= firstDuration
+    ) {
+      setIsDrawFaceHidden(false);
+    }
     if (
       isVisible &&
       hideAfterMs !== undefined &&
       elapsed >= hideAfterMs / 1000
     ) {
       setIsVisible(false);
+      return;
+    }
+
+    if (motion === "drawConcealed") {
+      const staging = drawStaging?.position ?? to;
+      if (elapsed <= firstDuration) {
+        const t = elapsed / firstDuration;
+        const arc = Math.sin(t * Math.PI) * 0.24;
+        applyDrawTransform(
+          ref.current,
+          from,
+          staging,
+          drawFaceDownWallRotation(fromRotation),
+          drawFaceDownWallRotation(fromRotation),
+          t,
+          arc,
+        );
+        return;
+      }
+
+      if (elapsed <= firstDuration + secondDuration) {
+        const t = (elapsed - firstDuration) / secondDuration;
+        const alignmentShare = 0.28;
+        const startRotation = drawFaceDownWallRotation(fromRotation);
+        const alignedRotation = drawFaceDownHandRotation(toRotation);
+        const finalRotation = eulerToQuaternion(toRotation);
+        const rotation =
+          t < alignmentShare
+            ? slerpQuaternions(
+                startRotation,
+                alignedRotation,
+                t / alignmentShare,
+              )
+            : slerpQuaternions(
+                alignedRotation,
+                finalRotation,
+                easeInOutCubic((t - alignmentShare) / (1 - alignmentShare)),
+              );
+        applyDrawTransform(
+          ref.current,
+          staging,
+          staging,
+          rotation,
+          rotation,
+          1,
+          0,
+        );
+        return;
+      }
+
+      const t = easeInOutCubic(
+        (elapsed - firstDuration - secondDuration) / thirdDuration,
+      );
+      applyDrawTransform(
+        ref.current,
+        staging,
+        to,
+        eulerToQuaternion(toRotation),
+        eulerToQuaternion(toRotation),
+        t,
+        0,
+      );
       return;
     }
 
@@ -829,9 +930,65 @@ function AnimatedTile({
 
   return (
     <group ref={ref} position={from} rotation={fromRotation}>
-      <TileBlock tile={tile} faceUp />
+      {motion === "drawConcealed" ? (
+        <FaceUpTileBlock tile={tile} faceVisible={!isDrawFaceHidden} />
+      ) : (
+        <TileBlock tile={tile} faceUp />
+      )}
     </group>
   );
+}
+
+function drawFaceDownWallRotation(rotation: Vec3): THREE.Quaternion {
+  return eulerToQuaternion(rotation).multiply(
+    new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(1, 0, 0),
+      Math.PI,
+    ),
+  );
+}
+
+function drawFaceDownHandRotation(rotation: Vec3): THREE.Quaternion {
+  return eulerToQuaternion(rotation).multiply(
+    new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(1, 0, 0),
+      Math.PI / 2,
+    ),
+  );
+}
+
+function eulerToQuaternion(rotation: Vec3): THREE.Quaternion {
+  return new THREE.Quaternion().setFromEuler(
+    new THREE.Euler(rotation[0], rotation[1], rotation[2]),
+  );
+}
+
+function slerpQuaternions(
+  from: THREE.Quaternion,
+  to: THREE.Quaternion,
+  progress: number,
+): THREE.Quaternion {
+  return from.clone().slerp(to, progress);
+}
+
+function applyDrawTransform(
+  group: THREE.Group | null,
+  from: Vec3,
+  to: Vec3,
+  fromRotation: THREE.Quaternion,
+  toRotation: THREE.Quaternion,
+  progress: number,
+  arc: number,
+) {
+  if (!group) {
+    return;
+  }
+  group.position.set(
+    THREE.MathUtils.lerp(from[0], to[0], progress),
+    THREE.MathUtils.lerp(from[1], to[1], progress) + arc,
+    THREE.MathUtils.lerp(from[2], to[2], progress),
+  );
+  group.quaternion.copy(fromRotation).slerp(toRotation, progress);
 }
 
 function applyAnimatedTransform(
@@ -842,7 +999,7 @@ function applyAnimatedTransform(
   toRotation: Vec3,
   progress: number,
   arc: number,
-  motion: "arc" | "knockdown" = "arc",
+  motion: "arc" | "drawConcealed" | "knockdown" = "arc",
 ) {
   if (!group) {
     return;
@@ -881,7 +1038,13 @@ function TileBlock({ tile, faceUp }: { tile: TileInstance; faceUp: boolean }) {
   return faceUp ? <FaceUpTileBlock tile={tile} /> : <FaceDownTileBlock />;
 }
 
-function FaceUpTileBlock({ tile }: { tile: TileInstance }) {
+function FaceUpTileBlock({
+  tile,
+  faceVisible = true,
+}: {
+  tile: TileInstance;
+  faceVisible?: boolean;
+}) {
   const texture = useTexture(tileImage(tile));
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 4;
@@ -891,6 +1054,7 @@ function FaceUpTileBlock({ tile }: { tile: TileInstance }) {
     <group>
       <TileBody orientation="faceUp" />
       <mesh
+        visible={faceVisible}
         position={[0, tileSize.height / 2 + 0.003, 0]}
         rotation={[-Math.PI / 2, 0, 0]}
       >

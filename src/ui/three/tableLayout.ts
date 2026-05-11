@@ -45,7 +45,10 @@ export type TileAnimation = {
     rotation: Vec3;
     holdMs?: number;
   };
-  motion?: "arc" | "knockdown";
+  drawStaging?: {
+    position: Vec3;
+  };
+  motion?: "arc" | "drawConcealed" | "knockdown";
   flick?: {
     position: Vec3;
     rotation: Vec3;
@@ -178,6 +181,18 @@ export function playerHandRowPosition(
 ): Vec3 {
   const [x, , z] = playerRowPosition(player, index, total, radius, 0);
   return [x, handUprightY, z];
+}
+
+export function playerDrawStagingPosition(
+  player: PlayerId,
+  handPosition: Vec3,
+): Vec3 {
+  const forward = playerForward(player);
+  return [
+    handPosition[0] - forward[0] * tileSize.depth * 0.9,
+    handPosition[1],
+    handPosition[2] - forward[2] * tileSize.depth * 0.9,
+  ];
 }
 
 export function playerRevealedHandPosition(
@@ -525,6 +540,9 @@ function currentEventAnimations(
       const previousPlacement = previousTiles.find(
         (placement) => placement.tile.id === tile.id,
       );
+      const finalPosition =
+        finalPlacement?.position ??
+        playerHandRowPosition(event.player, 0, 1, handRadius);
       return {
         tile,
         event,
@@ -533,12 +551,14 @@ function currentEventAnimations(
           sourcePosition(
             event.type === "tileDrawn" ? event.source : "liveWall",
           ),
-        to:
-          finalPlacement?.position ??
-          playerHandRowPosition(event.player, 0, 1, handRadius),
+        to: finalPosition,
         fromRotation: previousPlacement?.rotation ?? playerTileRotation(0),
         toRotation:
           finalPlacement?.rotation ?? playerHandTileRotation(event.player),
+        drawStaging: {
+          position: playerDrawStagingPosition(event.player, finalPosition),
+        },
+        motion: "drawConcealed",
       };
     });
   }
