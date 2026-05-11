@@ -56,7 +56,13 @@ export type TileAnimation = {
   };
   flipAxis?: Vec3;
   faceUp?: boolean;
-  motion?: "arc" | "drawConcealed" | "knockdown" | "flipReveal";
+  motion?:
+    | "arc"
+    | "drawConcealed"
+    | "discardToss"
+    | "claimToss"
+    | "knockdown"
+    | "flipReveal";
   flick?: {
     position: Vec3;
     rotation: Vec3;
@@ -88,6 +94,7 @@ const wallPerpendicularRadius = wallSideLength / 2 + tileSize.depth / 2;
 const discardRevealRightOffset = tileSize.width * 7;
 const discardRevealForwardRadius =
   wallPerpendicularRadius - tileSize.depth * 1.7;
+const wallCrossingY = tableY + 0.55;
 
 export function createThreeTableLayout(
   replay: ReplayState,
@@ -601,15 +608,15 @@ function currentEventAnimations(
         tile: event.tile,
         event,
         from: previousPlacement.position,
-        to: finalPlacement?.position ?? discardDropPosition(event.player),
+        to: discardFallPosition(event.player),
         fromRotation: previousPlacement.rotation,
         toRotation:
           finalPlacement?.rotation ?? playerTileRotation(event.player),
         via: {
-          position: discardFallPosition(event.player),
+          position: raisedPosition(discardFallPosition(event.player)),
           rotation: playerTileRotation(event.player),
-          holdMs: 10,
         },
+        motion: "discardToss",
         flick: {
           position: discardFallPosition(event.player),
           rotation: playerTileRotation(event.player),
@@ -618,7 +625,7 @@ function currentEventAnimations(
             event.tile,
             event.player,
           ),
-          delayMs: 390,
+          delayMs: 420,
         },
       },
     ];
@@ -670,6 +677,14 @@ function sourcePosition(source: "liveWall" | "deadWall"): Vec3 {
   return source === "deadWall"
     ? [-wallPerpendicularRadius, tableY + 0.28, -wallPerpendicularRadius]
     : [0, tableY + 0.28, wallPerpendicularRadius];
+}
+
+function raisedPosition(position: Vec3): Vec3 {
+  return [position[0], wallCrossingY, position[2]];
+}
+
+function raisedMidpoint(from: Vec3, to: Vec3): Vec3 {
+  return [(from[0] + to[0]) / 2, wallCrossingY, (from[2] + to[2]) / 2];
 }
 
 function stableUnit(value: string): number {
@@ -732,6 +747,7 @@ function meldTileAnimation(
   const previousPlacement = previousTiles.find(
     (placement) => placement.tile.id === tile.id,
   );
+  const crossesWallFromDiscard = previousPlacement?.owner === "discard";
 
   return [
     {
@@ -742,6 +758,16 @@ function meldTileAnimation(
       fromRotation:
         previousPlacement?.rotation ?? playerHandTileRotation(player),
       toRotation: finalPlacement.rotation,
+      via: crossesWallFromDiscard
+        ? {
+            position: raisedMidpoint(
+              previousPlacement.position,
+              finalPlacement.position,
+            ),
+            rotation: finalPlacement.rotation,
+          }
+        : undefined,
+      motion: crossesWallFromDiscard ? "claimToss" : undefined,
       faceUp: finalPlacement.faceUp,
     },
   ];

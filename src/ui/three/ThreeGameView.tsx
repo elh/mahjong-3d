@@ -30,7 +30,6 @@ import {
 
 const tileBackThickness = tileSize.height * 0.18;
 const tileCornerRadius = 0.035;
-const flickHandoffOverlapMs = 48;
 const loadedDiscardSettlingMs = 180;
 const enableTileCollisionSound = false;
 const showThreeDebugPanel = false;
@@ -328,9 +327,7 @@ export function ThreeGameView({
                 faceUp={animation.faceUp}
                 motion={animation.motion}
                 hideAfterMs={
-                  animation.flick
-                    ? animation.flick.delayMs + flickHandoffOverlapMs
-                    : undefined
+                  animation.flick ? animation.flick.delayMs : undefined
                 }
               />
             ))}
@@ -1126,10 +1123,7 @@ function DiscardPhysicsTile({
       setBodyType("dynamic");
       setIsActive(false);
       didApplyFlickRef.current = false;
-      const timeout = window.setTimeout(
-        () => setIsActive(true),
-        Math.max(0, flick.delayMs - flickHandoffOverlapMs),
-      );
+      const timeout = window.setTimeout(() => setIsActive(true), flick.delayMs);
       return () => window.clearTimeout(timeout);
     }
 
@@ -1240,7 +1234,13 @@ function AnimatedTile({
   };
   flipAxis?: Vec3;
   faceUp?: boolean;
-  motion?: "arc" | "drawConcealed" | "knockdown" | "flipReveal";
+  motion?:
+    | "arc"
+    | "drawConcealed"
+    | "discardToss"
+    | "claimToss"
+    | "knockdown"
+    | "flipReveal";
   hideAfterMs?: number;
 }) {
   const ref = useRef<THREE.Group>(null);
@@ -1268,8 +1268,24 @@ function AnimatedTile({
 
   useFrame((_, delta) => {
     const holdSeconds = (via?.holdMs ?? 0) / 1000;
-    const firstDuration = via ? 0.38 : motion === "drawConcealed" ? 0.42 : 0.64;
-    const secondDuration = via ? 0.46 : motion === "drawConcealed" ? 0.26 : 0;
+    const firstDuration =
+      motion === "discardToss"
+        ? 0.42
+        : motion === "claimToss"
+          ? 0.54
+          : via
+            ? 0.38
+            : motion === "drawConcealed"
+              ? 0.42
+              : 0.64;
+    const secondDuration =
+      motion === "discardToss" || motion === "claimToss"
+        ? 0
+        : via
+          ? 0.46
+          : motion === "drawConcealed"
+            ? 0.26
+            : 0;
     const thirdDuration = motion === "drawConcealed" ? 0.08 : 0;
     const totalDuration = firstDuration + holdSeconds + secondDuration;
     const fullDuration = totalDuration + thirdDuration;
@@ -1380,6 +1396,25 @@ function AnimatedTile({
       return;
     }
 
+    if ((motion === "discardToss" || motion === "claimToss") && via) {
+      const duration = motion === "discardToss" ? 0.42 : 0.54;
+      const progress = clamp01(elapsed / duration);
+      const t =
+        motion === "discardToss"
+          ? easeOutQuart(progress)
+          : easeInOutCubic(progress);
+      applyBezierAnimatedTransform(
+        ref.current,
+        from,
+        via.position,
+        to,
+        fromRotation,
+        toRotation,
+        t,
+      );
+      return;
+    }
+
     if (!via) {
       const t = easeOutCubic(elapsed / firstDuration);
       const arc =
@@ -1400,7 +1435,8 @@ function AnimatedTile({
     }
 
     if (elapsed <= firstDuration) {
-      const t = easeOutCubic(elapsed / firstDuration);
+      const progress = elapsed / firstDuration;
+      const t = easeOutCubic(progress);
       const arc = Math.sin(t * Math.PI) * 0.08;
       applyAnimatedTransform(
         ref.current,
@@ -1427,9 +1463,8 @@ function AnimatedTile({
       return;
     }
 
-    const t = easeInOutCubic(
-      (elapsed - firstDuration - holdSeconds) / secondDuration,
-    );
+    const progress = (elapsed - firstDuration - holdSeconds) / secondDuration;
+    const t = easeInOutCubic(progress);
     applyAnimatedTransform(
       ref.current,
       via.position,
@@ -1510,6 +1545,45 @@ function applyDrawTransform(
   group.quaternion.copy(fromRotation).slerp(toRotation, progress);
 }
 
+function applyBezierAnimatedTransform(
+  group: THREE.Group | null,
+  from: Vec3,
+  control: Vec3,
+  to: Vec3,
+  fromRotation: Vec3,
+  toRotation: Vec3,
+  progress: number,
+) {
+  if (!group) {
+    return;
+  }
+  const position = bezierPoint(from, control, to, progress);
+  group.position.set(position[0], position[1], position[2]);
+  group.quaternion
+    .copy(eulerToQuaternion(fromRotation))
+    .slerp(eulerToQuaternion(toRotation), progress);
+}
+
+function bezierPoint(
+  from: Vec3,
+  control: Vec3,
+  to: Vec3,
+  progress: number,
+): Vec3 {
+  const inverse = 1 - progress;
+  return [
+    inverse * inverse * from[0] +
+      2 * inverse * progress * control[0] +
+      progress * progress * to[0],
+    inverse * inverse * from[1] +
+      2 * inverse * progress * control[1] +
+      progress * progress * to[1],
+    inverse * inverse * from[2] +
+      2 * inverse * progress * control[2] +
+      progress * progress * to[2],
+  ];
+}
+
 function applyAnimatedTransform(
   group: THREE.Group | null,
   from: Vec3,
@@ -1518,7 +1592,13 @@ function applyAnimatedTransform(
   toRotation: Vec3,
   progress: number,
   arc: number,
-  motion: "arc" | "drawConcealed" | "knockdown" | "flipReveal" = "arc",
+  motion:
+    | "arc"
+    | "drawConcealed"
+    | "discardToss"
+    | "claimToss"
+    | "knockdown"
+    | "flipReveal" = "arc",
 ) {
   if (!group) {
     return;
@@ -1777,4 +1857,12 @@ function easeInOutCubic(value: number): number {
   return value < 0.5
     ? 4 * value * value * value
     : 1 - (-2 * value + 2) ** 3 / 2;
+}
+
+function easeOutQuart(value: number): number {
+  return 1 - (1 - value) ** 4;
+}
+
+function clamp01(value: number): number {
+  return Math.min(Math.max(value, 0), 1);
 }
