@@ -1,3 +1,13 @@
+/**
+ * Baseline legal-play bot, not a strong Mahjong AI.
+ *
+ * This strategy is intentionally shallow: it wins when possible, declares
+ * available kongs, picks discards with a shanten-ish hand-shape heuristic,
+ * considers live waits and visible tile exhaustion, and makes only simple
+ * chow/pong/kong claim decisions. It does not score Taiwanese tai/fan, model
+ * opponents, read discard danger, search future draws, optimize seat/dealer
+ * context, or adapt to house-rule variants.
+ */
 import type { BotContext, LegalAction } from "../sim/actions";
 import { analyzeHand, evaluateDiscard } from "../sim/handAnalysis";
 import type { TileInstance } from "../sim/tiles";
