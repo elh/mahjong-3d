@@ -31,6 +31,13 @@ Core rule: simulation state and event logs are the source of truth. UI state sho
 - Chow claim actions carry the two consumed tile ids so ambiguous chows are replayable.
 - All kongs use `kongDeclared`; discard-claimed kongs use `kong: "claimed"` with `from` and `tile`.
 
+## Test Fixtures
+
+- Special `test-*` seeds are scripted demo fixtures, not normal RNG seeds. e.g. `test-concealed-kong`, `test-added-kong`.
+- Normal `simulateRound()` must always respect caller-provided bots, even when the seed string looks like a fixture.
+- Use `simulateTestScenarioRound()` when a test or UI route intentionally wants fixture state plus scripted fixture bots.
+- Replay and 3D wall reconstruction may explicitly opt into fixture walls for known fixture seeds so those demos remain visually coherent.
+
 ## Taiwanese Mahjong Scope
 
 Target Taiwanese 16-tile Mahjong, not Riichi.
@@ -71,6 +78,14 @@ Baseline bots should be legal and plausible, not optimal.
 - Use tile images with rounded outlines; inline tiles are smaller.
 - Derive highlighted tiles from the active event.
 - Preserve keyboard navigation and hold-to-repeat event stepping.
+
+## 3D Viewer Scope
+
+- `src/ui/three/` is presentation-only; rules, bots, and replay semantics stay in `src/sim/`.
+- The 3D view must derive tile positions and animations from replay snapshots/events, not independent UI state.
+- Rapier physics is visual-only for discarded tiles; it must not feed back into rules or replay state.
+- Keep the Canvas/Rapier world stable during loading and stepping. Prefer loading overlays and cached assets over remounting the 3D scene.
+- Hidden debug/audio controls may exist behind explicit constants, but should not appear in the normal debug UI unless intentionally re-enabled.
 
 ## Assets and Licensing
 
