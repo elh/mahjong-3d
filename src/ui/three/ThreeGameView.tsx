@@ -1623,7 +1623,7 @@ function AnimatedTile({
           : via
             ? 0.42
             : motion === "drawConcealed"
-              ? 0.38
+              ? 0.46
               : motion === "knockdown"
                 ? 0.72
                 : 0.64;
@@ -1633,17 +1633,19 @@ function AnimatedTile({
         : via
           ? 0.5
           : motion === "drawConcealed"
-            ? 0.24
+            ? 0.38
             : 0;
-    const thirdDuration = motion === "drawConcealed" ? 0.1 : 0;
-    const totalDuration = firstDuration + holdSeconds + secondDuration;
+    const thirdDuration = 0;
+    const drawBlendDuration = motion === "drawConcealed" ? 0.14 : 0;
+    const totalDuration =
+      firstDuration + holdSeconds + secondDuration - drawBlendDuration;
     const fullDuration = totalDuration + thirdDuration;
     elapsedRef.current = Math.min(elapsedRef.current + delta, fullDuration);
     const elapsed = elapsedRef.current;
     if (
       motion === "drawConcealed" &&
       isDrawFaceHidden &&
-      elapsed >= firstDuration
+      elapsed >= firstDuration - drawBlendDuration
     ) {
       setIsDrawFaceHidden(false);
     }
@@ -1652,8 +1654,9 @@ function AnimatedTile({
     }
     if (motion === "drawConcealed") {
       const staging = drawStaging?.position ?? to;
-      if (elapsed <= firstDuration) {
-        const t = elapsed / firstDuration;
+      const settleStart = firstDuration - drawBlendDuration;
+      if (elapsed <= settleStart) {
+        const t = easeOutCubic(elapsed / firstDuration);
         const arc = Math.sin(t * Math.PI) * 0.24;
         applyDrawTransform(
           ref.current,
@@ -1667,46 +1670,52 @@ function AnimatedTile({
         return;
       }
 
-      if (elapsed <= firstDuration + secondDuration) {
-        const t = (elapsed - firstDuration) / secondDuration;
-        const alignmentShare = 0.28;
+      if (elapsed <= settleStart + secondDuration) {
+        const t = clamp01((elapsed - settleStart) / secondDuration);
+        const rotationProgress = clamp01(t / 0.7);
         const startRotation = drawFaceDownWallRotation(fromRotation);
-        const alignedRotation = drawFaceDownHandRotation(toRotation);
         const finalRotation = eulerToQuaternion(toRotation);
-        const rotation =
-          t < alignmentShare
-            ? slerpQuaternions(
-                startRotation,
-                alignedRotation,
-                t / alignmentShare,
-              )
-            : slerpQuaternions(
-                alignedRotation,
-                finalRotation,
-                easeInOutCubic((t - alignmentShare) / (1 - alignmentShare)),
-              );
-        applyDrawTransform(
-          ref.current,
-          staging,
-          staging,
-          rotation,
-          rotation,
-          1,
-          0,
+        const rotation = slerpQuaternions(
+          startRotation,
+          finalRotation,
+          rotationProgress,
         );
+        if (elapsed < firstDuration) {
+          const approachT = easeOutCubic(elapsed / firstDuration);
+          const approachArc = Math.sin(approachT * Math.PI) * 0.24;
+          const approachPosition = drawPosition(
+            from,
+            staging,
+            approachT,
+            approachArc,
+          );
+          const settlePosition = drawPosition(staging, to, t, 0);
+          const blend = smoothstep(
+            clamp01((elapsed - settleStart) / drawBlendDuration),
+          );
+          const position = lerpVec3(approachPosition, settlePosition, blend);
+          applyDrawTransform(
+            ref.current,
+            position,
+            position,
+            rotation,
+            rotation,
+            1,
+            0,
+          );
+          return;
+        }
+        applyDrawTransform(ref.current, staging, to, rotation, rotation, t, 0);
         return;
       }
 
-      const t = easeInOutCubic(
-        (elapsed - firstDuration - secondDuration) / thirdDuration,
-      );
       applyDrawTransform(
         ref.current,
-        staging,
+        to,
         to,
         eulerToQuaternion(toRotation),
         eulerToQuaternion(toRotation),
-        t,
+        1,
         0,
       );
       return;
@@ -1842,15 +1851,6 @@ function drawFaceDownWallRotation(rotation: Vec3): THREE.Quaternion {
   );
 }
 
-function drawFaceDownHandRotation(rotation: Vec3): THREE.Quaternion {
-  return eulerToQuaternion(rotation).multiply(
-    new THREE.Quaternion().setFromAxisAngle(
-      new THREE.Vector3(1, 0, 0),
-      Math.PI / 2,
-    ),
-  );
-}
-
 function eulerToQuaternion(rotation: Vec3): THREE.Quaternion {
   return new THREE.Quaternion().setFromEuler(
     new THREE.Euler(rotation[0], rotation[1], rotation[2]),
@@ -1883,6 +1883,27 @@ function applyDrawTransform(
     THREE.MathUtils.lerp(from[2], to[2], progress),
   );
   group.quaternion.copy(fromRotation).slerp(toRotation, progress);
+}
+
+function drawPosition(
+  from: Vec3,
+  to: Vec3,
+  progress: number,
+  arc: number,
+): Vec3 {
+  return [
+    THREE.MathUtils.lerp(from[0], to[0], progress),
+    THREE.MathUtils.lerp(from[1], to[1], progress) + arc,
+    THREE.MathUtils.lerp(from[2], to[2], progress),
+  ];
+}
+
+function lerpVec3(from: Vec3, to: Vec3, progress: number): Vec3 {
+  return [
+    THREE.MathUtils.lerp(from[0], to[0], progress),
+    THREE.MathUtils.lerp(from[1], to[1], progress),
+    THREE.MathUtils.lerp(from[2], to[2], progress),
+  ];
 }
 
 function applyBezierAnimatedTransform(
@@ -2199,6 +2220,10 @@ function easeInOutCubic(value: number): number {
   return value < 0.5
     ? 4 * value * value * value
     : 1 - (-2 * value + 2) ** 3 / 2;
+}
+
+function smoothstep(value: number): number {
+  return value * value * (3 - 2 * value);
 }
 
 function clamp01(value: number): number {
