@@ -304,7 +304,7 @@ export function ThreeGameView({
         frameloop={renderPaused ? "never" : "always"}
         shadows="percentage"
         dpr={[1, 1.75]}
-        camera={{ position: [0, 3.05, 6.75], fov: 42, near: 0.1, far: 100 }}
+        camera={{ position: [0, 2.85, 7.05], fov: 40, near: 0.1, far: 100 }}
       >
         <color attach="background" args={["#0f1112"]} />
         <ambientLight intensity={lightingDebug.ambientIntensity} />
@@ -408,11 +408,11 @@ export function ThreeGameView({
           autoRotate={
             simulatorMode && cameraAutoRotate && !isCameraUserControlled
           }
-          autoRotateSpeed={0.18}
+          autoRotateSpeed={0.14}
           enablePan={false}
           enableDamping
           minDistance={5.6}
-          maxDistance={7.4}
+          maxDistance={8.8}
           maxPolarAngle={Math.PI / 2.35}
           minPolarAngle={Math.PI / 4.2}
           onStart={() => setIsCameraUserControlled(true)}
