@@ -40,6 +40,12 @@ const tableSlabDepth = 0.24;
 const tableRailWidth = 0.16;
 const tableRailHeight = 0.075;
 const tableRailOuterHalfSize = tableHalfSize + tableRailWidth;
+
+type TilePose = {
+  position: Vec3;
+  rotation: Vec3;
+};
+
 type TileTextureEntry = {
   texture?: THREE.Texture;
   isLoading: boolean;
@@ -151,12 +157,14 @@ export function ThreeGameView({
   const lastRoundKeyRef = useRef(roundKey);
   const didMountRef = useRef(false);
   const animatedTileHandoffsRef = useRef(new Map<string, () => void>());
+  const discardPoseByTileIdRef = useRef(new Map<string, TilePose>());
   const roundChanged = roundKey !== lastRoundKeyRef.current;
   if (roundChanged) {
     lastRoundKeyRef.current = roundKey;
     initialEventIndexRef.current = eventIndex;
     lastEventIndexRef.current = eventIndex;
     didMountRef.current = false;
+    discardPoseByTileIdRef.current.clear();
   }
   const layout = useMemo(
     () =>
@@ -173,16 +181,42 @@ export function ThreeGameView({
     sceneVisible && eventIndex === initialEventIndexRef.current;
   const animations =
     shouldAnimateEvent || shouldAnimateInitialEvent ? layout.animations : [];
+  const renderedAnimations = animations.map((animation) => {
+    if (
+      animation.event.type !== "winDeclared" ||
+      animation.motion !== "claimToss"
+    ) {
+      return animation;
+    }
+    const discardPose = discardPoseByTileIdRef.current.get(animation.tile.id);
+    if (!discardPose) {
+      return animation;
+    }
+    return {
+      ...animation,
+      from: discardPose.position,
+      fromRotation: discardPose.rotation,
+      via: animation.via
+        ? {
+            ...animation.via,
+            position: winningPickupControlPoint(
+              discardPose.position,
+              animation.to,
+            ),
+          }
+        : animation.via,
+    };
+  });
   const animatedTileIds = new Set(
-    animations.map((animation) => animation.tile.id),
+    renderedAnimations.map((animation) => animation.tile.id),
   );
   const flickByTileId = new Map(
-    animations
+    renderedAnimations
       .filter((animation) => animation.flick)
       .map((animation) => [animation.tile.id, animation.flick!]),
   );
   const nonPhysicsAnimatedTileIds = new Set(
-    animations
+    renderedAnimations
       .filter((animation) => !animation.flick)
       .map((animation) => animation.tile.id),
   );
@@ -210,6 +244,9 @@ export function ThreeGameView({
   );
   const hideAnimatedTileForHandoff = useCallback((handoffKey: string) => {
     animatedTileHandoffsRef.current.get(handoffKey)?.();
+  }, []);
+  const recordDiscardPose = useCallback((tileId: string, pose: TilePose) => {
+    discardPoseByTileIdRef.current.set(tileId, pose);
   }, []);
 
   useEffect(() => {
@@ -329,6 +366,7 @@ export function ThreeGameView({
                 settings={flickDebug}
                 onContactSound={playContactSound}
                 onFlickStarted={hideAnimatedTileForHandoff}
+                onPoseChange={recordDiscardPose}
                 visible={sceneVisible}
               />
             ))}
@@ -337,7 +375,7 @@ export function ThreeGameView({
             {staticTiles.map((placement) => (
               <TileMesh key={placement.tile.id} placement={placement} />
             ))}
-            {animations.map((animation) => (
+            {renderedAnimations.map((animation) => (
               <AnimatedTile
                 key={`${animation.tile.id}-${eventIndex}`}
                 tile={animation.tile}
@@ -1113,6 +1151,14 @@ function ceramicImpulseBuffer(context: AudioContext): AudioBuffer {
   return buffer;
 }
 
+function winningPickupControlPoint(from: Vec3, to: Vec3): Vec3 {
+  return [
+    (from[0] + to[0]) / 2,
+    Math.max(from[1], to[1]) + 0.55,
+    (from[2] + to[2]) / 2,
+  ];
+}
+
 function DiscardPhysicsTile({
   placement,
   flick,
@@ -1120,6 +1166,7 @@ function DiscardPhysicsTile({
   settings,
   onContactSound,
   onFlickStarted,
+  onPoseChange,
   visible,
 }: {
   placement: TilePlacement;
@@ -1134,6 +1181,7 @@ function DiscardPhysicsTile({
   settings: FlickDebugSettings;
   onContactSound: (payload: ContactForcePayload) => void;
   onFlickStarted: (handoffKey: string) => void;
+  onPoseChange: (tileId: string, pose: TilePose) => void;
   visible: boolean;
 }) {
   const [isActive, setIsActive] = useState(!flick);
@@ -1189,6 +1237,18 @@ function DiscardPhysicsTile({
   }, [flick, handoffKey]);
 
   useFrame(() => {
+    if (bodyRef.current && isActive) {
+      const position = bodyRef.current.translation();
+      const rotation = bodyRef.current.rotation();
+      const euler = new THREE.Euler().setFromQuaternion(
+        new THREE.Quaternion(rotation.x, rotation.y, rotation.z, rotation.w),
+      );
+      onPoseChange(placement.tile.id, {
+        position: [position.x, position.y, position.z],
+        rotation: [euler.x, euler.y, euler.z],
+      });
+    }
+
     const activeFlick = flick ?? pendingFlickRef.current;
     if (
       !activeFlick ||
