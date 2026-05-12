@@ -370,7 +370,10 @@ function DebugApp() {
 }
 
 function SimApp() {
-  const simulation = useSimulationController({ syncSeedToUrl: false });
+  const simulation = useSimulationController({
+    initialEvent: "first-setup-draw",
+    syncSeedToUrl: false,
+  });
   const isDocumentHidden = useDocumentHidden();
   const prefersReducedMotion = usePrefersReducedMotion();
   const [isCameraUserControlled, setIsCameraUserControlled] = useState(false);

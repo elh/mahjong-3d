@@ -15,8 +15,10 @@ export type EventGroup = {
 };
 
 export function useSimulationController({
+  initialEvent = "first-turn",
   syncSeedToUrl = true,
 }: {
+  initialEvent?: "first-setup-draw" | "first-turn";
   syncSeedToUrl?: boolean;
 } = {}) {
   const initialSeed = useMemo(() => seedFromUrlOrRandom(), []);
@@ -95,7 +97,7 @@ export function useSimulationController({
 
       setGenerationError(undefined);
       setGame(event.data.result);
-      setEventIndex(firstTurnEventIndex(event.data.result.events));
+      setEventIndex(initialEventIndex(event.data.result.events, initialEvent));
       setIsGenerating(false);
       worker.terminate();
       if (workerRef.current === worker) {
@@ -375,6 +377,23 @@ function groupEvents(events: readonly GameEvent[]): EventGroup[] {
     groups.set(event.groupId, group);
   });
   return [...groups.values()];
+}
+
+function initialEventIndex(
+  events: readonly GameEvent[],
+  initialEvent: "first-setup-draw" | "first-turn",
+): number {
+  if (initialEvent === "first-setup-draw") {
+    return firstSetupDrawEventIndex(events);
+  }
+  return firstTurnEventIndex(events);
+}
+
+function firstSetupDrawEventIndex(events: readonly GameEvent[]): number {
+  const index = events.findIndex(
+    (event) => event.phase === "setup" && event.type === "tilesDrawn",
+  );
+  return index === -1 ? 0 : index;
 }
 
 function firstTurnEventIndex(events: readonly GameEvent[]): number {
