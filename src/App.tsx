@@ -2,6 +2,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Info,
+  Orbit,
   RefreshCw,
   SkipBack,
 } from "lucide-react";
@@ -372,6 +373,7 @@ function SimApp() {
   const simulation = useSimulationController({ syncSeedToUrl: false });
   const isDocumentHidden = useDocumentHidden();
   const prefersReducedMotion = usePrefersReducedMotion();
+  const [isCameraUserControlled, setIsCameraUserControlled] = useState(false);
   const {
     pendingSeed,
     isGenerating,
@@ -391,6 +393,11 @@ function SimApp() {
     events[0]?.type === "roundStarted" ? events[0].seed : pendingSeed;
   const isLoadingRound = isGenerating && !generationError;
   const debugHref = appHref(`?view=debug&seed=${encodeURIComponent(roundKey)}`);
+
+  useEffect(() => {
+    void roundKey;
+    setIsCameraUserControlled(false);
+  }, [roundKey]);
 
   useEffect(() => {
     if (
@@ -462,12 +469,16 @@ function SimApp() {
           loading={isLoadingRound}
           simulatorMode
           cameraAutoRotate={!prefersReducedMotion}
+          cameraUserControlled={isCameraUserControlled}
+          onCameraUserControlChange={setIsCameraUserControlled}
           renderPaused={isDocumentHidden}
         />
       </Suspense>
       <InfoPopover
         summary={{ title: "Concealed Gang", detail: `Seed: ${roundKey}` }}
         routeLink={{ href: debugHref, label: "Debug view" }}
+        showAutoOrbitButton={isCameraUserControlled}
+        onAutoOrbitButtonClick={() => setIsCameraUserControlled(false)}
       />
     </main>
   );
@@ -512,6 +523,8 @@ function usePrefersReducedMotion(): boolean {
 function InfoPopover({
   summary,
   routeLink,
+  showAutoOrbitButton = false,
+  onAutoOrbitButtonClick,
 }: {
   summary?: {
     title: string;
@@ -521,6 +534,8 @@ function InfoPopover({
     href: string;
     label: string;
   };
+  showAutoOrbitButton?: boolean;
+  onAutoOrbitButtonClick?: () => void;
 }) {
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   const infoButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -554,6 +569,18 @@ function InfoPopover({
 
   return (
     <>
+      {showAutoOrbitButton && (
+        <button
+          type="button"
+          className="info-button auto-orbit-button"
+          aria-label="Resume auto orbit"
+          title="Resume auto orbit"
+          onClick={onAutoOrbitButtonClick}
+        >
+          <Orbit size={15} aria-hidden="true" />
+        </button>
+      )}
+
       <button
         type="button"
         className="info-button"

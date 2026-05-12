@@ -126,6 +126,8 @@ type ThreeGameViewProps = {
   loading?: boolean;
   simulatorMode?: boolean;
   cameraAutoRotate?: boolean;
+  cameraUserControlled?: boolean;
+  onCameraUserControlChange?: (isUserControlled: boolean) => void;
   renderPaused?: boolean;
 };
 
@@ -139,6 +141,8 @@ export function ThreeGameView({
   loading = false,
   simulatorMode = false,
   cameraAutoRotate = true,
+  cameraUserControlled,
+  onCameraUserControlChange,
   renderPaused = false,
 }: ThreeGameViewProps) {
   const [flickDebug, setFlickDebug] = useState(defaultFlickDebugSettings);
@@ -147,7 +151,8 @@ export function ThreeGameView({
   );
   const [soundDebug, setSoundDebug] = useState(defaultSoundDebugSettings);
   const [sceneReady, setSceneReady] = useState(false);
-  const [isCameraUserControlled, setIsCameraUserControlled] = useState(false);
+  const [internalCameraUserControlled, setInternalCameraUserControlled] =
+    useState(false);
   const lastEventIndexRef = useRef(eventIndex);
   const initialEventIndexRef = useRef(eventIndex);
   const lastRoundKeyRef = useRef(roundKey);
@@ -162,6 +167,17 @@ export function ThreeGameView({
     didMountRef.current = false;
     discardPoseByTileIdRef.current.clear();
   }
+  const isCameraUserControlled =
+    cameraUserControlled ?? internalCameraUserControlled;
+  const setIsCameraUserControlled = useCallback(
+    (isUserControlled: boolean) => {
+      if (cameraUserControlled === undefined) {
+        setInternalCameraUserControlled(isUserControlled);
+      }
+      onCameraUserControlChange?.(isUserControlled);
+    },
+    [cameraUserControlled, onCameraUserControlChange],
+  );
   const layout = useMemo(
     () =>
       createThreeTableLayout(replay, currentEvent, previousReplay, nextEvent),
@@ -270,7 +286,7 @@ export function ThreeGameView({
   useEffect(() => {
     void roundKey;
     setSceneReady(false);
-    setIsCameraUserControlled(false);
+    setInternalCameraUserControlled(false);
     let timeout: number | undefined;
     const frame = window.requestAnimationFrame(() => {
       timeout = window.setTimeout(() => setSceneReady(true), 120);
