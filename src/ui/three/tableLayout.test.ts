@@ -581,7 +581,10 @@ describe("3D table layout", () => {
     expect(previousDiscard).toBeDefined();
     expect(winningAnimation?.from).toEqual(previousDiscard!.position);
     expect(winningAnimation?.to).toEqual(winningPlacement?.position);
-    expect(winningAnimation?.motion).toBe("knockdown");
+    expect(winningAnimation?.motion).toBe("claimToss");
+    expect(winningAnimation?.via?.position[1]).toBeGreaterThan(
+      previousDiscard!.position[1],
+    );
   });
 
   test("reveals concealed kong melds when a player wins", () => {

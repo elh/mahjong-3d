@@ -879,6 +879,7 @@ function winningTileAnimations(
     const previousPlacement = previousTiles.find(
       (candidate) => candidate.tile.id === placement.tile.id,
     );
+    const claimsWinningDiscard = previousPlacement?.owner === "discard";
     return {
       tile: placement.tile,
       event,
@@ -887,7 +888,17 @@ function winningTileAnimations(
       fromRotation:
         previousPlacement?.rotation ?? playerHandTileRotation(event.player),
       toRotation: placement.rotation,
-      motion: "knockdown",
+      via:
+        claimsWinningDiscard && previousPlacement
+          ? {
+              position: raisedMidpoint(
+                previousPlacement.position,
+                placement.position,
+              ),
+              rotation: placement.rotation,
+            }
+          : undefined,
+      motion: claimsWinningDiscard ? "claimToss" : "knockdown",
     };
   });
 }
