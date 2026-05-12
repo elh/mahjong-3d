@@ -75,8 +75,6 @@ type LightingDebugSettings = {
   keyZ: number;
   cameraFillIntensity: number;
   handFaceFillIntensity: number;
-  fogNear: number;
-  fogFar: number;
   environment: boolean;
 };
 
@@ -99,16 +97,14 @@ const defaultFlickDebugSettings: FlickDebugSettings = {
 };
 
 const defaultLightingDebugSettings: LightingDebugSettings = {
-  ambientIntensity: 0.42,
-  fillIntensity: 0.32,
-  keyIntensity: 3.4,
-  keyX: -2.8,
-  keyY: 5.2,
-  keyZ: 3.1,
-  cameraFillIntensity: 0.28,
-  handFaceFillIntensity: 0.48,
-  fogNear: 8.5,
-  fogFar: 13,
+  ambientIntensity: 0.36,
+  fillIntensity: 0.48,
+  keyIntensity: 3.8,
+  keyX: -3.4,
+  keyY: 5.8,
+  keyZ: 2.6,
+  cameraFillIntensity: 0.3,
+  handFaceFillIntensity: 0.52,
   environment: false,
 };
 
@@ -310,16 +306,12 @@ export function ThreeGameView({
         dpr={[1, 1.75]}
         camera={{ position: [0, 3.05, 6.75], fov: 42, near: 0.1, far: 100 }}
       >
-        <color attach="background" args={["#131614"]} />
-        <fog
-          attach="fog"
-          args={["#131614", lightingDebug.fogNear, lightingDebug.fogFar]}
-        />
+        <color attach="background" args={["#0f1112"]} />
         <ambientLight intensity={lightingDebug.ambientIntensity} />
         <hemisphereLight
           intensity={lightingDebug.fillIntensity}
-          color="#d9f0e5"
-          groundColor="#0b1713"
+          color="#ececeb"
+          groundColor="#181b1a"
         />
         <directionalLight
           castShadow
@@ -330,6 +322,20 @@ export function ThreeGameView({
             lightingDebug.keyZ,
           ]}
           shadow-mapSize={[1024, 1024]}
+          shadow-camera-left={-4.2}
+          shadow-camera-right={4.2}
+          shadow-camera-top={4.2}
+          shadow-camera-bottom={-4.2}
+          shadow-camera-near={0.5}
+          shadow-camera-far={12}
+          shadow-bias={-0.00025}
+        />
+        <pointLight
+          intensity={0.26}
+          distance={7.5}
+          decay={2}
+          position={[2.8, 2.4, -3.2]}
+          color="#c2c7c4"
         />
         <CameraShoulderFill intensity={lightingDebug.cameraFillIntensity} />
         <HandFaceFill intensity={lightingDebug.handFaceFillIntensity} />
@@ -662,7 +668,7 @@ function CameraShoulderFill({ intensity }: { intensity: number }) {
   });
 
   return (
-    <directionalLight ref={lightRef} intensity={intensity} color="#e8fff4" />
+    <directionalLight ref={lightRef} intensity={intensity} color="#eef6ff" />
   );
 }
 
@@ -681,7 +687,7 @@ function HandFaceFill({ intensity }: { intensity: number }) {
           key={position.join(",")}
           intensity={intensity}
           position={position}
-          color="#fff8e6"
+          color="#fff6e8"
         />
       ))}
     </>
@@ -911,22 +917,6 @@ function LightingDebugControls({
         onChange={(handFaceFillIntensity) =>
           onChange({ ...settings, handFaceFillIntensity })
         }
-      />
-      <DebugSlider
-        label="Fog near"
-        value={settings.fogNear}
-        min={4}
-        max={14}
-        step={0.1}
-        onChange={(fogNear) => onChange({ ...settings, fogNear })}
-      />
-      <DebugSlider
-        label="Fog far"
-        value={settings.fogFar}
-        min={7}
-        max={20}
-        step={0.1}
-        onChange={(fogFar) => onChange({ ...settings, fogFar })}
       />
     </>
   );
@@ -2057,7 +2047,9 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
             vec3 tileIvory = vec3(0.93, 0.875, 0.74);
             vec3 tileGreen = vec3(0.032, 0.365, 0.16);
             float backMask = step(${backThreshold.toFixed(5)}, ${backDirection.toFixed(1)} * vTileLocalPosition.y);
-            vec4 diffuseColor = vec4(mix(tileIvory, tileGreen, backMask), opacity);
+            vec3 tileColor = mix(tileIvory, tileGreen, backMask);
+            tileColor = mix(tileColor, vec3(0.965, 0.925, 0.82), 0.16 * (1.0 - backMask));
+            vec4 diffuseColor = vec4(tileColor, opacity);
             `,
           );
         }}
