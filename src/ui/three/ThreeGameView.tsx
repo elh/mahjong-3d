@@ -2034,9 +2034,9 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
       smoothness={8}
     >
       <meshStandardMaterial
-        color="#ffffff"
-        roughness={0.58}
-        metalness={0.02}
+        color="#efe2c5"
+        roughness={orientation === "faceUp" ? 0.5 : 0.46}
+        metalness={0.01}
         customProgramCacheKey={() => `mahjong-tile-body-${orientation}`}
         onBeforeCompile={(shader) => {
           shader.vertexShader = shader.vertexShader.replace(
@@ -2054,8 +2054,8 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
           shader.fragmentShader = shader.fragmentShader.replace(
             "vec4 diffuseColor = vec4( diffuse, opacity );",
             `
-            vec3 tileIvory = vec3(0.953, 0.918, 0.839);
-            vec3 tileGreen = vec3(0.024, 0.439, 0.106);
+            vec3 tileIvory = vec3(0.93, 0.875, 0.74);
+            vec3 tileGreen = vec3(0.032, 0.365, 0.16);
             float backMask = step(${backThreshold.toFixed(5)}, ${backDirection.toFixed(1)} * vTileLocalPosition.y);
             vec4 diffuseColor = vec4(mix(tileIvory, tileGreen, backMask), opacity);
             `,
