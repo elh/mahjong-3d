@@ -417,6 +417,15 @@ export function ThreeGameView({
 }
 
 function TableSurface() {
+  const feltTextures = useMemo(() => createFeltTextures(), []);
+  useEffect(
+    () => () => {
+      feltTextures.color.dispose();
+      feltTextures.bump.dispose();
+    },
+    [feltTextures],
+  );
+
   return (
     <group>
       <RoundedBox
@@ -427,8 +436,11 @@ function TableSurface() {
         position={[0, -tableSlabDepth / 2, 0]}
       >
         <meshStandardMaterial
-          color="#173e35"
-          roughness={0.94}
+          color="#245f50"
+          map={feltTextures.color}
+          bumpMap={feltTextures.bump}
+          bumpScale={0.032}
+          roughness={0.98}
           metalness={0.01}
         />
       </RoundedBox>
@@ -436,6 +448,98 @@ function TableSurface() {
       <TableRail />
     </group>
   );
+}
+
+function createFeltTextures(): {
+  color: THREE.CanvasTexture;
+  bump: THREE.CanvasTexture;
+} {
+  const size = 512;
+  const colorCanvas = document.createElement("canvas");
+  colorCanvas.width = size;
+  colorCanvas.height = size;
+  const bumpCanvas = document.createElement("canvas");
+  bumpCanvas.width = size;
+  bumpCanvas.height = size;
+  const colorContext = colorCanvas.getContext("2d");
+  const bumpContext = bumpCanvas.getContext("2d");
+  if (!colorContext || !bumpContext) {
+    return {
+      color: configureRepeatingTexture(new THREE.CanvasTexture(colorCanvas), 4),
+      bump: configureRepeatingTexture(new THREE.CanvasTexture(bumpCanvas), 4),
+    };
+  }
+
+  colorContext.fillStyle = "#266454";
+  colorContext.fillRect(0, 0, size, size);
+  const image = colorContext.getImageData(0, 0, size, size);
+  const bumpImage = bumpContext.createImageData(size, size);
+  for (let index = 0; index < image.data.length; index += 4) {
+    const pixel = index / 4;
+    const x = pixel % size;
+    const y = Math.floor(pixel / size);
+    const weave =
+      Math.sin(x * 0.58) * 7 +
+      Math.sin(y * 0.72) * 6 +
+      (stableFeltNoise(x, y) - 0.5) * 28;
+    image.data[index] = clampColor(37 + weave * 1.05);
+    image.data[index + 1] = clampColor(96 + weave * 0.95);
+    image.data[index + 2] = clampColor(80 + weave * 0.85);
+    image.data[index + 3] = 255;
+
+    const bumpValue = clampColor(124 + weave * 2.1);
+    bumpImage.data[index] = bumpValue;
+    bumpImage.data[index + 1] = bumpValue;
+    bumpImage.data[index + 2] = bumpValue;
+    bumpImage.data[index + 3] = 255;
+  }
+  colorContext.putImageData(image, 0, 0);
+  bumpContext.putImageData(bumpImage, 0, 0);
+
+  colorContext.globalAlpha = 0.14;
+  colorContext.strokeStyle = "#d9f2df";
+  colorContext.lineWidth = 0.5;
+  for (let index = 0; index < 160; index += 1) {
+    const x = stableFeltNoise(index, 3) * size;
+    const y = stableFeltNoise(index, 7) * size;
+    const length = 22 + stableFeltNoise(index, 11) * 58;
+    colorContext.beginPath();
+    colorContext.moveTo(x, y);
+    colorContext.lineTo(x + length, y + (stableFeltNoise(index, 17) - 0.5) * 6);
+    colorContext.stroke();
+  }
+
+  const colorTexture = configureRepeatingTexture(
+    new THREE.CanvasTexture(colorCanvas),
+    4,
+  );
+  colorTexture.colorSpace = THREE.SRGBColorSpace;
+  const bumpTexture = configureRepeatingTexture(
+    new THREE.CanvasTexture(bumpCanvas),
+    4,
+  );
+  return { color: colorTexture, bump: bumpTexture };
+}
+
+function configureRepeatingTexture(
+  texture: THREE.CanvasTexture,
+  repeat: number,
+): THREE.CanvasTexture {
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(repeat, repeat);
+  texture.anisotropy = 8;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function stableFeltNoise(left: number, right: number): number {
+  const value = Math.sin(left * 12.9898 + right * 78.233) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+function clampColor(value: number): number {
+  return Math.max(0, Math.min(255, Math.round(value)));
 }
 
 function CenterTableMark() {
