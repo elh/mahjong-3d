@@ -13,13 +13,15 @@ import {
   type TileInstance,
   tileKey,
 } from "./tiles";
-import type { WallState } from "./wall";
+import { createWallBreak, type WallState } from "./wall";
 
 export type TestScenarioRound = {
   state: RoundState;
   events: GameEvent[];
   maxTurns: number;
 };
+
+const testScenarioWallBreakDice: [number, number, number] = [1, 2, 3];
 
 /**
  * Scripted demonstration fixture seeds for replay/UI testing.
@@ -177,7 +179,7 @@ function createConcealedKongFixture(seed: string): ScenarioFixture {
     seed,
     dealer: 0,
     hands,
-    walls: createOrderedWalls(pool, hands, 0),
+    walls: createOrderedWalls(seed, pool, hands, 0),
   };
 }
 
@@ -216,7 +218,7 @@ function createAddedKongFixture(seed: string): Required<ScenarioFixture> {
     seed,
     dealer: 3,
     hands,
-    walls: createOrderedWalls(pool, hands, 3, [addedTile]),
+    walls: createOrderedWalls(seed, pool, hands, 3, [addedTile]),
     claimedTile,
     pongHandTiles,
     addedTile,
@@ -267,7 +269,7 @@ function createRobAddedKongFixture(seed: string): Required<ScenarioFixture> {
     seed,
     dealer: 3,
     hands,
-    walls: createOrderedWalls(pool, hands, 3, [addedTile]),
+    walls: createOrderedWalls(seed, pool, hands, 3, [addedTile]),
     claimedTile,
     pongHandTiles,
     addedTile,
@@ -292,7 +294,7 @@ function createSelfDrawWinFixture(seed: string): ScenarioFixture {
     seed,
     dealer: 0,
     hands,
-    walls: createOrderedWalls(pool, hands, 0, [winningTile]),
+    walls: createOrderedWalls(seed, pool, hands, 0, [winningTile]),
   };
 }
 
@@ -331,6 +333,7 @@ function createRoundAfterSetup(fixture: ScenarioFixture): {
     type: "roundStarted",
     seed: fixture.seed,
     dealer: state.dealer,
+    wallBreak: fixture.walls.wallBreak,
     wallCount: state.wall.length,
     deadWallCount: state.deadWall.length,
     handCounts: state.players.map((player) => player.hand.length) as [
@@ -448,6 +451,7 @@ function drawLiveTile(
 }
 
 function createOrderedWalls(
+  seed: string,
   pool: TilePool,
   hands: [TileInstance[], TileInstance[], TileInstance[], TileInstance[]],
   dealer: PlayerId,
@@ -469,7 +473,11 @@ function createOrderedWalls(
       .remaining()
       .filter((tile) => !deadWall.some((dead) => dead.id === tile.id)),
   ];
-  return { wall: liveWall, deadWall };
+  return {
+    wall: liveWall,
+    deadWall,
+    wallBreak: createWallBreak(seed, dealer, testScenarioWallBreakDice),
+  };
 }
 
 function fillHands(

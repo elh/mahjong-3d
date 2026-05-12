@@ -1,5 +1,6 @@
 import type { PlayerId } from "./state";
 import type { TileInstance } from "./tiles";
+import type { WallBreak } from "./wall";
 
 type EventMeta = {
   phase: "setup" | "turn";
@@ -12,6 +13,7 @@ export type GameEvent =
       type: "roundStarted";
       seed: string;
       dealer: PlayerId;
+      wallBreak: WallBreak;
       wallCount: number;
       deadWallCount: number;
       handCounts: [number, number, number, number];

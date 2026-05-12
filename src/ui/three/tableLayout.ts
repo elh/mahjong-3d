@@ -6,7 +6,12 @@ import {
   isTestScenarioSeed,
 } from "../../sim/testScenarios";
 import { sortTiles, type TileInstance } from "../../sim/tiles";
-import { createShuffledWalls } from "../../sim/wall";
+import {
+  createShuffledWalls,
+  physicalWallSlotMap,
+  wallStackCount,
+  type WallState,
+} from "../../sim/wall";
 
 export type Vec3 = [number, number, number];
 
@@ -591,30 +596,37 @@ function wallSlotMap(seed: string): Map<string, number> {
     return cached;
   }
 
-  const shuffledWalls = isTestScenarioSeed(seed)
-    ? (createTestScenarioWalls(seed) ?? createShuffledWalls(seed))
-    : createShuffledWalls(seed);
+  if (!isTestScenarioSeed(seed)) {
+    const slots = physicalWallSlotMap(seed);
+    wallSlotCache.set(seed, slots);
+    return slots;
+  }
+
+  const shuffledWalls =
+    createTestScenarioWalls(seed) ?? createShuffledWalls(seed);
   const slots = new Map<string, number>();
-  for (const [index, tile] of shuffledWalls.wall.entries()) {
-    slots.set(tile.id, physicalWallIndexFromLiveDrawIndex(index));
-  }
-  for (const [index, tile] of shuffledWalls.deadWall.entries()) {
-    slots.set(tile.id, physicalWallIndexFromDeadDrawIndex(index));
-  }
+  applyWallStateSlots(slots, shuffledWalls);
   wallSlotCache.set(seed, slots);
   return slots;
 }
 
-function physicalWallIndexFromLiveDrawIndex(index: number): number {
-  const stackSize = wallSideTiles * 4;
-  const pairIndex = stackSize - 1 - Math.floor(index / 2);
-  return pairIndex + (index % 2 === 0 ? stackSize : 0);
-}
-
-function physicalWallIndexFromDeadDrawIndex(index: number): number {
-  const stackSize = wallSideTiles * 4;
-  const pairIndex = Math.floor(index / 2);
-  return pairIndex + (index % 2 === 0 ? stackSize : 0);
+function applyWallStateSlots(
+  slots: Map<string, number>,
+  wallState: WallState,
+): void {
+  const firstLiveStack =
+    (wallState.wallBreak.cutStack + wallStackCount - 1) % wallStackCount;
+  for (const [index, tile] of wallState.wall.entries()) {
+    const stackIndex =
+      (firstLiveStack - Math.floor(index / 2) + wallStackCount) %
+      wallStackCount;
+    slots.set(tile.id, stackIndex + (index % 2 === 0 ? wallStackCount : 0));
+  }
+  for (const [index, tile] of wallState.deadWall.entries()) {
+    const stackIndex =
+      (wallState.wallBreak.cutStack + Math.floor(index / 2)) % wallStackCount;
+    slots.set(tile.id, stackIndex + (index % 2 === 0 ? wallStackCount : 0));
+  }
 }
 
 function wallPlacement(

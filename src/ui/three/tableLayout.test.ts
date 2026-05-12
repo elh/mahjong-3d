@@ -253,7 +253,7 @@ describe("3D table layout", () => {
     expect([...stackCounts.values()].every((count) => count === 2)).toBe(true);
   });
 
-  test("draws dead wall visually from the opposite end top then bottom", () => {
+  test("draws dead wall visually from the cut end top then bottom", () => {
     const seed = "three-dead-wall-end";
     const { wall, deadWall } = createShuffledWalls(seed);
     const replay = emptyReplayState();
@@ -277,8 +277,9 @@ describe("3D table layout", () => {
     expect(firstDead!.position[0]).toBeCloseTo(secondDead!.position[0], 5);
     expect(firstDead!.position[2]).toBeCloseTo(secondDead!.position[2], 5);
     expect(firstDead!.position[1]).toBeGreaterThan(secondDead!.position[1]);
-    expect(distance(firstLive!.position, firstDead!.position)).toBeGreaterThan(
+    expect(distance(firstLive!.position, firstDead!.position)).toBeCloseTo(
       tileSize.width,
+      5,
     );
     expect(distance(firstLive!.position, firstDead!.position)).toBeLessThan(
       tileSize.width + tileSize.depth,

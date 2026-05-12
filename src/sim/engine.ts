@@ -47,11 +47,10 @@ export function createInitialRound(seed: string): {
   state: RoundState;
   events: GameEvent[];
 } {
-  const { wall, deadWall } = createShuffledWalls(seed);
   const state: RoundState = {
     players: createPlayers(),
-    wall,
-    deadWall,
+    wall: [],
+    deadWall: [],
     currentPlayer: 0,
     needsDiscard: 0,
     discardSource: "draw",
@@ -59,6 +58,9 @@ export function createInitialRound(seed: string): {
     turn: 0,
     ended: false,
   };
+  const { wall, deadWall, wallBreak } = createShuffledWalls(seed, state.dealer);
+  state.wall = wall;
+  state.deadWall = deadWall;
   const events: GameEvent[] = [];
 
   for (let packet = 0; packet < 4; packet += 1) {
@@ -78,6 +80,7 @@ export function createInitialRound(seed: string): {
     type: "roundStarted",
     seed,
     dealer: state.dealer,
+    wallBreak,
     wallCount: state.wall.length,
     deadWallCount: state.deadWall.length,
     handCounts: state.players.map((player) => player.hand.length) as [

@@ -113,7 +113,7 @@ export function eventDetail(event: GameEvent | undefined): ReactNode {
   }
   switch (event.type) {
     case "roundStarted":
-      return `${playerNames[event.dealer]} is dealer. Each player has ${event.handCounts.join(", ")} concealed tiles.`;
+      return `${playerNames[event.dealer]} is dealer. Wall break ${event.wallBreak.dice.join("+")}=${event.wallBreak.diceTotal}: ${playerNames[event.wallBreak.wallOwner]}'s wall, stack ${event.wallBreak.cutStack + 1}. Each player has ${event.handCounts.join(", ")} concealed tiles.`;
     case "tileDrawn":
       return `${event.replacement ? "Supplement draw" : "Turn draw"} from ${event.source === "deadWall" ? "dead wall" : "live wall"} with ${event.wallCount} live tiles left.`;
     case "tilesDrawn":
