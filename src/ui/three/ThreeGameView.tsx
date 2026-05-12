@@ -10,6 +10,7 @@ import {
 } from "@react-three/rapier";
 import {
   Suspense,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -30,7 +31,6 @@ import {
 
 const tileBackThickness = tileSize.height * 0.18;
 const tileCornerRadius = 0.035;
-const flickHandoffOverlapMs = 48;
 const loadedDiscardSettlingMs = 180;
 const enableTileCollisionSound = false;
 const showThreeDebugPanel = false;
@@ -148,6 +148,7 @@ export function ThreeGameView({
   const initialEventIndexRef = useRef(eventIndex);
   const lastRoundKeyRef = useRef(roundKey);
   const didMountRef = useRef(false);
+  const animatedTileHandoffsRef = useRef(new Map<string, () => void>());
   const roundChanged = roundKey !== lastRoundKeyRef.current;
   if (roundChanged) {
     lastRoundKeyRef.current = roundKey;
@@ -194,6 +195,19 @@ export function ThreeGameView({
     () => createContactSoundHandler(soundDebug),
     [soundDebug],
   );
+  const registerAnimatedTileHandoff = useCallback(
+    (handoffKey: string, hideAnimatedTile: (() => void) | undefined) => {
+      if (hideAnimatedTile) {
+        animatedTileHandoffsRef.current.set(handoffKey, hideAnimatedTile);
+        return;
+      }
+      animatedTileHandoffsRef.current.delete(handoffKey);
+    },
+    [],
+  );
+  const hideAnimatedTileForHandoff = useCallback((handoffKey: string) => {
+    animatedTileHandoffsRef.current.get(handoffKey)?.();
+  }, []);
 
   useEffect(() => {
     if (!enableTileCollisionSound) {
@@ -304,8 +318,14 @@ export function ThreeGameView({
                     : placement
                 }
                 flick={flickByTileId.get(placement.tile.id)}
+                handoffKey={
+                  flickByTileId.has(placement.tile.id)
+                    ? `${roundKey}:${eventIndex}:${placement.tile.id}`
+                    : undefined
+                }
                 settings={flickDebug}
                 onContactSound={playContactSound}
+                onFlickStarted={hideAnimatedTileForHandoff}
                 visible={sceneVisible}
               />
             ))}
@@ -327,11 +347,12 @@ export function ThreeGameView({
                 flipAxis={animation.flipAxis}
                 faceUp={animation.faceUp}
                 motion={animation.motion}
-                hideAfterMs={
+                handoffKey={
                   animation.flick
-                    ? animation.flick.delayMs + flickHandoffOverlapMs
+                    ? `${roundKey}:${eventIndex}:${animation.tile.id}`
                     : undefined
                 }
+                registerHandoff={registerAnimatedTileHandoff}
               />
             ))}
           </group>
@@ -1092,8 +1113,10 @@ function ceramicImpulseBuffer(context: AudioContext): AudioBuffer {
 function DiscardPhysicsTile({
   placement,
   flick,
+  handoffKey,
   settings,
   onContactSound,
+  onFlickStarted,
   visible,
 }: {
   placement: TilePlacement;
@@ -1104,8 +1127,10 @@ function DiscardPhysicsTile({
     angularVelocity: Vec3;
     delayMs: number;
   };
+  handoffKey?: string;
   settings: FlickDebugSettings;
   onContactSound: (payload: ContactForcePayload) => void;
+  onFlickStarted: (handoffKey: string) => void;
   visible: boolean;
 }) {
   const [isActive, setIsActive] = useState(!flick);
@@ -1114,22 +1139,27 @@ function DiscardPhysicsTile({
   );
   const didApplyFlickRef = useRef(false);
   const pendingFlickRef = useRef(flick);
+  const pendingHandoffKeyRef = useRef(handoffKey);
   const latestPlacementRef = useRef(placement);
   const initialPlacementRef = useRef(placement);
   const bodyRef = useRef<RapierRigidBody>(null);
+  const meshGroupRef = useRef<THREE.Group>(null);
   latestPlacementRef.current = placement;
 
   useEffect(() => {
     if (flick) {
       pendingFlickRef.current = flick;
+      pendingHandoffKeyRef.current = handoffKey;
       initialPlacementRef.current = latestPlacementRef.current;
       setBodyType("dynamic");
       setIsActive(false);
+      if (meshGroupRef.current) {
+        meshGroupRef.current.visible = false;
+      }
       didApplyFlickRef.current = false;
-      const timeout = window.setTimeout(
-        () => setIsActive(true),
-        Math.max(0, flick.delayMs - flickHandoffOverlapMs),
-      );
+      const timeout = window.setTimeout(() => {
+        setIsActive(true);
+      }, flick.delayMs);
       return () => window.clearTimeout(timeout);
     }
 
@@ -1139,17 +1169,21 @@ function DiscardPhysicsTile({
     }
 
     pendingFlickRef.current = undefined;
+    pendingHandoffKeyRef.current = undefined;
     if (!didApplyFlickRef.current) {
       initialPlacementRef.current = latestPlacementRef.current;
     }
     setBodyType("kinematicPosition");
     setIsActive(true);
+    if (meshGroupRef.current) {
+      meshGroupRef.current.visible = true;
+    }
     const timeout = window.setTimeout(
       () => setBodyType("dynamic"),
       loadedDiscardSettlingMs,
     );
     return () => window.clearTimeout(timeout);
-  }, [flick]);
+  }, [flick, handoffKey]);
 
   useFrame(() => {
     const activeFlick = flick ?? pendingFlickRef.current;
@@ -1163,7 +1197,6 @@ function DiscardPhysicsTile({
     }
     didApplyFlickRef.current = true;
     pendingFlickRef.current = undefined;
-    setBodyType("dynamic");
     bodyRef.current.setAngvel(
       {
         x: activeFlick.angularVelocity[0] * settings.spin,
@@ -1180,6 +1213,13 @@ function DiscardPhysicsTile({
       },
       true,
     );
+    if (meshGroupRef.current) {
+      meshGroupRef.current.visible = true;
+    }
+    if (pendingHandoffKeyRef.current) {
+      onFlickStarted(pendingHandoffKeyRef.current);
+      pendingHandoffKeyRef.current = undefined;
+    }
   });
 
   if (!isActive) {
@@ -1205,7 +1245,7 @@ function DiscardPhysicsTile({
       <CuboidCollider
         args={[tileSize.width / 2, tileSize.height / 2, tileSize.depth / 2]}
       />
-      <group visible={visible}>
+      <group ref={meshGroupRef} visible={visible && !flick}>
         <TileBlock tile={initialPlacementRef.current.tile} faceUp />
       </group>
     </RigidBody>
@@ -1223,7 +1263,8 @@ function AnimatedTile({
   flipAxis,
   faceUp = true,
   motion = "arc",
-  hideAfterMs,
+  handoffKey,
+  registerHandoff,
 }: {
   tile: TileInstance;
   from: Vec3;
@@ -1240,16 +1281,38 @@ function AnimatedTile({
   };
   flipAxis?: Vec3;
   faceUp?: boolean;
-  motion?: "arc" | "drawConcealed" | "knockdown" | "flipReveal";
-  hideAfterMs?: number;
+  motion?:
+    | "arc"
+    | "drawConcealed"
+    | "discardToss"
+    | "claimToss"
+    | "knockdown"
+    | "flipReveal";
+  handoffKey?: string;
+  registerHandoff?: (
+    handoffKey: string,
+    hideAnimatedTile: (() => void) | undefined,
+  ) => void;
 }) {
   const ref = useRef<THREE.Group>(null);
   const elapsedRef = useRef(0);
-  const [isVisible, setIsVisible] = useState(true);
   const [isDrawFaceHidden, setIsDrawFaceHidden] = useState(
     motion === "drawConcealed",
   );
   const [isFlipFaceUp, setIsFlipFaceUp] = useState(motion !== "flipReveal");
+
+  useLayoutEffect(() => {
+    if (!handoffKey || !registerHandoff) {
+      return;
+    }
+    const hideAnimatedTile = () => {
+      if (ref.current) {
+        ref.current.visible = false;
+      }
+    };
+    registerHandoff(handoffKey, hideAnimatedTile);
+    return () => registerHandoff(handoffKey, undefined);
+  }, [handoffKey, registerHandoff]);
 
   useLayoutEffect(() => {
     if (motion !== "drawConcealed") {
@@ -1268,8 +1331,24 @@ function AnimatedTile({
 
   useFrame((_, delta) => {
     const holdSeconds = (via?.holdMs ?? 0) / 1000;
-    const firstDuration = via ? 0.38 : motion === "drawConcealed" ? 0.42 : 0.64;
-    const secondDuration = via ? 0.46 : motion === "drawConcealed" ? 0.26 : 0;
+    const firstDuration =
+      motion === "discardToss"
+        ? 0.42
+        : motion === "claimToss"
+          ? 0.54
+          : via
+            ? 0.38
+            : motion === "drawConcealed"
+              ? 0.42
+              : 0.64;
+    const secondDuration =
+      motion === "discardToss" || motion === "claimToss"
+        ? 0
+        : via
+          ? 0.46
+          : motion === "drawConcealed"
+            ? 0.26
+            : 0;
     const thirdDuration = motion === "drawConcealed" ? 0.08 : 0;
     const totalDuration = firstDuration + holdSeconds + secondDuration;
     const fullDuration = totalDuration + thirdDuration;
@@ -1285,15 +1364,6 @@ function AnimatedTile({
     if (motion === "flipReveal" && !isFlipFaceUp && elapsed >= 0.32) {
       setIsFlipFaceUp(true);
     }
-    if (
-      isVisible &&
-      hideAfterMs !== undefined &&
-      elapsed >= hideAfterMs / 1000
-    ) {
-      setIsVisible(false);
-      return;
-    }
-
     if (motion === "drawConcealed") {
       const staging = drawStaging?.position ?? to;
       if (elapsed <= firstDuration) {
@@ -1380,6 +1450,25 @@ function AnimatedTile({
       return;
     }
 
+    if ((motion === "discardToss" || motion === "claimToss") && via) {
+      const duration = motion === "discardToss" ? 0.42 : 0.54;
+      const progress = clamp01(elapsed / duration);
+      const t =
+        motion === "discardToss"
+          ? easeOutQuart(progress)
+          : easeInOutCubic(progress);
+      applyBezierAnimatedTransform(
+        ref.current,
+        from,
+        via.position,
+        to,
+        fromRotation,
+        toRotation,
+        t,
+      );
+      return;
+    }
+
     if (!via) {
       const t = easeOutCubic(elapsed / firstDuration);
       const arc =
@@ -1400,7 +1489,8 @@ function AnimatedTile({
     }
 
     if (elapsed <= firstDuration) {
-      const t = easeOutCubic(elapsed / firstDuration);
+      const progress = elapsed / firstDuration;
+      const t = easeOutCubic(progress);
       const arc = Math.sin(t * Math.PI) * 0.08;
       applyAnimatedTransform(
         ref.current,
@@ -1427,9 +1517,8 @@ function AnimatedTile({
       return;
     }
 
-    const t = easeInOutCubic(
-      (elapsed - firstDuration - holdSeconds) / secondDuration,
-    );
+    const progress = (elapsed - firstDuration - holdSeconds) / secondDuration;
+    const t = easeInOutCubic(progress);
     applyAnimatedTransform(
       ref.current,
       via.position,
@@ -1440,10 +1529,6 @@ function AnimatedTile({
       0,
     );
   });
-
-  if (!isVisible) {
-    return null;
-  }
 
   return (
     <group ref={ref} position={from} rotation={fromRotation}>
@@ -1510,6 +1595,45 @@ function applyDrawTransform(
   group.quaternion.copy(fromRotation).slerp(toRotation, progress);
 }
 
+function applyBezierAnimatedTransform(
+  group: THREE.Group | null,
+  from: Vec3,
+  control: Vec3,
+  to: Vec3,
+  fromRotation: Vec3,
+  toRotation: Vec3,
+  progress: number,
+) {
+  if (!group) {
+    return;
+  }
+  const position = bezierPoint(from, control, to, progress);
+  group.position.set(position[0], position[1], position[2]);
+  group.quaternion
+    .copy(eulerToQuaternion(fromRotation))
+    .slerp(eulerToQuaternion(toRotation), progress);
+}
+
+function bezierPoint(
+  from: Vec3,
+  control: Vec3,
+  to: Vec3,
+  progress: number,
+): Vec3 {
+  const inverse = 1 - progress;
+  return [
+    inverse * inverse * from[0] +
+      2 * inverse * progress * control[0] +
+      progress * progress * to[0],
+    inverse * inverse * from[1] +
+      2 * inverse * progress * control[1] +
+      progress * progress * to[1],
+    inverse * inverse * from[2] +
+      2 * inverse * progress * control[2] +
+      progress * progress * to[2],
+  ];
+}
+
 function applyAnimatedTransform(
   group: THREE.Group | null,
   from: Vec3,
@@ -1518,7 +1642,13 @@ function applyAnimatedTransform(
   toRotation: Vec3,
   progress: number,
   arc: number,
-  motion: "arc" | "drawConcealed" | "knockdown" | "flipReveal" = "arc",
+  motion:
+    | "arc"
+    | "drawConcealed"
+    | "discardToss"
+    | "claimToss"
+    | "knockdown"
+    | "flipReveal" = "arc",
 ) {
   if (!group) {
     return;
@@ -1777,4 +1907,12 @@ function easeInOutCubic(value: number): number {
   return value < 0.5
     ? 4 * value * value * value
     : 1 - (-2 * value + 2) ** 3 / 2;
+}
+
+function easeOutQuart(value: number): number {
+  return 1 - (1 - value) ** 4;
+}
+
+function clamp01(value: number): number {
+  return Math.min(Math.max(value, 0), 1);
 }

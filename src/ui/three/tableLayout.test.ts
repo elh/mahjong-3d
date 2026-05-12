@@ -12,7 +12,6 @@ import {
   discardFlickAngularVelocity,
   discardFlickVelocity,
   playerDrawStagingPosition,
-  playerHandRowPosition,
   playerHandTileRotation,
   playerRevealedHandPosition,
   playerRight,
@@ -116,10 +115,13 @@ describe("3D table layout", () => {
         playerHandTileRotation(discardEvent.player),
       );
       expect(discardAnimation.via).toEqual({
-        position: discardFallPosition(discardEvent.player),
+        position: expect.arrayContaining([expect.any(Number)]),
         rotation: [0, discardEvent.player * (Math.PI / 2), 0],
-        holdMs: 10,
       });
+      expect(discardAnimation.motion).toBe("discardToss");
+      expect(discardAnimation.to).toEqual(
+        discardFallPosition(discardEvent.player),
+      );
       expect(discardAnimation.flick).toEqual({
         position: discardFallPosition(discardEvent.player),
         rotation: [0, discardEvent.player * (Math.PI / 2), 0],
@@ -131,7 +133,7 @@ describe("3D table layout", () => {
           discardEvent.tile,
           discardEvent.player,
         ),
-        delayMs: 390,
+        delayMs: 420,
       });
       expect(discardAnimation.flick!.angularVelocity[0]).toBe(0);
       expect(discardAnimation.flick!.angularVelocity[2]).toBe(0);
@@ -143,14 +145,27 @@ describe("3D table layout", () => {
         ),
       ).toBeGreaterThan(5.5);
       expect(discardAnimation.via!.position[1]).toBeCloseTo(
+        tileSize.height / 2 + 0.56,
+        5,
+      );
+      expect(discardAnimation.via!.position[0]).toBeCloseTo(
+        discardAnimation.to[0],
+        5,
+      );
+      expect(discardAnimation.via!.position[2]).toBeCloseTo(
+        discardAnimation.to[2],
+        5,
+      );
+      expect(discardAnimation.flick!.position[1]).toBeCloseTo(
         tileSize.height / 2 + 0.01,
         5,
       );
-      expect(discardAnimation.to[1]).toBeLessThan(
-        playerHandRowPosition(discardEvent.player, 0, 1, 3.45)[1],
-      );
       expect(discardDropPosition(discardEvent.player)[1]).toBeGreaterThan(
         discardAnimation.to[1],
+      );
+      expect(discardFallPosition(discardEvent.player)[1]).toBeCloseTo(
+        discardAnimation.to[1],
+        1,
       );
     }
   });
@@ -381,6 +396,20 @@ describe("3D table layout", () => {
       layout.tiles.find((placement) => placement.tile.id === claimed.id)
         ?.position,
     );
+    expect(claimedAnimation?.via?.position[1]).toBeCloseTo(
+      tileSize.height / 2 + 0.56,
+      5,
+    );
+    expect(claimedAnimation?.via?.position[0]).toBeCloseTo(
+      (claimedAnimation!.from[0] + claimedAnimation!.to[0]) / 2,
+      5,
+    );
+    expect(claimedAnimation?.via?.position[2]).toBeCloseTo(
+      (claimedAnimation!.from[2] + claimedAnimation!.to[2]) / 2,
+      5,
+    );
+    expect(claimedAnimation?.motion).toBe("claimToss");
+    expect(handAnimation?.via).toBeUndefined();
   });
 
   test("animates a test-seed concealed kong from hand into melds", () => {
