@@ -32,6 +32,7 @@ export const testScenarioSeeds = [
   "test-concealed-kong",
   "test-added-kong",
   "test-rob-added-kong",
+  "test-self-draw-win",
 ] as const;
 
 export type TestScenarioSeed = (typeof testScenarioSeeds)[number];
@@ -52,6 +53,9 @@ export function createTestScenarioRound(
   if (seed === "test-rob-added-kong") {
     return createRobAddedKongScenario(seed);
   }
+  if (seed === "test-self-draw-win") {
+    return createSelfDrawWinScenario(seed);
+  }
   return undefined;
 }
 
@@ -66,6 +70,9 @@ export function createTestScenarioWalls(
   }
   if (seed === "test-rob-added-kong") {
     return createRobAddedKongFixture(seed).walls;
+  }
+  if (seed === "test-self-draw-win") {
+    return createSelfDrawWinFixture(seed).walls;
   }
   return undefined;
 }
@@ -94,6 +101,20 @@ function createAddedKongScenario(seed: string): TestScenarioRound {
 function createRobAddedKongScenario(seed: string): TestScenarioRound {
   const fixture = createRobAddedKongFixture(seed);
   return createAddedKongScenarioFromFixture(fixture);
+}
+
+function createSelfDrawWinScenario(seed: string): TestScenarioRound {
+  const fixture = createSelfDrawWinFixture(seed);
+  const { state, events } = createRoundAfterSetup(fixture);
+
+  state.currentPlayer = 1;
+  state.turn = 1;
+
+  return {
+    state: cloneRoundState(state),
+    events,
+    maxTurns: 2,
+  };
 }
 
 function createAddedKongScenarioFromFixture(
@@ -251,6 +272,27 @@ function createRobAddedKongFixture(seed: string): Required<ScenarioFixture> {
     pongHandTiles,
     addedTile,
     eastDiscardAfterClaim,
+  };
+}
+
+function createSelfDrawWinFixture(seed: string): ScenarioFixture {
+  const pool = createTilePool();
+  const hands = emptyHands();
+  const winningTile = pool.take("c1", 1)[0];
+
+  hands[1] = [
+    ...pool.takeOneEach(["c2", "c3", "d1", "d2", "d3", "d4", "d5", "d6"]),
+    ...pool.takeOneEach(["b1", "b2", "b3"]),
+    ...pool.take("wind-east", 3),
+    ...pool.take("dragon-red", 2),
+  ];
+  fillHands(pool, hands, 0);
+
+  return {
+    seed,
+    dealer: 0,
+    hands,
+    walls: createOrderedWalls(pool, hands, 0, [winningTile]),
   };
 }
 

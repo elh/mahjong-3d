@@ -188,14 +188,11 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
       state.winners = Array.from(
         new Set([...(state.winners ?? []), event.player]),
       );
-      if (event.from !== undefined) {
-        const wonTile = removeWonTileFromSource(state, event.from, event.tile);
-        state.players[event.player].hand = sortTiles([
-          ...state.players[event.player].hand,
-          wonTile,
-        ]);
-        state.players[event.player].winningTile = wonTile;
-      }
+      state.players[event.player].winningTile =
+        event.from !== undefined
+          ? removeWonTileFromSource(state, event.from, event.tile)
+          : (removeTile(state.players[event.player].hand, event.tile.id) ??
+            event.tile);
       return;
     case "drawDeclared":
       state.ended = true;

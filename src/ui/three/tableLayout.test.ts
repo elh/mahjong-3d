@@ -531,7 +531,8 @@ describe("3D table layout", () => {
     previousReplay.players[1].discards = [winningTile];
 
     const replay = emptyReplayState();
-    replay.players[0].hand = [...handTiles, winningTile];
+    replay.players[0].hand = handTiles;
+    replay.players[0].winningTile = winningTile;
     replay.players[0].melds = [{ type: "pong", tiles: tiles.slice(4, 7) }];
     replay.players[0].flowers = tiles.slice(7, 9);
     const event: GameEvent = {
@@ -595,7 +596,8 @@ describe("3D table layout", () => {
 
     const replay = emptyReplayState();
     replay.ended = true;
-    replay.players[0].hand = tiles.slice(0, 4);
+    replay.players[0].hand = tiles.slice(0, 3);
+    replay.players[0].winningTile = tiles[3];
     replay.players[2].melds = [
       { type: "kong", tiles: concealedKongTiles, concealed: true },
     ];
@@ -633,6 +635,116 @@ describe("3D table layout", () => {
     expect(revealAnimations.map((animation) => animation.flipAxis)).toEqual(
       Array.from({ length: 4 }, () => playerRight(2)),
     );
+  });
+
+  test("stages a self-drawn winning tile outside the hand before reveal", () => {
+    const tiles = createTileSet();
+    const handTiles = tiles.slice(0, 3);
+    const winningTile = tiles[3];
+    const previousReplay = emptyReplayState();
+    previousReplay.wall = [winningTile];
+
+    const replay = emptyReplayState();
+    replay.players[0].hand = [...handTiles, winningTile];
+    replay.currentEvent = {
+      type: "tileDrawn",
+      phase: "turn",
+      groupId: "turn-1",
+      turn: 1,
+      player: 0,
+      tile: winningTile,
+      replacement: false,
+      source: "liveWall",
+      wallCount: 0,
+      deadWallCount: 0,
+    };
+    const winEvent: GameEvent = {
+      type: "winDeclared",
+      phase: "turn",
+      groupId: "turn-1",
+      turn: 1,
+      player: 0,
+      tile: winningTile,
+    };
+
+    const layout = createThreeTableLayout(
+      replay,
+      replay.currentEvent,
+      previousReplay,
+      winEvent,
+    );
+    const stagedPlacement = layout.tiles.find(
+      (placement) => placement.tile.id === winningTile.id,
+    );
+    const drawAnimation = layout.animations.find(
+      (animation) => animation.tile.id === winningTile.id,
+    );
+    const concealedPlacement = layout.tiles.find(
+      (placement) => placement.tile.id === handTiles[0].id,
+    );
+
+    expect(stagedPlacement?.position).toEqual(
+      drawAnimation?.drawStaging?.position,
+    );
+    expect(drawAnimation?.to).toEqual(stagedPlacement?.position);
+    expect(stagedPlacement!.position[2]).toBeLessThan(
+      concealedPlacement!.position[2],
+    );
+  });
+
+  test("moves a staged self-drawn winning tile to the side on win reveal", () => {
+    const tiles = createTileSet();
+    const handTiles = tiles.slice(0, 3);
+    const winningTile = tiles[3];
+    const drawEvent: GameEvent = {
+      type: "tileDrawn",
+      phase: "turn",
+      groupId: "turn-1",
+      turn: 1,
+      player: 0,
+      tile: winningTile,
+      replacement: false,
+      source: "liveWall",
+      wallCount: 0,
+      deadWallCount: 0,
+    };
+    const winEvent: GameEvent = {
+      type: "winDeclared",
+      phase: "turn",
+      groupId: "turn-1",
+      turn: 1,
+      player: 0,
+      tile: winningTile,
+    };
+    const previousReplay = emptyReplayState();
+    previousReplay.currentEvent = drawEvent;
+    previousReplay.players[0].hand = [...handTiles, winningTile];
+
+    const replay = emptyReplayState();
+    replay.ended = true;
+    replay.players[0].hand = handTiles;
+    replay.players[0].winningTile = winningTile;
+
+    const previousLayout = createThreeTableLayout(
+      previousReplay,
+      drawEvent,
+      undefined,
+      winEvent,
+    );
+    const layout = createThreeTableLayout(replay, winEvent, previousReplay);
+    const stagedPlacement = previousLayout.tiles.find(
+      (placement) => placement.tile.id === winningTile.id,
+    );
+    const winningPlacement = layout.tiles.find(
+      (placement) => placement.tile.id === winningTile.id,
+    );
+    const winningAnimation = layout.animations.find(
+      (animation) => animation.tile.id === winningTile.id,
+    );
+
+    expect(winningPlacement?.position).toEqual(playerWinningTilePosition(0, 3));
+    expect(winningAnimation?.from).toEqual(stagedPlacement?.position);
+    expect(winningAnimation?.to).toEqual(winningPlacement?.position);
   });
 
   test("animates a test-seed robbed kong as a win from the declarer hand", () => {

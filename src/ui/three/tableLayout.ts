@@ -100,16 +100,22 @@ export function createThreeTableLayout(
   replay: ReplayState,
   currentEvent: GameEvent | undefined,
   previousReplay?: ReplayState,
+  nextEvent?: GameEvent,
 ): ThreeTableLayout {
-  const tiles = createStaticThreeTableLayout(replay, currentEvent);
+  const tiles = createStaticThreeTableLayout(replay, currentEvent, nextEvent);
   const previousTiles = previousReplay
-    ? createStaticThreeTableLayout(previousReplay)
+    ? createStaticThreeTableLayout(
+        previousReplay,
+        previousReplay.currentEvent,
+        currentEvent,
+      )
     : [];
   const animations = currentEventAnimations(
     tiles,
     previousTiles,
     replay,
     currentEvent,
+    nextEvent,
   );
   return { tiles, animations };
 }
@@ -117,7 +123,9 @@ export function createThreeTableLayout(
 function createStaticThreeTableLayout(
   replay: ReplayState,
   currentEvent?: GameEvent,
+  nextEvent?: GameEvent,
 ): TilePlacement[] {
+  const stagedDraw = stagedWinningDraw(currentEvent, nextEvent);
   const tiles: TilePlacement[] = [
     ...layoutWall(replay.wall, "wall", replay.seed),
     ...layoutWall(replay.deadWall, "deadWall", replay.seed),
@@ -127,7 +135,7 @@ function createStaticThreeTableLayout(
         ? [
             ...layoutWinningPlayerArea(
               player.hand,
-              currentEvent.tile,
+              player.winningTile ?? currentEvent.tile,
               player.id,
             ),
             ...layoutPlayerAuxiliaryRow(
@@ -137,13 +145,22 @@ function createStaticThreeTableLayout(
               replay.ended,
             ),
           ]
-        : layoutPlayerArea(
-            player.hand,
-            player.melds,
-            player.flowers,
-            player.id,
-            replay.ended,
-          )),
+        : stagedDraw?.player === player.id
+          ? layoutPlayerAreaWithStagedDraw(
+              player.hand,
+              stagedDraw.tile,
+              player.melds,
+              player.flowers,
+              player.id,
+              replay.ended,
+            )
+          : layoutPlayerArea(
+              player.hand,
+              player.melds,
+              player.flowers,
+              player.id,
+              replay.ended,
+            )),
       ...layoutDiscards(player.discards, player.id),
     ]),
   ];
@@ -312,6 +329,38 @@ function layoutPlayerArea(
 ): TilePlacement[] {
   return [
     ...layoutPlayerRow(hand, player, "hand", handRadius, 0),
+    ...layoutPlayerAuxiliaryRow(melds, flowers, player, revealConcealedKongs),
+  ];
+}
+
+function layoutPlayerAreaWithStagedDraw(
+  hand: readonly TileInstance[],
+  stagedTile: TileInstance,
+  melds: readonly Meld[],
+  flowers: readonly TileInstance[],
+  player: PlayerId,
+  revealConcealedKongs: boolean,
+): TilePlacement[] {
+  const concealedHand = removeFirstTileById(hand, stagedTile.id);
+  const sortedHand = sortTiles(hand);
+  const sortedIndex = sortedHand.findIndex((tile) => tile.id === stagedTile.id);
+  const finalHandPosition = playerHandRowPosition(
+    player,
+    sortedIndex === -1 ? sortedHand.length : sortedIndex,
+    sortedHand.length,
+    handRadius,
+  );
+  return [
+    ...layoutPlayerRow(concealedHand, player, "hand", handRadius, 0),
+    {
+      tile: stagedTile,
+      owner: "hand",
+      player,
+      position: playerDrawStagingPosition(player, finalHandPosition),
+      rotation: playerHandTileRotation(player),
+      faceUp: true,
+      physics: false,
+    },
     ...layoutPlayerAuxiliaryRow(melds, flowers, player, revealConcealedKongs),
   ];
 }
@@ -563,6 +612,7 @@ function currentEventAnimations(
   previousTiles: readonly TilePlacement[],
   replay: ReplayState,
   event: GameEvent | undefined,
+  nextEvent: GameEvent | undefined,
 ): TileAnimation[] {
   if (event?.type === "tileDrawn" || event?.type === "tilesDrawn") {
     const eventTiles = event.type === "tileDrawn" ? [event.tile] : event.tiles;
@@ -576,6 +626,13 @@ function currentEventAnimations(
       const finalPosition =
         finalPlacement?.position ??
         playerHandRowPosition(event.player, 0, 1, handRadius);
+      const drawStaging = playerDrawStagingPosition(
+        event.player,
+        finalPosition,
+      );
+      const stagesWinningDraw =
+        event.type === "tileDrawn" &&
+        stagedWinningDraw(event, nextEvent)?.tile.id === tile.id;
       return {
         tile,
         event,
@@ -589,7 +646,7 @@ function currentEventAnimations(
         toRotation:
           finalPlacement?.rotation ?? playerHandTileRotation(event.player),
         drawStaging: {
-          position: playerDrawStagingPosition(event.player, finalPosition),
+          position: stagesWinningDraw ? finalPosition : drawStaging,
         },
         motion: "drawConcealed",
       };
@@ -833,6 +890,22 @@ function winningTileAnimations(
       motion: "knockdown",
     };
   });
+}
+
+function stagedWinningDraw(
+  event: GameEvent | undefined,
+  nextEvent: GameEvent | undefined,
+): Extract<GameEvent, { type: "tileDrawn" }> | undefined {
+  if (
+    event?.type !== "tileDrawn" ||
+    nextEvent?.type !== "winDeclared" ||
+    nextEvent.player !== event.player ||
+    nextEvent.from !== undefined ||
+    nextEvent.tile.id !== event.tile.id
+  ) {
+    return undefined;
+  }
+  return event;
 }
 
 function removeFirstTileById(

@@ -99,6 +99,7 @@ function DebugApp() {
     () => (eventIndex > 0 ? replayEvents(events, eventIndex - 1) : undefined),
     [events, eventIndex],
   );
+  const nextEvent = events[eventIndex + 1];
   const roundKey =
     events[0]?.type === "roundStarted" ? events[0].seed : pendingSeed;
   const isLoadingRound = isGenerating && !generationError;
@@ -251,6 +252,7 @@ function DebugApp() {
             replay={replay}
             previousReplay={previousReplay}
             currentEvent={currentEvent}
+            nextEvent={nextEvent}
             eventIndex={eventIndex}
             roundKey={roundKey}
             loading={isLoadingRound}
@@ -327,6 +329,11 @@ function DebugApp() {
                       highlightedTileIds={highlightedTileIds}
                     />
                     <TileGroup
+                      title="Winning Tile"
+                      tiles={player.winningTile ? [player.winningTile] : []}
+                      highlightedTileIds={highlightedTileIds}
+                    />
+                    <TileGroup
                       title="Melds"
                       tiles={player.melds.flatMap((meld) => meld.tiles)}
                       highlightedTileIds={highlightedTileIds}
@@ -379,6 +386,7 @@ function SimApp() {
     () => (eventIndex > 0 ? replayEvents(events, eventIndex - 1) : undefined),
     [events, eventIndex],
   );
+  const nextEvent = events[eventIndex + 1];
   const roundKey =
     events[0]?.type === "roundStarted" ? events[0].seed : pendingSeed;
   const isLoadingRound = isGenerating && !generationError;
@@ -448,6 +456,7 @@ function SimApp() {
           replay={replay}
           previousReplay={previousReplay}
           currentEvent={currentEvent}
+          nextEvent={nextEvent}
           eventIndex={eventIndex}
           roundKey={roundKey}
           loading={isLoadingRound}

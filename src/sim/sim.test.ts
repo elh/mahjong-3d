@@ -492,8 +492,14 @@ describe("simulation", () => {
     expect(replay.players[0].discards.map((tile) => tile.id)).not.toContain(
       discard.id,
     );
-    expect(replay.players[1].hand.map((tile) => tile.id)).toContain(discard.id);
-    expect(replay.players[2].hand.map((tile) => tile.id)).toContain(discard.id);
+    expect(replay.players[1].hand.map((tile) => tile.id)).not.toContain(
+      discard.id,
+    );
+    expect(replay.players[2].hand.map((tile) => tile.id)).not.toContain(
+      discard.id,
+    );
+    expect(replay.players[1].winningTile?.id).toBe(discard.id);
+    expect(replay.players[2].winningTile?.id).toBe(discard.id);
   });
 
   test("uses a draw event as the final event for non-winning rounds", () => {
@@ -614,6 +620,37 @@ describe("simulation", () => {
     expect(result.finalState.winners).toEqual([0]);
     expect(result.events.some((event) => event.type === "tileDiscarded")).toBe(
       false,
+    );
+    expect(
+      result.finalState.players[0].hand.map((tile) => tile.id),
+    ).not.toContain(result.finalState.players[0].winningTile?.id);
+  });
+
+  test("separates a self-drawn winning tile from the replayed hand", () => {
+    const pick = tilePicker();
+    const state = emptyRoundState();
+    const drawn = pick("c1", 1)[0];
+    state.currentPlayer = 1;
+    state.players[1].hand = discardWinWait(pick, "wind-east", "dragon-red");
+    state.wall = [drawn];
+
+    const result = simulateRoundFromState({
+      seed: "self-draw-win",
+      state,
+      bots: createBaselineBots(),
+      maxTurns: 1,
+    });
+    const win = result.events.at(-1);
+    const replay = replayEvents(result.events);
+
+    expect(win?.type).toBe("winDeclared");
+    expect(result.finalState.players[1].winningTile?.id).toBe(drawn.id);
+    expect(
+      result.finalState.players[1].hand.map((tile) => tile.id),
+    ).not.toContain(drawn.id);
+    expect(replay.players[1].winningTile?.id).toBe(drawn.id);
+    expect(replay.players[1].hand.map((tile) => tile.id)).not.toContain(
+      drawn.id,
     );
   });
 
@@ -852,6 +889,11 @@ describe("simulation", () => {
       expect(win.tile.id).toBe(robbedTile.id);
     }
     expect(result.finalState.players[1].winningTile?.id).toBe(robbedTile.id);
+    const replay = replayEvents(result.events);
+    expect(replay.players[1].winningTile?.id).toBe(robbedTile.id);
+    expect(replay.players[1].hand.map((tile) => tile.id)).not.toContain(
+      robbedTile.id,
+    );
   });
 
   test("test-rob-added-kong demonstrates robbing an added kong", () => {
@@ -891,6 +933,31 @@ describe("simulation", () => {
       expect(win.from).toBe(0);
     }
     expect(result.finalState.players[1].winningTile).toBeDefined();
+  });
+
+  test("test-self-draw-win demonstrates a self-drawn win", () => {
+    const result = simulateTestScenarioRound("test-self-draw-win");
+    const drawIndex = result.events.findIndex(
+      (event) =>
+        event.type === "tileDrawn" &&
+        event.phase === "turn" &&
+        event.player === 1,
+    );
+    const draw = result.events[drawIndex];
+    const win = result.events[drawIndex + 1];
+    const replay = replayEvents(result.events);
+
+    expect(draw?.type).toBe("tileDrawn");
+    expect(win?.type).toBe("winDeclared");
+    if (draw?.type === "tileDrawn" && win?.type === "winDeclared") {
+      expect(win.player).toBe(1);
+      expect(win.from).toBeUndefined();
+      expect(win.tile.id).toBe(draw.tile.id);
+      expect(replay.players[1].winningTile?.id).toBe(draw.tile.id);
+      expect(replay.players[1].hand.map((tile) => tile.id)).not.toContain(
+        draw.tile.id,
+      );
+    }
   });
 
   test("records flower exposure explicitly and replays it", () => {
@@ -982,8 +1049,7 @@ function emptyRoundState(): RoundState {
 function expectedReplayHandIds(
   player: RoundState["players"][number],
 ): string[] {
-  const handIds = player.hand.map((tile) => tile.id);
-  return player.winningTile ? [...handIds, player.winningTile.id] : handIds;
+  return player.hand.map((tile) => tile.id);
 }
 
 function tilesForStartingWin(pick: TilePicker): TileInstance[] {

@@ -232,14 +232,17 @@ function playTurn(
         (state.turn === 0 && mustDiscard && playerId === state.dealer)) &&
       isWinningHand(player.hand, player.melds)
     ) {
+      const winningTile = drawn ?? startingHandWinTile(player.hand);
       state.winner = playerId;
       state.winners = [playerId];
+      player.winningTile = winningTile;
       events.push({
         ...eventMeta("turn", state.turn),
         type: "winDeclared",
         player: playerId,
-        tile: drawn ?? startingHandWinTile(player.hand),
+        tile: winningTile,
       });
+      removeTile(player.hand, winningTile.id);
       endRound(state, events, "win");
       break;
     }

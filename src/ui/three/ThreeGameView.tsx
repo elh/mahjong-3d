@@ -118,6 +118,7 @@ type ThreeGameViewProps = {
   replay: ReplayState;
   previousReplay: ReplayState | undefined;
   currentEvent: GameEvent | undefined;
+  nextEvent: GameEvent | undefined;
   eventIndex: number;
   roundKey: string;
   loading?: boolean;
@@ -130,6 +131,7 @@ export function ThreeGameView({
   replay,
   previousReplay,
   currentEvent,
+  nextEvent,
   eventIndex,
   roundKey,
   loading = false,
@@ -157,8 +159,9 @@ export function ThreeGameView({
     didMountRef.current = false;
   }
   const layout = useMemo(
-    () => createThreeTableLayout(replay, currentEvent, previousReplay),
-    [replay, currentEvent, previousReplay],
+    () =>
+      createThreeTableLayout(replay, currentEvent, previousReplay, nextEvent),
+    [replay, currentEvent, previousReplay, nextEvent],
   );
   const requiredTileTextureUrls = useMemo(() => allTileImageUrls(), []);
   const tileFacesReady = useTileTexturesReady(requiredTileTextureUrls);
