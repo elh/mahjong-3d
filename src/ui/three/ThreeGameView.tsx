@@ -129,6 +129,8 @@ type ThreeGameViewProps = {
   cameraUserControlled?: boolean;
   onCameraUserControlChange?: (isUserControlled: boolean) => void;
   renderPaused?: boolean;
+  suppressLoadingOverlay?: boolean;
+  preserveSceneOnRoundChange?: boolean;
 };
 
 export function ThreeGameView({
@@ -144,6 +146,8 @@ export function ThreeGameView({
   cameraUserControlled,
   onCameraUserControlChange,
   renderPaused = false,
+  suppressLoadingOverlay = false,
+  preserveSceneOnRoundChange = false,
 }: ThreeGameViewProps) {
   const [flickDebug, setFlickDebug] = useState(defaultFlickDebugSettings);
   const [lightingDebug, setLightingDebug] = useState(
@@ -156,10 +160,12 @@ export function ThreeGameView({
   const lastEventIndexRef = useRef(eventIndex);
   const initialEventIndexRef = useRef(eventIndex);
   const lastRoundKeyRef = useRef(roundKey);
+  const preserveSceneOnRoundChangeRef = useRef(preserveSceneOnRoundChange);
   const didMountRef = useRef(false);
   const animatedTileHandoffsRef = useRef(new Map<string, () => void>());
   const discardPoseByTileIdRef = useRef(new Map<string, TilePose>());
   const roundChanged = roundKey !== lastRoundKeyRef.current;
+  preserveSceneOnRoundChangeRef.current = preserveSceneOnRoundChange;
   if (roundChanged) {
     lastRoundKeyRef.current = roundKey;
     initialEventIndexRef.current = eventIndex;
@@ -186,7 +192,10 @@ export function ThreeGameView({
   const requiredTileTextureUrls = useMemo(() => allTileImageUrls(), []);
   const tileFacesReady = useTileTexturesReady(requiredTileTextureUrls);
   const sceneVisible =
-    sceneReady && tileFacesReady && !roundChanged && !loading;
+    sceneReady &&
+    tileFacesReady &&
+    (!roundChanged || preserveSceneOnRoundChange) &&
+    !loading;
   const shouldAnimateEvent =
     didMountRef.current && eventIndex !== lastEventIndexRef.current;
   const shouldAnimateInitialEvent =
@@ -285,6 +294,9 @@ export function ThreeGameView({
 
   useEffect(() => {
     void roundKey;
+    if (preserveSceneOnRoundChangeRef.current) {
+      return;
+    }
     setSceneReady(false);
     setInternalCameraUserControlled(false);
     let timeout: number | undefined;
@@ -311,7 +323,7 @@ export function ThreeGameView({
           onSoundChange={setSoundDebug}
         />
       ) : null}
-      {!sceneVisible ? (
+      {!sceneVisible && !suppressLoadingOverlay ? (
         <div className="three-loading-overlay" aria-live="polite">
           Loading...
         </div>

@@ -14,6 +14,11 @@ export type EventGroup = {
   events: { event: GameEvent; index: number }[];
 };
 
+type QueuedRound = {
+  seed: string;
+  result: SimulateRoundResult;
+};
+
 export function useSimulationController({
   initialEvent = "first-turn",
   syncSeedToUrl = true,
@@ -25,12 +30,16 @@ export function useSimulationController({
   const [seedInput, setSeedInput] = useState(initialSeed);
   const [pendingSeed, setPendingSeed] = useState(initialSeed);
   const [game, setGame] = useState<SimulateRoundResult | undefined>();
+  const [queuedRound, setQueuedRound] = useState<QueuedRound | undefined>();
+  const [isPreloadingNextRound, setIsPreloadingNextRound] = useState(false);
   const [isGenerating, setIsGenerating] = useState(true);
   const [generationError, setGenerationError] = useState<string | undefined>();
   const [eventIndex, setEventIndex] = useState(0);
   const [isScrubbingEvent, setIsScrubbingEvent] = useState(false);
   const requestIdRef = useRef(0);
   const workerRef = useRef<Worker | null>(null);
+  const queuedRoundRef = useRef<QueuedRound | undefined>(undefined);
+  const isPreloadingNextRoundRef = useRef(false);
   const holdDelayRef = useRef<number | undefined>(undefined);
   const holdIntervalRef = useRef<number | undefined>(undefined);
   const stepFrameRef = useRef<number | undefined>(undefined);
@@ -39,6 +48,9 @@ export function useSimulationController({
   const scrubIdleTimeoutRef = useRef<number | undefined>(undefined);
   const scrubEventIndexRef = useRef<number | undefined>(undefined);
   const suppressStepClickRef = useRef(false);
+  const preloadRequestIdRef = useRef(0);
+  const preloadWorkerRef = useRef<Worker | null>(null);
+  const preloadRetryTimeoutRef = useRef<number | undefined>(undefined);
   const events = game?.events ?? [];
   const replay = useMemo(
     () => replayEvents(events, eventIndex),
@@ -70,6 +82,9 @@ export function useSimulationController({
       window.removeEventListener("popstate", syncSeedFromHistory);
       workerRef.current?.terminate();
       workerRef.current = null;
+      preloadWorkerRef.current?.terminate();
+      preloadWorkerRef.current = null;
+      clearPreloadRetry();
       clearEventHold();
       clearPendingStep();
       clearEventScrub({ updateState: false });
@@ -118,6 +133,72 @@ export function useSimulationController({
     return worker;
   }
 
+  function createPreloadWorker() {
+    preloadWorkerRef.current?.terminate();
+    const worker = new Worker(
+      new URL("../sim/simulationWorker.ts", import.meta.url),
+      {
+        type: "module",
+      },
+    );
+    worker.onmessage = (event: MessageEvent<SimulationResponse>) => {
+      if (event.data.requestId !== preloadRequestIdRef.current) {
+        return;
+      }
+
+      worker.terminate();
+      if (preloadWorkerRef.current === worker) {
+        preloadWorkerRef.current = null;
+      }
+
+      if (event.data.status === "error") {
+        retryPreloadNextRound();
+        return;
+      }
+
+      setQueuedPreloadRound({
+        seed: event.data.result.seed,
+        result: event.data.result,
+      });
+      setNextRoundPreloading(false);
+    };
+    worker.onerror = () => {
+      worker.terminate();
+      if (preloadWorkerRef.current === worker) {
+        preloadWorkerRef.current = null;
+      }
+      retryPreloadNextRound();
+    };
+    preloadWorkerRef.current = worker;
+    return worker;
+  }
+
+  const setQueuedPreloadRound = useCallback(
+    (round: QueuedRound | undefined) => {
+      queuedRoundRef.current = round;
+      setQueuedRound(round);
+    },
+    [],
+  );
+
+  const setNextRoundPreloading = useCallback((isPreloading: boolean) => {
+    isPreloadingNextRoundRef.current = isPreloading;
+    setIsPreloadingNextRound(isPreloading);
+  }, []);
+
+  function startNextRoundPreload() {
+    clearPreloadRetry();
+    const seed = randomSeed();
+    const requestId = preloadRequestIdRef.current + 1;
+    preloadRequestIdRef.current = requestId;
+    setNextRoundPreloading(true);
+    const worker = createPreloadWorker();
+    worker.postMessage({
+      requestId,
+      seed,
+    } satisfies SimulationRequest);
+  }
+
   function queueSimulation(
     seed: string,
     options: { replaceUrl?: boolean } = {},
@@ -130,6 +211,11 @@ export function useSimulationController({
     }
     setSeedInput(nextSeed);
     setPendingSeed(nextSeed);
+    setQueuedPreloadRound(undefined);
+    setNextRoundPreloading(false);
+    preloadWorkerRef.current?.terminate();
+    preloadWorkerRef.current = null;
+    clearPreloadRetry();
     setIsGenerating(true);
     setGenerationError(undefined);
     clearPendingStep();
@@ -139,6 +225,33 @@ export function useSimulationController({
       requestId,
       seed: nextSeed,
     } satisfies SimulationRequest);
+  }
+
+  const clearPreloadRetry = useCallback(() => {
+    if (preloadRetryTimeoutRef.current !== undefined) {
+      window.clearTimeout(preloadRetryTimeoutRef.current);
+      preloadRetryTimeoutRef.current = undefined;
+    }
+  }, []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: preload state is guarded through refs so retry callbacks never close over stale state.
+  const preloadNextRound = useCallback(() => {
+    if (queuedRoundRef.current || isPreloadingNextRoundRef.current) {
+      return;
+    }
+    startNextRoundPreload();
+  }, []);
+
+  function retryPreloadNextRound() {
+    setQueuedPreloadRound(undefined);
+    setNextRoundPreloading(false);
+    clearPreloadRetry();
+    preloadRetryTimeoutRef.current = window.setTimeout(() => {
+      preloadRetryTimeoutRef.current = undefined;
+      if (!queuedRoundRef.current && !isPreloadingNextRoundRef.current) {
+        startNextRoundPreload();
+      }
+    }, 800);
   }
 
   function newSeed() {
@@ -185,6 +298,30 @@ export function useSimulationController({
     }
     pendingStepDeltaRef.current = 0;
   }, []);
+
+  const promoteQueuedRound = useCallback(() => {
+    if (!queuedRound) {
+      return false;
+    }
+    clearPendingStep();
+    clearEventScrub();
+    clearPreloadRetry();
+    setSeedInput(queuedRound.seed);
+    setPendingSeed(queuedRound.seed);
+    setGame(queuedRound.result);
+    setEventIndex(initialEventIndex(queuedRound.result.events, initialEvent));
+    setQueuedPreloadRound(undefined);
+    setNextRoundPreloading(false);
+    return true;
+  }, [
+    clearEventScrub,
+    clearPendingStep,
+    clearPreloadRetry,
+    initialEvent,
+    queuedRound,
+    setNextRoundPreloading,
+    setQueuedPreloadRound,
+  ]);
 
   const stepEvent = useCallback(
     (direction: -1 | 1) => {
@@ -297,9 +434,13 @@ export function useSimulationController({
     highlightedTileIds,
     canStepPrevious,
     canStepNext,
+    hasQueuedNextRound: queuedRound !== undefined,
+    isPreloadingNextRound,
     newSeed,
     restart,
     startTypedSeed,
+    preloadNextRound,
+    promoteQueuedRound,
     stepEvent,
     jumpToEventIndex,
     scrubToEventIndex,

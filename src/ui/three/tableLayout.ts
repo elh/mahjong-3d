@@ -129,42 +129,68 @@ function createStaticThreeTableLayout(
   const tiles: TilePlacement[] = [
     ...layoutWall(replay.wall, "wall", replay.seed),
     ...layoutWall(replay.deadWall, "deadWall", replay.seed),
-    ...replay.players.flatMap((player) => [
-      ...(currentEvent?.type === "winDeclared" &&
-      currentEvent.player === player.id
-        ? [
-            ...layoutWinningPlayerArea(
-              player.hand,
-              player.winningTile ?? currentEvent.tile,
-              player.id,
-            ),
-            ...layoutPlayerAuxiliaryRow(
-              player.melds,
-              player.flowers,
-              player.id,
-              replay.ended,
-            ),
-          ]
-        : stagedDraw?.player === player.id
-          ? layoutPlayerAreaWithStagedDraw(
-              player.hand,
-              stagedDraw.tile,
-              player.melds,
-              player.flowers,
-              player.id,
-              replay.ended,
-            )
-          : layoutPlayerArea(
-              player.hand,
-              player.melds,
-              player.flowers,
-              player.id,
-              replay.ended,
-            )),
-      ...layoutDiscards(player.discards, player.id),
-    ]),
+    ...replay.players.flatMap((player) => {
+      const revealedWinningTile = winningRevealTile(
+        replay,
+        currentEvent,
+        player.id,
+      );
+      return [
+        ...(revealedWinningTile
+          ? [
+              ...layoutWinningPlayerArea(
+                player.hand,
+                revealedWinningTile,
+                player.id,
+              ),
+              ...layoutPlayerAuxiliaryRow(
+                player.melds,
+                player.flowers,
+                player.id,
+                replay.ended,
+              ),
+            ]
+          : stagedDraw?.player === player.id
+            ? layoutPlayerAreaWithStagedDraw(
+                player.hand,
+                stagedDraw.tile,
+                player.melds,
+                player.flowers,
+                player.id,
+                replay.ended,
+              )
+            : layoutPlayerArea(
+                player.hand,
+                player.melds,
+                player.flowers,
+                player.id,
+                replay.ended,
+              )),
+        ...layoutDiscards(player.discards, player.id),
+      ];
+    }),
   ];
   return tiles;
+}
+
+function winningRevealTile(
+  replay: ReplayState,
+  currentEvent: GameEvent | undefined,
+  player: PlayerId,
+): TileInstance | undefined {
+  if (currentEvent?.type === "winDeclared" && currentEvent.player === player) {
+    return replay.players[player].winningTile ?? currentEvent.tile;
+  }
+
+  const replayPlayer = replay.players[player];
+  if (
+    replay.ended &&
+    replayPlayer.winningTile !== undefined &&
+    currentEvent?.type !== "winDeclared"
+  ) {
+    return replayPlayer.winningTile;
+  }
+  return undefined;
 }
 
 export function playerAngle(player: PlayerId): number {

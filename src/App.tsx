@@ -11,6 +11,11 @@ import { replayEvents } from "./sim/replay";
 import { EventLog } from "./ui/EventLog";
 import { eventDetail, eventTitle } from "./ui/eventText";
 import { InfoModal } from "./ui/InfoModal";
+import {
+  infiniteRoundFadeMs,
+  infiniteRoundSwapMs,
+  nextRoundPromotionDelayMs,
+} from "./ui/infinitePlayback";
 import { playerNames } from "./ui/playerNames";
 import { TileGroup } from "./ui/TileGroup";
 import { useSimulationController } from "./ui/useSimulationController";
@@ -377,6 +382,8 @@ function SimApp() {
   const isDocumentHidden = useDocumentHidden();
   const prefersReducedMotion = usePrefersReducedMotion();
   const [isCameraUserControlled, setIsCameraUserControlled] = useState(false);
+  const [isRoundTransitioning, setIsRoundTransitioning] = useState(false);
+  const terminalReachedAtRef = useRef<number | undefined>(undefined);
   const {
     pendingSeed,
     isGenerating,
@@ -385,7 +392,10 @@ function SimApp() {
     events,
     replay,
     currentEvent,
+    hasQueuedNextRound,
     stepEvent,
+    preloadNextRound,
+    promoteQueuedRound,
   } = simulation;
   const previousReplay = useMemo(
     () => (eventIndex > 0 ? replayEvents(events, eventIndex - 1) : undefined),
@@ -396,11 +406,63 @@ function SimApp() {
     events[0]?.type === "roundStarted" ? events[0].seed : pendingSeed;
   const isLoadingRound = isGenerating && !generationError;
   const debugHref = appHref(`?view=debug&seed=${encodeURIComponent(roundKey)}`);
+  const isAtRoundEnd = events.length > 0 && eventIndex >= events.length - 1;
 
   useEffect(() => {
-    void roundKey;
-    setIsCameraUserControlled(false);
-  }, [roundKey]);
+    if (isLoadingRound || generationError || !isAtRoundEnd) {
+      terminalReachedAtRef.current = undefined;
+      setIsRoundTransitioning(false);
+      return;
+    }
+
+    terminalReachedAtRef.current ??= Date.now();
+    preloadNextRound();
+  }, [generationError, isAtRoundEnd, isLoadingRound, preloadNextRound]);
+
+  useEffect(() => {
+    if (
+      isDocumentHidden ||
+      !isAtRoundEnd ||
+      !hasQueuedNextRound ||
+      terminalReachedAtRef.current === undefined
+    ) {
+      return;
+    }
+
+    const remainingHoldMs = nextRoundPromotionDelayMs({
+      isAtRoundEnd,
+      hasQueuedNextRound,
+      isDocumentHidden,
+      terminalReachedAt: terminalReachedAtRef.current,
+      now: Date.now(),
+    });
+    if (remainingHoldMs === undefined) {
+      return;
+    }
+    let promoteTimeout: number | undefined;
+    let clearFadeTimeout: number | undefined;
+    const transitionTimeout = window.setTimeout(() => {
+      setIsRoundTransitioning(true);
+      promoteTimeout = window.setTimeout(() => {
+        if (promoteQueuedRound()) {
+          terminalReachedAtRef.current = undefined;
+        }
+      }, infiniteRoundSwapMs);
+      clearFadeTimeout = window.setTimeout(() => {
+        setIsRoundTransitioning(false);
+      }, infiniteRoundFadeMs);
+    }, remainingHoldMs);
+
+    return () => {
+      window.clearTimeout(transitionTimeout);
+      if (promoteTimeout !== undefined) {
+        window.clearTimeout(promoteTimeout);
+      }
+      if (clearFadeTimeout !== undefined) {
+        window.clearTimeout(clearFadeTimeout);
+      }
+    };
+  }, [hasQueuedNextRound, isAtRoundEnd, isDocumentHidden, promoteQueuedRound]);
 
   useEffect(() => {
     if (
@@ -475,8 +537,18 @@ function SimApp() {
           cameraUserControlled={isCameraUserControlled}
           onCameraUserControlChange={setIsCameraUserControlled}
           renderPaused={isDocumentHidden}
+          suppressLoadingOverlay={isRoundTransitioning}
+          preserveSceneOnRoundChange={isRoundTransitioning}
         />
       </Suspense>
+      <div
+        className={
+          isRoundTransitioning
+            ? "round-transition-overlay active"
+            : "round-transition-overlay"
+        }
+        aria-hidden="true"
+      />
       <InfoPopover
         summary={{ title: "Concealed Gang", detail: `Seed: ${roundKey}` }}
         routeLink={{ href: debugHref, label: "Debug view" }}
