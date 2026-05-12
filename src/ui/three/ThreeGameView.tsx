@@ -680,28 +680,24 @@ function clampColor(value: number): number {
 }
 
 function CenterTableMark() {
-  const texture = useMemo(() => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 512;
-    canvas.height = 512;
-    const context = canvas.getContext("2d");
-    if (!context) {
-      return undefined;
-    }
+  const [texture, setTexture] = useState<THREE.Texture>();
 
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = "rgba(255, 255, 244, 0.22)";
-    context.textAlign = "center";
-    context.textBaseline = "middle";
-    context.font =
-      '410px "Songti SC", "Songti TC", "STSong", "Noto Serif CJK TC", "Noto Serif TC", "Source Han Serif TC", "PMingLiU", serif';
-    context.fillText("黃", canvas.width / 2, canvas.height / 2 + 8);
-
-    const canvasTexture = new THREE.CanvasTexture(canvas);
-    canvasTexture.colorSpace = THREE.SRGBColorSpace;
-    canvasTexture.anisotropy = 4;
-    canvasTexture.needsUpdate = true;
-    return canvasTexture;
+  useEffect(() => {
+    let isMounted = true;
+    const loader = new THREE.TextureLoader();
+    loader.load(`${import.meta.env.BASE_URL ?? "/"}marks/huang.svg`, (mark) => {
+      if (!isMounted) {
+        mark.dispose();
+        return;
+      }
+      mark.colorSpace = THREE.SRGBColorSpace;
+      mark.anisotropy = 4;
+      mark.needsUpdate = true;
+      setTexture(mark);
+    });
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => () => texture?.dispose(), [texture]);
@@ -711,8 +707,8 @@ function CenterTableMark() {
   }
 
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, -0.28]}>
-      <planeGeometry args={[3.12, 3.12]} />
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, -0.12]}>
+      <planeGeometry args={[3.44, 3.44]} />
       <meshBasicMaterial
         map={texture}
         transparent
