@@ -31,8 +31,7 @@ export function InfoModal({
         basic bot.
       </p>
       <p>
-        Github:{" "}
-        <a href="https://github.com/elh/concealed-gang">elh/concealed-gang</a>
+        Github: <a href="https://github.com/elh/mahjong-3d">elh/mahjong-3d</a>
       </p>
       <p>
         Alternative view: <a href={routeLink.href}>{routeLink.label}</a>

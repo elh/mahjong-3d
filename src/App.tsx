@@ -368,7 +368,7 @@ function DebugApp() {
       )}
 
       <InfoPopover
-        summary={{ title: "Concealed Gang", detail: `Seed: ${roundKey}` }}
+        summary={{ title: "Mahjong 3D", detail: `Seed: ${roundKey}` }}
         routeLink={{ href: appHref(), label: "Simulator" }}
       />
     </main>
@@ -555,7 +555,7 @@ function SimApp() {
         aria-hidden="true"
       />
       <InfoPopover
-        summary={{ title: "Concealed Gang", detail: `Seed: ${roundKey}` }}
+        summary={{ title: "Mahjong 3D", detail: `Seed: ${roundKey}` }}
         routeLink={{ href: debugHref, label: "Debug view" }}
         showAutoOrbitButton={isCameraUserControlled}
         onAutoOrbitButtonClick={() => setIsCameraUserControlled(false)}

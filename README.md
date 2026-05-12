@@ -1,4 +1,4 @@
-# concealed-gang
+# mahjong-3d
 
 A Taiwanese Mahjong 3D viz, game debug UI, rules implementation, and basic bot.
 
