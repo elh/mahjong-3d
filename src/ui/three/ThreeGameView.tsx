@@ -1524,7 +1524,7 @@ function AnimatedTile({
           : via
             ? 0.42
             : motion === "drawConcealed"
-              ? 0.44
+              ? 0.38
               : motion === "knockdown"
                 ? 0.72
                 : 0.64;
@@ -1534,9 +1534,9 @@ function AnimatedTile({
         : via
           ? 0.5
           : motion === "drawConcealed"
-            ? 0.28
+            ? 0.24
             : 0;
-    const thirdDuration = motion === "drawConcealed" ? 0.14 : 0;
+    const thirdDuration = motion === "drawConcealed" ? 0.1 : 0;
     const totalDuration = firstDuration + holdSeconds + secondDuration;
     const fullDuration = totalDuration + thirdDuration;
     elapsedRef.current = Math.min(elapsedRef.current + delta, fullDuration);

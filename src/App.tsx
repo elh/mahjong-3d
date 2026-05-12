@@ -21,6 +21,7 @@ import { TileGroup } from "./ui/TileGroup";
 import { useSimulationController } from "./ui/useSimulationController";
 
 const eventAdvanceDelayMs = 1200;
+const setupEventAdvanceDelayMs = 800;
 const turnBoundaryPauseMs = 100;
 
 const ThreeGameView = lazy(() =>
@@ -483,8 +484,12 @@ function SimApp() {
     const currentEvent = events[eventIndex];
     const isTurnBoundary =
       currentEvent?.groupId !== nextEvent.groupId && nextEvent.phase === "turn";
-    const delay =
-      eventAdvanceDelayMs + (isTurnBoundary ? turnBoundaryPauseMs : 0);
+    const isSetupDrawPhase =
+      currentEvent?.phase === "setup" || nextEvent.phase === "setup";
+    const baseDelay = isSetupDrawPhase
+      ? setupEventAdvanceDelayMs
+      : eventAdvanceDelayMs;
+    const delay = baseDelay + (isTurnBoundary ? turnBoundaryPauseMs : 0);
     const timeout = window.setTimeout(() => stepEvent(1), delay);
 
     return () => {
