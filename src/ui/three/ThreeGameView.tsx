@@ -75,8 +75,6 @@ type LightingDebugSettings = {
   keyZ: number;
   cameraFillIntensity: number;
   handFaceFillIntensity: number;
-  fogNear: number;
-  fogFar: number;
   environment: boolean;
 };
 
@@ -99,16 +97,14 @@ const defaultFlickDebugSettings: FlickDebugSettings = {
 };
 
 const defaultLightingDebugSettings: LightingDebugSettings = {
-  ambientIntensity: 0.42,
-  fillIntensity: 0.32,
-  keyIntensity: 3.4,
-  keyX: -2.8,
-  keyY: 5.2,
-  keyZ: 3.1,
-  cameraFillIntensity: 0.28,
-  handFaceFillIntensity: 0.48,
-  fogNear: 8.5,
-  fogFar: 13,
+  ambientIntensity: 0.36,
+  fillIntensity: 0.48,
+  keyIntensity: 3.8,
+  keyX: -3.4,
+  keyY: 5.8,
+  keyZ: 2.6,
+  cameraFillIntensity: 0.3,
+  handFaceFillIntensity: 0.52,
   environment: false,
 };
 
@@ -308,18 +304,14 @@ export function ThreeGameView({
         frameloop={renderPaused ? "never" : "always"}
         shadows="percentage"
         dpr={[1, 1.75]}
-        camera={{ position: [0, 3.05, 6.75], fov: 42, near: 0.1, far: 100 }}
+        camera={{ position: [0, 2.85, 7.05], fov: 40, near: 0.1, far: 100 }}
       >
-        <color attach="background" args={["#131614"]} />
-        <fog
-          attach="fog"
-          args={["#131614", lightingDebug.fogNear, lightingDebug.fogFar]}
-        />
+        <color attach="background" args={["#0f1112"]} />
         <ambientLight intensity={lightingDebug.ambientIntensity} />
         <hemisphereLight
           intensity={lightingDebug.fillIntensity}
-          color="#d9f0e5"
-          groundColor="#0b1713"
+          color="#ececeb"
+          groundColor="#181b1a"
         />
         <directionalLight
           castShadow
@@ -330,6 +322,20 @@ export function ThreeGameView({
             lightingDebug.keyZ,
           ]}
           shadow-mapSize={[1024, 1024]}
+          shadow-camera-left={-4.2}
+          shadow-camera-right={4.2}
+          shadow-camera-top={4.2}
+          shadow-camera-bottom={-4.2}
+          shadow-camera-near={0.5}
+          shadow-camera-far={12}
+          shadow-bias={-0.00025}
+        />
+        <pointLight
+          intensity={0.26}
+          distance={7.5}
+          decay={2}
+          position={[2.8, 2.4, -3.2]}
+          color="#c2c7c4"
         />
         <CameraShoulderFill intensity={lightingDebug.cameraFillIntensity} />
         <HandFaceFill intensity={lightingDebug.handFaceFillIntensity} />
@@ -402,11 +408,11 @@ export function ThreeGameView({
           autoRotate={
             simulatorMode && cameraAutoRotate && !isCameraUserControlled
           }
-          autoRotateSpeed={0.18}
+          autoRotateSpeed={0.14}
           enablePan={false}
           enableDamping
           minDistance={5.6}
-          maxDistance={7.4}
+          maxDistance={8.8}
           maxPolarAngle={Math.PI / 2.35}
           minPolarAngle={Math.PI / 4.2}
           onStart={() => setIsCameraUserControlled(true)}
@@ -417,6 +423,15 @@ export function ThreeGameView({
 }
 
 function TableSurface() {
+  const feltTextures = useMemo(() => createFeltTextures(), []);
+  useEffect(
+    () => () => {
+      feltTextures.color.dispose();
+      feltTextures.bump.dispose();
+    },
+    [feltTextures],
+  );
+
   return (
     <group>
       <RoundedBox
@@ -427,8 +442,11 @@ function TableSurface() {
         position={[0, -tableSlabDepth / 2, 0]}
       >
         <meshStandardMaterial
-          color="#173e35"
-          roughness={0.94}
+          color="#245f50"
+          map={feltTextures.color}
+          bumpMap={feltTextures.bump}
+          bumpScale={0.032}
+          roughness={0.98}
           metalness={0.01}
         />
       </RoundedBox>
@@ -436,6 +454,98 @@ function TableSurface() {
       <TableRail />
     </group>
   );
+}
+
+function createFeltTextures(): {
+  color: THREE.CanvasTexture;
+  bump: THREE.CanvasTexture;
+} {
+  const size = 512;
+  const colorCanvas = document.createElement("canvas");
+  colorCanvas.width = size;
+  colorCanvas.height = size;
+  const bumpCanvas = document.createElement("canvas");
+  bumpCanvas.width = size;
+  bumpCanvas.height = size;
+  const colorContext = colorCanvas.getContext("2d");
+  const bumpContext = bumpCanvas.getContext("2d");
+  if (!colorContext || !bumpContext) {
+    return {
+      color: configureRepeatingTexture(new THREE.CanvasTexture(colorCanvas), 4),
+      bump: configureRepeatingTexture(new THREE.CanvasTexture(bumpCanvas), 4),
+    };
+  }
+
+  colorContext.fillStyle = "#266454";
+  colorContext.fillRect(0, 0, size, size);
+  const image = colorContext.getImageData(0, 0, size, size);
+  const bumpImage = bumpContext.createImageData(size, size);
+  for (let index = 0; index < image.data.length; index += 4) {
+    const pixel = index / 4;
+    const x = pixel % size;
+    const y = Math.floor(pixel / size);
+    const weave =
+      Math.sin(x * 0.58) * 7 +
+      Math.sin(y * 0.72) * 6 +
+      (stableFeltNoise(x, y) - 0.5) * 28;
+    image.data[index] = clampColor(37 + weave * 1.05);
+    image.data[index + 1] = clampColor(96 + weave * 0.95);
+    image.data[index + 2] = clampColor(80 + weave * 0.85);
+    image.data[index + 3] = 255;
+
+    const bumpValue = clampColor(124 + weave * 2.1);
+    bumpImage.data[index] = bumpValue;
+    bumpImage.data[index + 1] = bumpValue;
+    bumpImage.data[index + 2] = bumpValue;
+    bumpImage.data[index + 3] = 255;
+  }
+  colorContext.putImageData(image, 0, 0);
+  bumpContext.putImageData(bumpImage, 0, 0);
+
+  colorContext.globalAlpha = 0.14;
+  colorContext.strokeStyle = "#d9f2df";
+  colorContext.lineWidth = 0.5;
+  for (let index = 0; index < 160; index += 1) {
+    const x = stableFeltNoise(index, 3) * size;
+    const y = stableFeltNoise(index, 7) * size;
+    const length = 22 + stableFeltNoise(index, 11) * 58;
+    colorContext.beginPath();
+    colorContext.moveTo(x, y);
+    colorContext.lineTo(x + length, y + (stableFeltNoise(index, 17) - 0.5) * 6);
+    colorContext.stroke();
+  }
+
+  const colorTexture = configureRepeatingTexture(
+    new THREE.CanvasTexture(colorCanvas),
+    4,
+  );
+  colorTexture.colorSpace = THREE.SRGBColorSpace;
+  const bumpTexture = configureRepeatingTexture(
+    new THREE.CanvasTexture(bumpCanvas),
+    4,
+  );
+  return { color: colorTexture, bump: bumpTexture };
+}
+
+function configureRepeatingTexture(
+  texture: THREE.CanvasTexture,
+  repeat: number,
+): THREE.CanvasTexture {
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(repeat, repeat);
+  texture.anisotropy = 8;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function stableFeltNoise(left: number, right: number): number {
+  const value = Math.sin(left * 12.9898 + right * 78.233) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+function clampColor(value: number): number {
+  return Math.max(0, Math.min(255, Math.round(value)));
 }
 
 function CenterTableMark() {
@@ -558,7 +668,7 @@ function CameraShoulderFill({ intensity }: { intensity: number }) {
   });
 
   return (
-    <directionalLight ref={lightRef} intensity={intensity} color="#e8fff4" />
+    <directionalLight ref={lightRef} intensity={intensity} color="#eef6ff" />
   );
 }
 
@@ -577,7 +687,7 @@ function HandFaceFill({ intensity }: { intensity: number }) {
           key={position.join(",")}
           intensity={intensity}
           position={position}
-          color="#fff8e6"
+          color="#fff6e8"
         />
       ))}
     </>
@@ -807,22 +917,6 @@ function LightingDebugControls({
         onChange={(handFaceFillIntensity) =>
           onChange({ ...settings, handFaceFillIntensity })
         }
-      />
-      <DebugSlider
-        label="Fog near"
-        value={settings.fogNear}
-        min={4}
-        max={14}
-        step={0.1}
-        onChange={(fogNear) => onChange({ ...settings, fogNear })}
-      />
-      <DebugSlider
-        label="Fog far"
-        value={settings.fogFar}
-        min={7}
-        max={20}
-        step={0.1}
-        onChange={(fogFar) => onChange({ ...settings, fogFar })}
       />
     </>
   );
@@ -1396,23 +1490,25 @@ function AnimatedTile({
     const holdSeconds = (via?.holdMs ?? 0) / 1000;
     const firstDuration =
       motion === "discardToss"
-        ? 0.42
+        ? 0.46
         : motion === "claimToss"
-          ? 0.54
+          ? 0.58
           : via
-            ? 0.38
+            ? 0.42
             : motion === "drawConcealed"
-              ? 0.42
-              : 0.64;
+              ? 0.44
+              : motion === "knockdown"
+                ? 0.72
+                : 0.64;
     const secondDuration =
       motion === "discardToss" || motion === "claimToss"
         ? 0
         : via
-          ? 0.46
+          ? 0.5
           : motion === "drawConcealed"
-            ? 0.26
+            ? 0.28
             : 0;
-    const thirdDuration = motion === "drawConcealed" ? 0.08 : 0;
+    const thirdDuration = motion === "drawConcealed" ? 0.14 : 0;
     const totalDuration = firstDuration + holdSeconds + secondDuration;
     const fullDuration = totalDuration + thirdDuration;
     elapsedRef.current = Math.min(elapsedRef.current + delta, fullDuration);
@@ -1514,11 +1610,11 @@ function AnimatedTile({
     }
 
     if ((motion === "discardToss" || motion === "claimToss") && via) {
-      const duration = motion === "discardToss" ? 0.42 : 0.54;
+      const duration = motion === "discardToss" ? 0.46 : 0.58;
       const progress = clamp01(elapsed / duration);
       const t =
         motion === "discardToss"
-          ? easeOutQuart(progress)
+          ? easeOutCubic(progress)
           : easeInOutCubic(progress);
       applyBezierAnimatedTransform(
         ref.current,
@@ -1533,7 +1629,11 @@ function AnimatedTile({
     }
 
     if (!via) {
-      const t = easeOutCubic(elapsed / firstDuration);
+      const progress = clamp01(elapsed / firstDuration);
+      const t =
+        motion === "knockdown"
+          ? easeInOutCubic(progress)
+          : easeOutCubic(progress);
       const arc =
         motion === "knockdown"
           ? Math.sin(t * Math.PI) * 0.035
@@ -1930,9 +2030,9 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
       smoothness={8}
     >
       <meshStandardMaterial
-        color="#ffffff"
-        roughness={0.58}
-        metalness={0.02}
+        color="#efe2c5"
+        roughness={orientation === "faceUp" ? 0.5 : 0.46}
+        metalness={0.01}
         customProgramCacheKey={() => `mahjong-tile-body-${orientation}`}
         onBeforeCompile={(shader) => {
           shader.vertexShader = shader.vertexShader.replace(
@@ -1950,10 +2050,12 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
           shader.fragmentShader = shader.fragmentShader.replace(
             "vec4 diffuseColor = vec4( diffuse, opacity );",
             `
-            vec3 tileIvory = vec3(0.953, 0.918, 0.839);
-            vec3 tileGreen = vec3(0.024, 0.439, 0.106);
+            vec3 tileIvory = vec3(0.93, 0.875, 0.74);
+            vec3 tileGreen = vec3(0.032, 0.365, 0.16);
             float backMask = step(${backThreshold.toFixed(5)}, ${backDirection.toFixed(1)} * vTileLocalPosition.y);
-            vec4 diffuseColor = vec4(mix(tileIvory, tileGreen, backMask), opacity);
+            vec3 tileColor = mix(tileIvory, tileGreen, backMask);
+            tileColor = mix(tileColor, vec3(0.965, 0.925, 0.82), 0.16 * (1.0 - backMask));
+            vec4 diffuseColor = vec4(tileColor, opacity);
             `,
           );
         }}
@@ -1970,10 +2072,6 @@ function easeInOutCubic(value: number): number {
   return value < 0.5
     ? 4 * value * value * value
     : 1 - (-2 * value + 2) ** 3 / 2;
-}
-
-function easeOutQuart(value: number): number {
-  return 1 - (1 - value) ** 4;
 }
 
 function clamp01(value: number): number {
