@@ -40,6 +40,47 @@ const tableSlabDepth = 0.24;
 const tableRailWidth = 0.16;
 const tableRailHeight = 0.075;
 const tableRailOuterHalfSize = tableHalfSize + tableRailWidth;
+const cameraTarget: Vec3 = [0, 0, 0];
+
+type CameraPreset = {
+  position: Vec3;
+  fov: number;
+  minDistance: number;
+  maxDistance: number;
+  minPolarAngle: number;
+  maxPolarAngle: number;
+  target: Vec3;
+};
+
+const cameraPresets = {
+  desktop: {
+    position: [0, 2.85, 7.05],
+    fov: 40,
+    minDistance: 5.6,
+    maxDistance: 8.8,
+    minPolarAngle: Math.PI / 4.2,
+    maxPolarAngle: Math.PI / 2.35,
+    target: cameraTarget,
+  },
+  narrow: {
+    position: [0, 4.8, 9.8],
+    fov: 48,
+    minDistance: 8.2,
+    maxDistance: 12.4,
+    minPolarAngle: Math.PI / 4.6,
+    maxPolarAngle: Math.PI / 2.6,
+    target: cameraTarget,
+  },
+  mobilePortrait: {
+    position: [0, 6.8, 9.8],
+    fov: 54,
+    minDistance: 10,
+    maxDistance: 13.8,
+    minPolarAngle: Math.PI / 5.8,
+    maxPolarAngle: Math.PI / 3,
+    target: cameraTarget,
+  },
+} satisfies Record<string, CameraPreset>;
 
 type TilePose = {
   position: Vec3;
@@ -157,6 +198,7 @@ export function ThreeGameView({
   const [sceneReady, setSceneReady] = useState(false);
   const [internalCameraUserControlled, setInternalCameraUserControlled] =
     useState(false);
+  const cameraPreset = useResponsiveCameraPreset();
   const lastEventIndexRef = useRef(eventIndex);
   const initialEventIndexRef = useRef(eventIndex);
   const lastRoundKeyRef = useRef(roundKey);
@@ -332,8 +374,14 @@ export function ThreeGameView({
         frameloop={renderPaused ? "never" : "always"}
         shadows="percentage"
         dpr={[1, 1.75]}
-        camera={{ position: [0, 2.85, 7.05], fov: 40, near: 0.1, far: 100 }}
+        camera={{
+          position: cameraPreset.position,
+          fov: cameraPreset.fov,
+          near: 0.1,
+          far: 100,
+        }}
       >
+        <CameraPresetSync preset={cameraPreset} />
         <color attach="background" args={["#0f1112"]} />
         <ambientLight intensity={lightingDebug.ambientIntensity} />
         <hemisphereLight
@@ -439,15 +487,70 @@ export function ThreeGameView({
           autoRotateSpeed={0.14}
           enablePan={false}
           enableDamping
-          minDistance={5.6}
-          maxDistance={8.8}
-          maxPolarAngle={Math.PI / 2.35}
-          minPolarAngle={Math.PI / 4.2}
+          target={cameraPreset.target}
+          minDistance={cameraPreset.minDistance}
+          maxDistance={cameraPreset.maxDistance}
+          maxPolarAngle={cameraPreset.maxPolarAngle}
+          minPolarAngle={cameraPreset.minPolarAngle}
           onStart={() => setIsCameraUserControlled(true)}
         />
       </Canvas>
     </section>
   );
+}
+
+function useResponsiveCameraPreset(): CameraPreset {
+  const [presetName, setPresetName] = useState<keyof typeof cameraPresets>(() =>
+    currentCameraPresetName(),
+  );
+
+  useEffect(() => {
+    const mobilePortraitQuery = window.matchMedia(
+      "(max-width: 640px) and (orientation: portrait)",
+    );
+    const narrowQuery = window.matchMedia("(max-width: 860px)");
+    const updatePreset = () => setPresetName(currentCameraPresetName());
+
+    updatePreset();
+    mobilePortraitQuery.addEventListener("change", updatePreset);
+    narrowQuery.addEventListener("change", updatePreset);
+    return () => {
+      mobilePortraitQuery.removeEventListener("change", updatePreset);
+      narrowQuery.removeEventListener("change", updatePreset);
+    };
+  }, []);
+
+  return cameraPresets[presetName];
+}
+
+function currentCameraPresetName(): keyof typeof cameraPresets {
+  if (typeof window === "undefined") {
+    return "desktop";
+  }
+  if (
+    window.matchMedia("(max-width: 640px) and (orientation: portrait)").matches
+  ) {
+    return "mobilePortrait";
+  }
+  if (window.matchMedia("(max-width: 860px)").matches) {
+    return "narrow";
+  }
+  return "desktop";
+}
+
+function CameraPresetSync({ preset }: { preset: CameraPreset }) {
+  const { camera } = useThree();
+
+  useLayoutEffect(() => {
+    camera.position.set(...preset.position);
+    camera.lookAt(...preset.target);
+    if (camera instanceof THREE.PerspectiveCamera) {
+      camera.fov = preset.fov;
+      camera.updateProjectionMatrix();
+    }
+  }, [camera, preset]);
+
+  return null;
 }
 
 function TableSurface() {
@@ -591,7 +694,7 @@ function CenterTableMark() {
     context.textAlign = "center";
     context.textBaseline = "middle";
     context.font =
-      '410px "Kaiti TC", "Songti TC", "STKaiti", "PMingLiU", "MingLiU", serif';
+      '410px "Songti SC", "Songti TC", "STSong", "Noto Serif CJK TC", "Noto Serif TC", "Source Han Serif TC", "PMingLiU", serif';
     context.fillText("黃", canvas.width / 2, canvas.height / 2 + 8);
 
     const canvasTexture = new THREE.CanvasTexture(canvas);
