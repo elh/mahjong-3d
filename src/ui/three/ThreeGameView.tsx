@@ -1490,23 +1490,25 @@ function AnimatedTile({
     const holdSeconds = (via?.holdMs ?? 0) / 1000;
     const firstDuration =
       motion === "discardToss"
-        ? 0.42
+        ? 0.46
         : motion === "claimToss"
-          ? 0.54
+          ? 0.58
           : via
-            ? 0.38
+            ? 0.42
             : motion === "drawConcealed"
-              ? 0.42
-              : 0.64;
+              ? 0.44
+              : motion === "knockdown"
+                ? 0.72
+                : 0.64;
     const secondDuration =
       motion === "discardToss" || motion === "claimToss"
         ? 0
         : via
-          ? 0.46
+          ? 0.5
           : motion === "drawConcealed"
-            ? 0.26
+            ? 0.28
             : 0;
-    const thirdDuration = motion === "drawConcealed" ? 0.08 : 0;
+    const thirdDuration = motion === "drawConcealed" ? 0.14 : 0;
     const totalDuration = firstDuration + holdSeconds + secondDuration;
     const fullDuration = totalDuration + thirdDuration;
     elapsedRef.current = Math.min(elapsedRef.current + delta, fullDuration);
@@ -1608,11 +1610,11 @@ function AnimatedTile({
     }
 
     if ((motion === "discardToss" || motion === "claimToss") && via) {
-      const duration = motion === "discardToss" ? 0.42 : 0.54;
+      const duration = motion === "discardToss" ? 0.46 : 0.58;
       const progress = clamp01(elapsed / duration);
       const t =
         motion === "discardToss"
-          ? easeOutQuart(progress)
+          ? easeOutCubic(progress)
           : easeInOutCubic(progress);
       applyBezierAnimatedTransform(
         ref.current,
@@ -1627,7 +1629,11 @@ function AnimatedTile({
     }
 
     if (!via) {
-      const t = easeOutCubic(elapsed / firstDuration);
+      const progress = clamp01(elapsed / firstDuration);
+      const t =
+        motion === "knockdown"
+          ? easeInOutCubic(progress)
+          : easeOutCubic(progress);
       const arc =
         motion === "knockdown"
           ? Math.sin(t * Math.PI) * 0.035
@@ -2066,10 +2072,6 @@ function easeInOutCubic(value: number): number {
   return value < 0.5
     ? 4 * value * value * value
     : 1 - (-2 * value + 2) ** 3 / 2;
-}
-
-function easeOutQuart(value: number): number {
-  return 1 - (1 - value) ** 4;
 }
 
 function clamp01(value: number): number {
