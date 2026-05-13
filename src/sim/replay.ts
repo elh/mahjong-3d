@@ -1,6 +1,10 @@
 import type { GameEvent } from "./events";
 import type { Meld, PlayerId } from "./state";
-import { createTestScenarioWalls, isTestScenarioSeed } from "./testScenarios";
+import {
+  createTestScenarioStartingState,
+  createTestScenarioWalls,
+  isTestScenarioSeed,
+} from "./testScenarios";
 import { removeTile } from "./tileCollections";
 import type { TileInstance } from "./tiles";
 import { sortTiles } from "./tiles";
@@ -58,6 +62,7 @@ export function replayEvents(
   if (roundStart?.type === "roundStarted") {
     state.seed = roundStart.seed;
     initializeWalls(state, roundStart.seed);
+    initializeTestScenarioState(state, roundStart.seed);
   }
 
   for (
@@ -211,6 +216,34 @@ function initializeWalls(state: ReplayState, seed: string): void {
     : createShuffledWalls(seed);
   state.wall = wall;
   state.deadWall = deadWall;
+}
+
+function initializeTestScenarioState(state: ReplayState, seed: string): void {
+  if (!isTestScenarioSeed(seed)) {
+    return;
+  }
+  const startingState = createTestScenarioStartingState(seed);
+  if (!startingState) {
+    return;
+  }
+  state.players = startingState.players.map((player) => ({
+    id: player.id,
+    hand: [...player.hand],
+    flowers: [...player.flowers],
+    discards: [...player.discards],
+    melds: player.melds.map((meld) => ({ ...meld, tiles: [...meld.tiles] })),
+    winningTile: player.winningTile,
+  })) as ReplayState["players"];
+  state.wall = [...startingState.wall];
+  state.deadWall = [...startingState.deadWall];
+  state.wallCount = startingState.wall.length;
+  state.deadWallCount = startingState.deadWall.length;
+  state.dealer = startingState.dealer;
+  state.ended = startingState.ended;
+  state.winner = startingState.winner;
+  state.winners = startingState.winners
+    ? [...startingState.winners]
+    : undefined;
 }
 
 function removeWonTileFromSource(

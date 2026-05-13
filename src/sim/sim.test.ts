@@ -13,6 +13,7 @@ import { validateBetweenTurns } from "./invariants";
 import { replayEvents } from "./replay";
 import { createSeededRng, shuffle } from "./rng";
 import type { RoundState } from "./state";
+import { createTestScenarioStartingState } from "./testScenarios";
 import { createTileSet, type TileInstance, tileKey } from "./tiles";
 import {
   createShuffledWalls,
@@ -860,15 +861,6 @@ describe("simulation", () => {
 
   test("test-added-kong demonstrates adding a fourth tile to an exposed pong", () => {
     const result = simulateTestScenarioRound("test-added-kong");
-    const preludeClaimIndex = result.events.findIndex(
-      (event) => event.type === "claimMade" && event.claim === "pong",
-    );
-    const drawIndex = result.events.findIndex(
-      (event) =>
-        event.type === "tileDrawn" &&
-        event.phase === "turn" &&
-        !event.replacement,
-    );
     const kongIndex = result.events.findIndex(
       (event) => event.type === "kongDeclared" && event.kong === "added",
     );
@@ -882,10 +874,8 @@ describe("simulation", () => {
     expect(result.events.some((event) => event.type === "rulesError")).toBe(
       false,
     );
-    expect(preludeClaimIndex).toBeGreaterThan(-1);
-    expect(drawIndex).toBeGreaterThan(preludeClaimIndex);
+    expect(result.events[0]?.type).toBe("roundStarted");
     expect(intent?.type).toBe("addedKongDeclared");
-    expect(intentIndex).toBeGreaterThan(drawIndex);
     expect(kongIndex).toBeGreaterThan(intentIndex);
     expect(kong?.type).toBe("kongDeclared");
     if (kong?.type === "kongDeclared") {
@@ -972,15 +962,6 @@ describe("simulation", () => {
 
   test("test-rob-added-kong demonstrates robbing an added kong", () => {
     const result = simulateTestScenarioRound("test-rob-added-kong");
-    const preludeClaimIndex = result.events.findIndex(
-      (event) => event.type === "claimMade" && event.claim === "pong",
-    );
-    const drawIndex = result.events.findIndex(
-      (event) =>
-        event.type === "tileDrawn" &&
-        event.phase === "turn" &&
-        !event.replacement,
-    );
     const winIndex = result.events.findIndex(
       (event) => event.type === "winDeclared",
     );
@@ -996,10 +977,8 @@ describe("simulation", () => {
     expect(result.events.some((event) => event.type === "kongDeclared")).toBe(
       false,
     );
-    expect(preludeClaimIndex).toBeGreaterThan(-1);
-    expect(drawIndex).toBeGreaterThan(preludeClaimIndex);
+    expect(result.events[0]?.type).toBe("roundStarted");
     expect(intent?.type).toBe("addedKongDeclared");
-    expect(intentIndex).toBeGreaterThan(drawIndex);
     expect(winIndex).toBeGreaterThan(intentIndex);
     expect(win?.type).toBe("winDeclared");
     if (win?.type === "winDeclared") {
@@ -1031,6 +1010,47 @@ describe("simulation", () => {
       expect(replay.players[1].hand.map((tile) => tile.id)).not.toContain(
         draw.tile.id,
       );
+    }
+  });
+
+  test("test scenario draws consume the expected fixture wall tiles", () => {
+    const concealedStart = createTestScenarioStartingState(
+      "test-concealed-kong",
+    );
+    const concealed = simulateTestScenarioRound("test-concealed-kong");
+    const concealedReplacement = concealed.events.find(
+      (event) => event.type === "tileDrawn" && event.replacement,
+    );
+
+    const addedStart = createTestScenarioStartingState("test-added-kong");
+    const added = simulateTestScenarioRound("test-added-kong");
+    const addedReplacement = added.events.find(
+      (event) => event.type === "tileDrawn" && event.replacement,
+    );
+
+    const selfDrawStart = createTestScenarioStartingState("test-self-draw-win");
+    const selfDraw = simulateTestScenarioRound("test-self-draw-win");
+    const winningDraw = selfDraw.events.find(
+      (event) => event.type === "tileDrawn" && !event.replacement,
+    );
+
+    expect(concealedReplacement?.type).toBe("tileDrawn");
+    expect(addedReplacement?.type).toBe("tileDrawn");
+    expect(winningDraw?.type).toBe("tileDrawn");
+    if (
+      concealedStart &&
+      addedStart &&
+      selfDrawStart &&
+      concealedReplacement?.type === "tileDrawn" &&
+      addedReplacement?.type === "tileDrawn" &&
+      winningDraw?.type === "tileDrawn"
+    ) {
+      expect(concealedReplacement.source).toBe("deadWall");
+      expect(concealedReplacement.tile.id).toBe(concealedStart.deadWall[0].id);
+      expect(addedReplacement.source).toBe("deadWall");
+      expect(addedReplacement.tile.id).toBe(addedStart.deadWall[0].id);
+      expect(winningDraw.source).toBe("liveWall");
+      expect(winningDraw.tile.id).toBe(selfDrawStart.wall[0].id);
     }
   });
 

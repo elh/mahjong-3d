@@ -377,7 +377,6 @@ function DebugApp() {
 
 function SimApp() {
   const simulation = useSimulationController({
-    initialEvent: "first-setup-draw",
     syncSeedToUrl: false,
   });
   const isDocumentHidden = useDocumentHidden();

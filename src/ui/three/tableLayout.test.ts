@@ -540,6 +540,72 @@ describe("3D table layout", () => {
     expect(layout.animations).toHaveLength(0);
   });
 
+  test("animates fixture draws from their prebuilt wall positions", () => {
+    const added = simulateTestScenarioRound("test-added-kong");
+    const replacementIndex = added.events.findIndex(
+      (event) => event.type === "tileDrawn" && event.replacement,
+    );
+    const replacementEvent = added.events[replacementIndex];
+    const previousReplacementReplay = replayEvents(
+      added.events,
+      replacementIndex - 1,
+    );
+    const replacementReplay = replayEvents(added.events, replacementIndex);
+    const previousReplacementLayout = createThreeTableLayout(
+      previousReplacementReplay,
+      undefined,
+    );
+    const replacementLayout = createThreeTableLayout(
+      replacementReplay,
+      replacementEvent,
+      previousReplacementReplay,
+    );
+
+    const selfDraw = simulateTestScenarioRound("test-self-draw-win");
+    const drawIndex = selfDraw.events.findIndex(
+      (event) => event.type === "tileDrawn" && !event.replacement,
+    );
+    const drawEvent = selfDraw.events[drawIndex];
+    const previousDrawReplay = replayEvents(selfDraw.events, drawIndex - 1);
+    const drawReplay = replayEvents(selfDraw.events, drawIndex);
+    const previousDrawLayout = createThreeTableLayout(
+      previousDrawReplay,
+      undefined,
+    );
+    const drawLayout = createThreeTableLayout(
+      drawReplay,
+      drawEvent,
+      previousDrawReplay,
+    );
+
+    expect(replacementEvent?.type).toBe("tileDrawn");
+    expect(drawEvent?.type).toBe("tileDrawn");
+    if (
+      replacementEvent?.type === "tileDrawn" &&
+      drawEvent?.type === "tileDrawn"
+    ) {
+      const previousReplacementPlacement = previousReplacementLayout.tiles.find(
+        (placement) => placement.tile.id === replacementEvent.tile.id,
+      );
+      const replacementAnimation = replacementLayout.animations.find(
+        (animation) => animation.tile.id === replacementEvent.tile.id,
+      );
+      const previousDrawPlacement = previousDrawLayout.tiles.find(
+        (placement) => placement.tile.id === drawEvent.tile.id,
+      );
+      const drawAnimation = drawLayout.animations.find(
+        (animation) => animation.tile.id === drawEvent.tile.id,
+      );
+
+      expect(previousReplacementPlacement?.owner).toBe("deadWall");
+      expect(replacementAnimation?.from).toEqual(
+        previousReplacementPlacement?.position,
+      );
+      expect(previousDrawPlacement?.owner).toBe("wall");
+      expect(drawAnimation?.from).toEqual(previousDrawPlacement?.position);
+    }
+  });
+
   test("reveals a winning hand flat with the winning tile to the right", () => {
     const tiles = createTileSet();
     const handTiles = tiles.slice(0, 3);

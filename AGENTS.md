@@ -33,10 +33,10 @@ Core rule: simulation state and event logs are the source of truth. UI state sho
 
 ## Test Fixtures
 
-- Special `test-*` seeds are scripted demo fixtures, not normal RNG seeds. e.g. `test-concealed-kong`, `test-added-kong`.
+- Special `test-*` seeds are demo fixtures with prebuilt starting states, not normal RNG seeds. e.g. `test-concealed-kong`, `test-added-kong`.
 - Normal `simulateRound()` must always respect caller-provided bots, even when the seed string looks like a fixture.
 - Use `simulateTestScenarioRound()` when a test or UI route intentionally wants fixture state plus scripted fixture bots.
-- Replay and 3D wall reconstruction may explicitly opt into fixture walls for known fixture seeds so those demos remain visually coherent.
+- Replay and 3D wall reconstruction may explicitly opt into fixture starting states and walls for known fixture seeds so those demos remain short and visually coherent.
 
 ## Taiwanese Mahjong Scope
 
