@@ -743,8 +743,12 @@ function currentEventAnimations(
   }
 
   if (event?.type === "addedKongDeclared") {
-    return event.tiles.flatMap((tile) =>
-      meldTileAnimation(tile, event, tiles, previousTiles, event.player),
+    return meldTileAnimation(
+      event.addedTile,
+      event,
+      tiles,
+      previousTiles,
+      event.player,
     );
   }
 
@@ -843,6 +847,13 @@ function meldTileAnimation(
     (placement) => placement.tile.id === tile.id,
   );
   const crossesWallFromDiscard = previousPlacement?.owner === "discard";
+  if (
+    previousPlacement &&
+    !crossesWallFromDiscard &&
+    placementsMatch(previousPlacement, finalPlacement)
+  ) {
+    return [];
+  }
 
   return [
     {
@@ -866,6 +877,23 @@ function meldTileAnimation(
       faceUp: finalPlacement.faceUp,
     },
   ];
+}
+
+function placementsMatch(
+  previousPlacement: TilePlacement,
+  finalPlacement: TilePlacement,
+): boolean {
+  return (
+    previousPlacement.owner === finalPlacement.owner &&
+    previousPlacement.player === finalPlacement.player &&
+    previousPlacement.faceUp === finalPlacement.faceUp &&
+    vec3Equals(previousPlacement.position, finalPlacement.position) &&
+    vec3Equals(previousPlacement.rotation, finalPlacement.rotation)
+  );
+}
+
+function vec3Equals(left: Vec3, right: Vec3): boolean {
+  return left[0] === right[0] && left[1] === right[1] && left[2] === right[2];
 }
 
 function concealedKongRevealAnimations(

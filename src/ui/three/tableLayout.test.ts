@@ -482,7 +482,7 @@ describe("3D table layout", () => {
     ).toBe(true);
   });
 
-  test("animates a test-seed added kong by moving the fourth tile from hand", () => {
+  test("animates a test-seed added kong by moving only the fourth tile from hand", () => {
     const result = simulateTestScenarioRound("test-added-kong");
     const intentIndex = result.events.findIndex(
       (event) => event.type === "addedKongDeclared",
@@ -494,7 +494,7 @@ describe("3D table layout", () => {
     const layout = createThreeTableLayout(replay, intentEvent, previousReplay);
 
     expect(intentEvent?.type).toBe("addedKongDeclared");
-    expect(layout.animations).toHaveLength(4);
+    expect(layout.animations).toHaveLength(1);
     if (intentEvent?.type === "addedKongDeclared") {
       const addedAnimation = layout.animations.find(
         (animation) => animation.tile.id === intentEvent.addedTile.id,
@@ -519,8 +519,25 @@ describe("3D table layout", () => {
             (placement) => placement.tile.id === tile.id,
           )?.owner,
         ).toBe("meld");
+        expect(
+          layout.animations.some((animation) => animation.tile.id === tile.id),
+        ).toBe(false);
       }
     }
+  });
+
+  test("does not replay added kong placement after robbing window finalizes", () => {
+    const result = simulateTestScenarioRound("test-added-kong");
+    const kongIndex = result.events.findIndex(
+      (event) => event.type === "kongDeclared" && event.kong === "added",
+    );
+    const kongEvent = result.events[kongIndex];
+    const previousReplay = replayEvents(result.events, kongIndex - 1);
+    const replay = replayEvents(result.events, kongIndex);
+    const layout = createThreeTableLayout(replay, kongEvent, previousReplay);
+
+    expect(kongEvent?.type).toBe("kongDeclared");
+    expect(layout.animations).toHaveLength(0);
   });
 
   test("reveals a winning hand flat with the winning tile to the right", () => {
