@@ -29,8 +29,13 @@ export function eventTitle(event: GameEvent | undefined): ReactNode {
     case "flowerExposed":
       return (
         <>
-          {playerNames[event.player]} exposed flower{" "}
-          <InlineTile tile={event.tile} />
+          {playerNames[event.player]} exposed{" "}
+          {event.tiles.length === 1
+            ? "flower "
+            : `${event.tiles.length} flowers `}
+          {event.tiles.map((tile) => (
+            <InlineTile key={tile.id} tile={tile} />
+          ))}
         </>
       );
     case "claimMade":
@@ -85,7 +90,7 @@ export function eventLogTitle(event: GameEvent): string {
     case "tileDiscarded":
       return `${playerNames[event.player]} discarded ${tileAlt(event.tile)}`;
     case "flowerExposed":
-      return `${playerNames[event.player]} exposed flower ${tileAlt(event.tile)}`;
+      return `${playerNames[event.player]} exposed ${event.tiles.length === 1 ? "flower" : `${event.tiles.length} flowers`} ${event.tiles.map(tileAlt).join(", ")}`;
     case "claimMade":
       return `${playerNames[event.player]} claimed ${event.claim} ${tileAlt(event.tile)}`;
     case "kongDeclared": {
@@ -117,11 +122,15 @@ export function eventDetail(event: GameEvent | undefined): ReactNode {
     case "tileDrawn":
       return `${event.replacement ? "Supplement draw" : "Turn draw"} from ${event.source === "deadWall" ? "dead wall" : "live wall"} with ${event.wallCount} live tiles left.`;
     case "tilesDrawn":
-      return `Initial deal packet from the live wall with ${event.wallCount} live tiles left.`;
+      return event.source === "deadWall"
+        ? `Setup supplement draw from the dead wall with ${event.wallCount} live tiles left.`
+        : `Initial deal packet from the live wall with ${event.wallCount} live tiles left.`;
     case "tileDiscarded":
       return `${playerNames[event.player]} now has ${event.handCount} concealed tiles.`;
     case "flowerExposed":
-      return `${playerNames[event.player]} exposed a flower and will draw a supplement tile.`;
+      return event.tiles.length === 1
+        ? `${playerNames[event.player]} exposed a flower and will draw a supplement tile.`
+        : `${playerNames[event.player]} exposed ${event.tiles.length} flowers and will draw supplement tiles.`;
     case "claimMade":
       return (
         <>

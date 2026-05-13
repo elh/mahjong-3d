@@ -34,6 +34,7 @@ export const testScenarioSeeds = [
   "test-added-kong",
   "test-rob-added-kong",
   "test-self-draw-win",
+  "test-setup-flowers",
 ] as const;
 
 export type TestScenarioSeed = (typeof testScenarioSeeds)[number];
@@ -45,6 +46,9 @@ export function isTestScenarioSeed(seed: string): seed is TestScenarioSeed {
 export function createTestScenarioRound(
   seed: TestScenarioSeed,
 ): TestScenarioRound | undefined {
+  if (seed === "test-setup-flowers") {
+    return createSetupFlowersScenario(seed);
+  }
   const state = createTestScenarioStartingState(seed);
   if (!state) {
     return undefined;
@@ -77,6 +81,9 @@ export function createTestScenarioStartingState(
 export function createTestScenarioWalls(
   seed: TestScenarioSeed,
 ): WallState | undefined {
+  if (seed === "test-setup-flowers") {
+    return createSetupFlowersFixture(seed).walls;
+  }
   const state = createTestScenarioStartingState(seed);
   if (!state) {
     return undefined;
@@ -184,6 +191,93 @@ function createSelfDrawWinStartingState(seed: string): RoundState {
   return state;
 }
 
+function createSetupFlowersScenario(seed: string): TestScenarioRound {
+  const fixture = createSetupFlowersFixture(seed);
+  const { state, events } = createRoundAfterSetup(fixture);
+  state.currentPlayer = fixture.dealer;
+  state.needsDiscard = fixture.dealer;
+  state.discardSource = "draw";
+  return {
+    state: cloneRoundState(state),
+    events,
+    maxTurns: 1,
+  };
+}
+
+function createSetupFlowersFixture(seed: string): SetupFixture {
+  const pool = createTilePool();
+  const hands = emptyHands();
+  const player0InitialFlower = pool.take("flower-1", 1)[0];
+  const player0SupplementFlower = pool.take("season-1", 1)[0];
+  const player1InitialFlowers = pool.takeOneEach(["flower-2", "season-2"]);
+  const player2InitialFlowers = pool.takeOneEach([
+    "flower-3",
+    "season-3",
+    "flower-4",
+  ]);
+  const replacementTiles = [
+    player0SupplementFlower,
+    ...pool.takeOneEach(["c1", "c2"]),
+    ...pool.takeOneEach(["d1", "d2", "d3"]),
+    ...pool.takeOneEach(["b1"]),
+  ];
+
+  hands[0] = [player0InitialFlower];
+  hands[1] = [...player1InitialFlowers];
+  hands[2] = [...player2InitialFlowers];
+  fillSetupHands(pool, hands, 0);
+
+  return {
+    seed,
+    dealer: 0,
+    hands,
+    walls: createSetupFixtureWalls(seed, 0, pool, hands, replacementTiles),
+  };
+}
+
+type SetupFixture = {
+  seed: string;
+  dealer: PlayerId;
+  hands: [TileInstance[], TileInstance[], TileInstance[], TileInstance[]];
+  walls: WallState;
+};
+
+function createRoundAfterSetup(fixture: SetupFixture): {
+  state: RoundState;
+  events: GameEvent[];
+} {
+  const state: RoundState = {
+    players: createPlayers(),
+    wall: [...fixture.walls.wall],
+    deadWall: [...fixture.walls.deadWall],
+    currentPlayer: fixture.dealer,
+    dealer: fixture.dealer,
+    turn: 0,
+    ended: false,
+  };
+  const events: GameEvent[] = [];
+
+  for (let packet = 0; packet < 4; packet += 1) {
+    for (const player of state.players) {
+      drawSetupTiles(state, events, player.id, [
+        ...fixture.hands[player.id].slice(packet * 4, packet * 4 + 4),
+      ]);
+    }
+  }
+  drawSetupTiles(state, events, fixture.dealer, [
+    fixture.hands[fixture.dealer][16],
+  ]);
+  replaceSetupFlowers(state, events);
+
+  for (const player of state.players) {
+    player.hand = sortTiles(player.hand);
+  }
+
+  events.push(roundStartedEvent(fixture.seed, state));
+
+  return { state, events };
+}
+
 function emptyRoundState(
   dealer: PlayerId,
   currentPlayer: PlayerId,
@@ -262,6 +356,160 @@ function roundStartedEvent(
       number,
     ],
   };
+}
+
+function drawSetupTiles(
+  state: RoundState,
+  events: GameEvent[],
+  player: PlayerId,
+  tiles: TileInstance[],
+): void {
+  for (const tile of tiles) {
+    const drawn = state.wall.shift();
+    if (drawn?.id !== tile.id) {
+      throw new Error(`Test scenario wall order mismatch for ${tile.id}.`);
+    }
+    state.players[player].hand.push(drawn);
+  }
+  events.push({
+    ...eventMeta("setup", 0),
+    type: tiles.length === 1 ? "tileDrawn" : "tilesDrawn",
+    player,
+    ...(tiles.length === 1
+      ? {
+          tile: tiles[0],
+          replacement: false,
+          source: "liveWall" as const,
+        }
+      : { tiles, source: "liveWall" as const }),
+    wallCount: state.wall.length,
+    deadWallCount: state.deadWall.length,
+  } as GameEvent);
+}
+
+function replaceSetupFlowers(state: RoundState, events: GameEvent[]): void {
+  let replacedAny = true;
+  while (replacedAny) {
+    replacedAny = false;
+    for (const player of state.players) {
+      const flowers = player.hand.filter(isFlower);
+      if (flowers.length === 0) {
+        continue;
+      }
+      replacedAny = true;
+      for (const flower of flowers) {
+        state.players[player.id].hand = state.players[player.id].hand.filter(
+          (tile) => tile.id !== flower.id,
+        );
+        state.players[player.id].flowers.push(flower);
+      }
+      events.push({
+        ...eventMeta("setup", 0),
+        type: "flowerExposed",
+        player: player.id,
+        tile: flowers[0],
+        tiles: flowers,
+      });
+      drawSetupSupplementTiles(state, events, player.id, flowers.length);
+    }
+  }
+}
+
+function drawSetupSupplementTiles(
+  state: RoundState,
+  events: GameEvent[],
+  player: PlayerId,
+  count: number,
+): void {
+  const tiles: TileInstance[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const tile = state.deadWall.shift();
+    if (!tile) {
+      break;
+    }
+    const replenishment = state.wall.pop();
+    if (replenishment) {
+      state.deadWall.push(replenishment);
+    }
+    state.players[player].hand.push(tile);
+    tiles.push(tile);
+  }
+  if (tiles.length === 1) {
+    events.push({
+      ...eventMeta("setup", 0),
+      type: "tileDrawn",
+      player,
+      tile: tiles[0],
+      replacement: true,
+      source: "deadWall",
+      wallCount: state.wall.length,
+      deadWallCount: state.deadWall.length,
+    });
+  } else if (tiles.length > 1) {
+    events.push({
+      ...eventMeta("setup", 0),
+      type: "tilesDrawn",
+      player,
+      tiles,
+      replacement: true,
+      source: "deadWall",
+      wallCount: state.wall.length,
+      deadWallCount: state.deadWall.length,
+    });
+  }
+}
+
+function createSetupFixtureWalls(
+  seed: string,
+  dealer: PlayerId,
+  pool: TilePool,
+  hands: [TileInstance[], TileInstance[], TileInstance[], TileInstance[]],
+  replacementTiles: TileInstance[],
+): WallState {
+  const setupDraws: TileInstance[] = [];
+  for (let packet = 0; packet < 4; packet += 1) {
+    for (const hand of hands) {
+      setupDraws.push(...hand.slice(packet * 4, packet * 4 + 4));
+    }
+  }
+  setupDraws.push(hands[dealer][16]);
+  const deadWall = [
+    ...replacementTiles,
+    ...pool.takeFill(16 - replacementTiles.length),
+  ];
+  return {
+    wall: [
+      ...setupDraws,
+      ...pool
+        .remaining()
+        .filter((tile) => !deadWall.some((dead) => dead.id === tile.id)),
+    ],
+    deadWall,
+    wallBreak: createWallBreak(seed, dealer, testScenarioWallBreakDice),
+  };
+}
+
+function fillSetupHands(
+  pool: TilePool,
+  hands: [TileInstance[], TileInstance[], TileInstance[], TileInstance[]],
+  dealer: PlayerId,
+): void {
+  for (const [index, hand] of hands.entries()) {
+    const targetCount = index === dealer ? 17 : 16;
+    if (hand.length > targetCount) {
+      throw new Error(`Test scenario hand ${index} has too many tiles.`);
+    }
+    hand.push(...pool.takeFill(targetCount - hand.length));
+  }
+}
+
+function emptyHands(): [
+  TileInstance[],
+  TileInstance[],
+  TileInstance[],
+  TileInstance[],
+] {
+  return [[], [], [], []];
 }
 
 type TilePool = {

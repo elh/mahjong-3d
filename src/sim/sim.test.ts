@@ -310,7 +310,9 @@ describe("simulation", () => {
     const setupDraws = events.filter(
       (event) => event.type === "tilesDrawn" || event.type === "tileDrawn",
     );
-    const packets = setupDraws.filter((event) => event.type === "tilesDrawn");
+    const packets = setupDraws.filter(
+      (event) => event.type === "tilesDrawn" && event.source === "liveWall",
+    );
     const openingDraw = [...setupDraws]
       .reverse()
       .find(
@@ -1052,6 +1054,62 @@ describe("simulation", () => {
       expect(winningDraw.source).toBe("liveWall");
       expect(winningDraw.tile.id).toBe(selfDrawStart.wall[0].id);
     }
+  });
+
+  test("test-setup-flowers batches initial flower supplement draws", () => {
+    const result = simulateTestScenarioRound("test-setup-flowers");
+    const roundStartedIndex = result.events.findIndex(
+      (event) => event.type === "roundStarted",
+    );
+    const setupSupplements = result.events.filter(
+      (event) =>
+        event.phase === "setup" &&
+        ((event.type === "tileDrawn" && event.replacement) ||
+          (event.type === "tilesDrawn" && event.replacement)),
+    );
+    const player1Supplement = setupSupplements.find(
+      (event) => event.type === "tilesDrawn" && event.player === 1,
+    );
+    const player2Supplement = setupSupplements.find(
+      (event) => event.type === "tilesDrawn" && event.player === 2,
+    );
+    const player0Supplements = setupSupplements.filter(
+      (event) =>
+        (event.type === "tileDrawn" || event.type === "tilesDrawn") &&
+        event.player === 0,
+    );
+    const replay = replayEvents(result.events, roundStartedIndex);
+
+    expect(roundStartedIndex).toBeGreaterThan(0);
+    expect(
+      result.events
+        .slice(0, roundStartedIndex)
+        .filter((event) => event.type === "flowerExposed")
+        .map((event) => [event.player, event.tiles.length]),
+    ).toEqual([
+      [0, 1],
+      [1, 2],
+      [2, 3],
+      [0, 1],
+    ]);
+    expect(player0Supplements).toHaveLength(2);
+    expect(
+      player0Supplements.every((event) => event.type === "tileDrawn"),
+    ).toBe(true);
+    expect(player1Supplement?.type).toBe("tilesDrawn");
+    expect(player2Supplement?.type).toBe("tilesDrawn");
+    if (
+      player1Supplement?.type === "tilesDrawn" &&
+      player2Supplement?.type === "tilesDrawn"
+    ) {
+      expect(player1Supplement.source).toBe("deadWall");
+      expect(player1Supplement.tiles).toHaveLength(2);
+      expect(player2Supplement.source).toBe("deadWall");
+      expect(player2Supplement.tiles).toHaveLength(3);
+    }
+    expect(replay.players[0].flowers).toHaveLength(2);
+    expect(replay.players[1].flowers).toHaveLength(2);
+    expect(replay.players[2].flowers).toHaveLength(3);
   });
 
   test("records flower exposure explicitly and replays it", () => {

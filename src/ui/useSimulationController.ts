@@ -455,9 +455,10 @@ function activeTileIds(event: GameEvent | undefined): ReadonlySet<string> {
   switch (event.type) {
     case "tileDrawn":
     case "tileDiscarded":
-    case "flowerExposed":
     case "winDeclared":
       return new Set([event.tile.id]);
+    case "flowerExposed":
+      return new Set(event.tiles.map((tile) => tile.id));
     case "tilesDrawn":
       return new Set(event.tiles.map((tile) => tile.id));
     case "claimMade":

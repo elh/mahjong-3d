@@ -172,6 +172,9 @@ function testScenarioBots(
       );
     },
   };
+  if (seed === "test-setup-flowers") {
+    return [passClaims, passClaims, passClaims, passClaims];
+  }
   return seed === "test-rob-added-kong"
     ? [kongThenDiscard, winClaims, passClaims, passClaims]
     : [kongThenDiscard, passClaims, passClaims, passClaims];
@@ -401,14 +404,20 @@ function replaceDealtFlowers(state: RoundState, events: GameEvent[]): void {
       for (const flower of flowers) {
         removeTile(player.hand, flower.id);
         player.flowers.push(flower);
-        events.push({
-          ...eventMeta("setup", 0),
-          type: "flowerExposed",
-          player: player.id,
-          tile: flower,
-        });
-        drawSupplementTileIntoHand(state, player.id, events, "setup", 0);
       }
+      events.push({
+        ...eventMeta("setup", 0),
+        type: "flowerExposed",
+        player: player.id,
+        tile: flowers[0],
+        tiles: flowers,
+      });
+      drawSetupSupplementTilesIntoHand(
+        state,
+        player.id,
+        flowers.length,
+        events,
+      );
     }
   }
 }
@@ -449,6 +458,7 @@ function drawUntilNonFlower(
         type: "flowerExposed",
         player: playerId,
         tile,
+        tiles: [tile],
       });
       drawFromDeadWall = true;
       continue;
@@ -464,20 +474,40 @@ function drawUntilNonFlower(
   return undefined;
 }
 
-function drawSupplementTileIntoHand(
+function drawSetupSupplementTilesIntoHand(
   state: RoundState,
   playerId: PlayerId,
+  count: number,
   events: GameEvent[],
-  phase: "setup" | "turn",
-  turn: number,
-): TileInstance | undefined {
-  const tile = drawSupplementTile(state);
-  if (!tile) {
-    return undefined;
+): TileInstance[] {
+  const tiles: TileInstance[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const tile = drawSupplementTile(state);
+    if (!tile) {
+      break;
+    }
+    state.players[playerId].hand.push(tile);
+    tiles.push(tile);
   }
-  state.players[playerId].hand.push(tile);
-  events.push(drawEvent(state, playerId, tile, true, "deadWall", phase, turn));
-  return tile;
+
+  if (tiles.length === 1) {
+    events.push(
+      drawEvent(state, playerId, tiles[0], true, "deadWall", "setup", 0),
+    );
+  } else if (tiles.length > 1) {
+    events.push({
+      ...eventMeta("setup", 0),
+      type: "tilesDrawn",
+      player: playerId,
+      tiles,
+      replacement: true,
+      source: "deadWall",
+      wallCount: state.wall.length,
+      deadWallCount: state.deadWall.length,
+    });
+  }
+
+  return tiles;
 }
 
 function drawEvent(

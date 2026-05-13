@@ -101,7 +101,13 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
       return;
     case "tilesDrawn":
       for (const tile of event.tiles) {
-        removeTile(state.wall, tile.id);
+        removeTile(
+          event.source === "deadWall" ? state.deadWall : state.wall,
+          tile.id,
+        );
+        if (event.source === "deadWall") {
+          replenishDeadWall(state);
+        }
       }
       state.wallCount = event.wallCount;
       state.deadWallCount = event.deadWallCount;
@@ -111,10 +117,11 @@ function applyEvent(state: ReplayState, event: GameEvent): void {
       ]);
       return;
     case "flowerExposed": {
-      const exposed =
-        removeTile(state.players[event.player].hand, event.tile.id) ??
-        event.tile;
-      state.players[event.player].flowers.push(exposed);
+      for (const tile of event.tiles) {
+        const exposed =
+          removeTile(state.players[event.player].hand, tile.id) ?? tile;
+        state.players[event.player].flowers.push(exposed);
+      }
       return;
     }
     case "tileDiscarded":

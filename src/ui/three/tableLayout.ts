@@ -674,11 +674,7 @@ function currentEventAnimations(
       return {
         tile,
         event,
-        from:
-          previousPlacement?.position ??
-          sourcePosition(
-            event.type === "tileDrawn" ? event.source : "liveWall",
-          ),
+        from: previousPlacement?.position ?? sourcePosition(event.source),
         to: finalPosition,
         fromRotation: previousPlacement?.rotation ?? playerTileRotation(0),
         toRotation:
@@ -727,12 +723,8 @@ function currentEventAnimations(
   }
 
   if (event?.type === "flowerExposed") {
-    return meldTileAnimation(
-      event.tile,
-      event,
-      tiles,
-      previousTiles,
-      event.player,
+    return event.tiles.flatMap((tile) =>
+      meldTileAnimation(tile, event, tiles, previousTiles, event.player),
     );
   }
 

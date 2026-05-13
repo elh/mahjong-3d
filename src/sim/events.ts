@@ -31,14 +31,16 @@ export type GameEvent =
       type: "tilesDrawn";
       player: PlayerId;
       tiles: TileInstance[];
-      source: "liveWall";
+      source: "liveWall" | "deadWall";
+      replacement?: boolean;
       wallCount: number;
       deadWallCount: number;
     })
   | (EventMeta & {
       type: "flowerExposed";
       player: PlayerId;
-      tile: TileInstance;
+      tile?: TileInstance;
+      tiles: TileInstance[];
     })
   | (EventMeta & {
       type: "tileDiscarded";
