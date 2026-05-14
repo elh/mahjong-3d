@@ -6,13 +6,22 @@ import {
   RefreshCw,
   SkipBack,
 } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { replayEvents } from "./sim/replay";
 import { EventLog } from "./ui/EventLog";
 import { eventDetail, eventTitle } from "./ui/eventText";
 import { InfoModal } from "./ui/InfoModal";
 import {
   infiniteRoundFadeMs,
+  infiniteRoundFlipTransitionDelayMs,
   infiniteRoundSwapMs,
   nextRoundPromotionDelayMs,
 } from "./ui/infinitePlayback";
@@ -66,9 +75,153 @@ function scrollActiveEventIntoView(
 }
 
 export default function App() {
-  const isDebugRoute =
-    new URLSearchParams(window.location.search).get("view") === "debug";
-  return isDebugRoute ? <DebugApp /> : <SimApp />;
+  const view = new URLSearchParams(window.location.search).get("view");
+  if (view === "debug") {
+    return <DebugApp />;
+  }
+  if (view === "table-flip") {
+    return <TableFlipDebugApp />;
+  }
+  return <SimApp />;
+}
+
+function TableFlipDebugApp() {
+  const simulation = useSimulationController({
+    defaultSeed: "test-self-draw-win",
+  });
+  const {
+    pendingSeed,
+    isGenerating,
+    generationError,
+    eventIndex,
+    events,
+    replay,
+    currentEvent,
+    jumpToEventIndex,
+  } = simulation;
+  const previousReplay = useMemo(
+    () => (eventIndex > 0 ? replayEvents(events, eventIndex - 1) : undefined),
+    [events, eventIndex],
+  );
+  const nextEvent = events[eventIndex + 1];
+  const roundKey =
+    events[0]?.type === "roundStarted" ? events[0].seed : pendingSeed;
+  const isLoadingRound = isGenerating && !generationError;
+  const finalEventIndex = Math.max(events.length - 1, 0);
+  const debugHref = appHref(`?view=debug&seed=${encodeURIComponent(roundKey)}`);
+  const [previewRoundVersion, setPreviewRoundVersion] = useState(0);
+  const [isPreviewTransitioning, setIsPreviewTransitioning] = useState(false);
+  const previewFadeTimeoutRef = useRef<number | undefined>(undefined);
+  const previewSwapTimeoutRef = useRef<number | undefined>(undefined);
+  const previewClearTimeoutRef = useRef<number | undefined>(undefined);
+  const previewRoundKey =
+    previewRoundVersion === 0
+      ? roundKey
+      : `${roundKey}:preview-${previewRoundVersion}`;
+  const clearPreviewTransitionTimeouts = useCallback(() => {
+    if (previewFadeTimeoutRef.current !== undefined) {
+      window.clearTimeout(previewFadeTimeoutRef.current);
+      previewFadeTimeoutRef.current = undefined;
+    }
+    if (previewSwapTimeoutRef.current !== undefined) {
+      window.clearTimeout(previewSwapTimeoutRef.current);
+      previewSwapTimeoutRef.current = undefined;
+    }
+    if (previewClearTimeoutRef.current !== undefined) {
+      window.clearTimeout(previewClearTimeoutRef.current);
+      previewClearTimeoutRef.current = undefined;
+    }
+  }, []);
+  const previewNextTable = useCallback(
+    (delayMs: number) => {
+      clearPreviewTransitionTimeouts();
+      setIsPreviewTransitioning(false);
+      previewFadeTimeoutRef.current = window.setTimeout(() => {
+        previewFadeTimeoutRef.current = undefined;
+        setIsPreviewTransitioning(true);
+        previewSwapTimeoutRef.current = window.setTimeout(() => {
+          previewSwapTimeoutRef.current = undefined;
+          setPreviewRoundVersion((version) => version + 1);
+          previewClearTimeoutRef.current = window.setTimeout(() => {
+            previewClearTimeoutRef.current = undefined;
+            setIsPreviewTransitioning(false);
+          }, infiniteRoundFadeMs);
+        }, infiniteRoundSwapMs);
+      }, delayMs);
+    },
+    [clearPreviewTransitionTimeouts],
+  );
+
+  useEffect(() => {
+    if (
+      !isLoadingRound &&
+      events.length > 0 &&
+      eventIndex !== finalEventIndex
+    ) {
+      jumpToEventIndex(finalEventIndex);
+    }
+  }, [
+    eventIndex,
+    events.length,
+    finalEventIndex,
+    isLoadingRound,
+    jumpToEventIndex,
+  ]);
+
+  useEffect(
+    () => () => {
+      clearPreviewTransitionTimeouts();
+    },
+    [clearPreviewTransitionTimeouts],
+  );
+
+  return (
+    <main className="sim-shell">
+      {(isGenerating || generationError) && (
+        <section
+          className={
+            generationError ? "generation-pill error" : "generation-pill"
+          }
+          aria-live="polite"
+        >
+          {generationError
+            ? `Could not generate ${pendingSeed}: ${generationError}`
+            : `Generating ${pendingSeed}...`}
+        </section>
+      )}
+      <Suspense
+        fallback={
+          <section
+            className="three-viewer loading"
+            aria-label="Loading 3D view"
+          >
+            Loading 3D view...
+          </section>
+        }
+      >
+        <ThreeGameView
+          replay={replay}
+          previousReplay={previousReplay}
+          currentEvent={currentEvent}
+          nextEvent={nextEvent}
+          eventIndex={eventIndex}
+          roundKey={previewRoundKey}
+          loading={isLoadingRound}
+          simulatorMode
+          cameraAutoRotate={false}
+          suppressLoadingOverlay={isPreviewTransitioning}
+          preserveSceneOnRoundChange={isPreviewTransitioning}
+          tableFlipDebug
+          onTableFlipPreviewTransition={previewNextTable}
+          sceneTransitionOverlayActive={isPreviewTransitioning}
+        />
+      </Suspense>
+      <InfoPopover
+        summary={{ title: "Table Flip Debug", detail: `Seed: ${roundKey}` }}
+        routeLink={{ href: debugHref, label: "Debug view" }}
+      />
+    </main>
+  );
 }
 
 function DebugApp() {
@@ -383,6 +536,9 @@ function SimApp() {
   const prefersReducedMotion = usePrefersReducedMotion();
   const [isCameraUserControlled, setIsCameraUserControlled] = useState(false);
   const [isRoundTransitioning, setIsRoundTransitioning] = useState(false);
+  const [tableFlipTransitionKey, setTableFlipTransitionKey] = useState<
+    string | undefined
+  >();
   const terminalReachedAtRef = useRef<number | undefined>(undefined);
   const {
     pendingSeed,
@@ -412,6 +568,7 @@ function SimApp() {
     if (isLoadingRound || generationError || !isAtRoundEnd) {
       terminalReachedAtRef.current = undefined;
       setIsRoundTransitioning(false);
+      setTableFlipTransitionKey(undefined);
       return;
     }
 
@@ -439,22 +596,35 @@ function SimApp() {
     if (remainingHoldMs === undefined) {
       return;
     }
+    let flipSettleTimeout: number | undefined;
     let promoteTimeout: number | undefined;
     let clearFadeTimeout: number | undefined;
     const transitionTimeout = window.setTimeout(() => {
-      setIsRoundTransitioning(true);
-      promoteTimeout = window.setTimeout(() => {
-        if (promoteQueuedRound()) {
-          terminalReachedAtRef.current = undefined;
-        }
-      }, infiniteRoundSwapMs);
-      clearFadeTimeout = window.setTimeout(() => {
-        setIsRoundTransitioning(false);
-      }, infiniteRoundFadeMs);
+      if (!prefersReducedMotion) {
+        setTableFlipTransitionKey(`${roundKey}:${eventIndex}`);
+      }
+      flipSettleTimeout = window.setTimeout(
+        () => {
+          setIsRoundTransitioning(true);
+          promoteTimeout = window.setTimeout(() => {
+            if (promoteQueuedRound()) {
+              terminalReachedAtRef.current = undefined;
+              setTableFlipTransitionKey(undefined);
+            }
+            clearFadeTimeout = window.setTimeout(() => {
+              setIsRoundTransitioning(false);
+            }, infiniteRoundFadeMs);
+          }, infiniteRoundSwapMs);
+        },
+        prefersReducedMotion ? 0 : infiniteRoundFlipTransitionDelayMs(),
+      );
     }, remainingHoldMs);
 
     return () => {
       window.clearTimeout(transitionTimeout);
+      if (flipSettleTimeout !== undefined) {
+        window.clearTimeout(flipSettleTimeout);
+      }
       if (promoteTimeout !== undefined) {
         window.clearTimeout(promoteTimeout);
       }
@@ -462,7 +632,15 @@ function SimApp() {
         window.clearTimeout(clearFadeTimeout);
       }
     };
-  }, [hasQueuedNextRound, isAtRoundEnd, isDocumentHidden, promoteQueuedRound]);
+  }, [
+    eventIndex,
+    hasQueuedNextRound,
+    isAtRoundEnd,
+    isDocumentHidden,
+    prefersReducedMotion,
+    promoteQueuedRound,
+    roundKey,
+  ]);
 
   useEffect(() => {
     if (
@@ -543,16 +721,12 @@ function SimApp() {
           renderPaused={isDocumentHidden}
           suppressLoadingOverlay={isRoundTransitioning}
           preserveSceneOnRoundChange={isRoundTransitioning}
+          tableFlipTransitionKey={
+            prefersReducedMotion ? undefined : tableFlipTransitionKey
+          }
+          sceneTransitionOverlayActive={isRoundTransitioning}
         />
       </Suspense>
-      <div
-        className={
-          isRoundTransitioning
-            ? "round-transition-overlay active"
-            : "round-transition-overlay"
-        }
-        aria-hidden="true"
-      />
       <InfoPopover
         summary={{ title: "Mahjong 3D", detail: `Seed: ${roundKey}` }}
         routeLink={{ href: debugHref, label: "Debug view" }}

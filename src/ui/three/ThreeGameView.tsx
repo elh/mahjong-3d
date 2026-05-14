@@ -20,10 +20,20 @@ import {
 import * as THREE from "three";
 import type { GameEvent } from "../../sim/events";
 import type { ReplayState } from "../../sim/replay";
+import type { PlayerId } from "../../sim/state";
 import type { TileInstance } from "../../sim/tiles";
 import { allTileImageUrls, tileImage } from "../tileImages";
 import {
+  createTableFlipSettings,
+  createTableFlipTilePhysics,
+  type TableFlipSettings,
+  type TableFlipTilePhysics,
+  tableFlipOriginPlayer,
+} from "./tableFlip";
+import {
   createThreeTableLayout,
+  playerForward,
+  playerRight,
   type TilePlacement,
   tileSize,
   type Vec3,
@@ -41,6 +51,10 @@ const tableRailWidth = 0.16;
 const tableRailHeight = 0.075;
 const tableRailOuterHalfSize = tableHalfSize + tableRailWidth;
 const cameraTarget: Vec3 = [0, 0, 0];
+const rapierRigidBodyType = {
+  dynamic: 0,
+  kinematicPosition: 2,
+} as const;
 
 type CameraPreset = {
   position: Vec3;
@@ -95,6 +109,11 @@ type TileTextureEntry = {
 };
 
 const tileTextureCache = new Map<string, TileTextureEntry>();
+const centerTableMarkTextureEntry: TileTextureEntry = {
+  isLoading: false,
+  listeners: new Set(),
+};
+let centerTableFallbackMarkTexture: THREE.CanvasTexture | undefined;
 let tileAudioContext: AudioContext | undefined;
 let lastTileSoundAt = 0;
 type FlickDebugSettings = {
@@ -127,6 +146,21 @@ type SoundDebugSettings = {
   minSpeed: number;
 };
 
+type TableFlipDebugSettings = {
+  prepDelayMs: number;
+  flipDurationSeconds: number;
+  resetDelayMs: number;
+  flipRange: number;
+  releaseAt: number;
+  variability: number;
+  tableLift: number;
+  tableSlide: number;
+  tileImpulse: number;
+  tileLift: number;
+  tileSpin: number;
+  tileDamping: number;
+};
+
 const defaultFlickDebugSettings: FlickDebugSettings = {
   force: 1.5,
   lift: 1,
@@ -157,6 +191,21 @@ const defaultSoundDebugSettings: SoundDebugSettings = {
   minSpeed: 0.04,
 };
 
+const defaultTableFlipDebugSettings: TableFlipDebugSettings = {
+  prepDelayMs: 300,
+  flipDurationSeconds: 1.15,
+  resetDelayMs: 4000,
+  flipRange: 1.8,
+  releaseAt: 0.6,
+  variability: 2,
+  tableLift: 0.28,
+  tableSlide: 0.32,
+  tileImpulse: 0,
+  tileLift: 0,
+  tileSpin: 0,
+  tileDamping: 0.9,
+};
+
 type ThreeGameViewProps = {
   replay: ReplayState;
   previousReplay: ReplayState | undefined;
@@ -172,6 +221,10 @@ type ThreeGameViewProps = {
   renderPaused?: boolean;
   suppressLoadingOverlay?: boolean;
   preserveSceneOnRoundChange?: boolean;
+  tableFlipDebug?: boolean;
+  tableFlipTransitionKey?: string;
+  onTableFlipPreviewTransition?: (delayMs: number) => void;
+  sceneTransitionOverlayActive?: boolean;
 };
 
 export function ThreeGameView({
@@ -189,13 +242,27 @@ export function ThreeGameView({
   renderPaused = false,
   suppressLoadingOverlay = false,
   preserveSceneOnRoundChange = false,
+  tableFlipDebug = false,
+  tableFlipTransitionKey,
+  onTableFlipPreviewTransition,
+  sceneTransitionOverlayActive = false,
 }: ThreeGameViewProps) {
   const [flickDebug, setFlickDebug] = useState(defaultFlickDebugSettings);
   const [lightingDebug, setLightingDebug] = useState(
     defaultLightingDebugSettings,
   );
   const [soundDebug, setSoundDebug] = useState(defaultSoundDebugSettings);
+  const [tableFlipDebugSettings, setTableFlipDebugSettings] = useState(
+    defaultTableFlipDebugSettings,
+  );
   const [sceneReady, setSceneReady] = useState(false);
+  const [tableFlipRun, setTableFlipRun] = useState(0);
+  const [tableFlipPhysicsKey, setTableFlipPhysicsKey] = useState(0);
+  const [tableFlipSnapshot, setTableFlipSnapshot] = useState<
+    TableFlipTilePhysics[] | undefined
+  >();
+  const [isTableFlipMotionActive, setIsTableFlipMotionActive] = useState(false);
+  const [isTableFlipResetting, setIsTableFlipResetting] = useState(false);
   const [internalCameraUserControlled, setInternalCameraUserControlled] =
     useState(false);
   const cameraPreset = useResponsiveCameraPreset();
@@ -203,10 +270,16 @@ export function ThreeGameView({
   const initialEventIndexRef = useRef(eventIndex);
   const lastRoundKeyRef = useRef(roundKey);
   const preserveSceneOnRoundChangeRef = useRef(preserveSceneOnRoundChange);
+  const tableFlipRoundKeyRef = useRef(roundKey);
+  const lastTableFlipTransitionKeyRef = useRef<string | undefined>(undefined);
+  const tableFlipDelayTimeoutRef = useRef<number | undefined>(undefined);
+  const tableFlipResetFrameRef = useRef<number | undefined>(undefined);
   const didMountRef = useRef(false);
   const animatedTileHandoffsRef = useRef(new Map<string, () => void>());
   const discardPoseByTileIdRef = useRef(new Map<string, TilePose>());
+  const renderedTilePoseByTileIdRef = useRef(new Map<string, TilePose>());
   const roundChanged = roundKey !== lastRoundKeyRef.current;
+  const tableFlipEnabled = tableFlipDebug || tableFlipSnapshot !== undefined;
   preserveSceneOnRoundChangeRef.current = preserveSceneOnRoundChange;
   if (roundChanged) {
     lastRoundKeyRef.current = roundKey;
@@ -214,6 +287,7 @@ export function ThreeGameView({
     lastEventIndexRef.current = eventIndex;
     didMountRef.current = false;
     discardPoseByTileIdRef.current.clear();
+    renderedTilePoseByTileIdRef.current.clear();
   }
   const isCameraUserControlled =
     cameraUserControlled ?? internalCameraUserControlled;
@@ -241,7 +315,9 @@ export function ThreeGameView({
   const shouldAnimateEvent =
     didMountRef.current && eventIndex !== lastEventIndexRef.current;
   const shouldAnimateInitialEvent =
-    sceneVisible && eventIndex === initialEventIndexRef.current;
+    !tableFlipEnabled &&
+    sceneVisible &&
+    eventIndex === initialEventIndexRef.current;
   const animations =
     shouldAnimateEvent || shouldAnimateInitialEvent ? layout.animations : [];
   const renderedAnimations = animations.map((animation) => {
@@ -291,6 +367,18 @@ export function ThreeGameView({
     (placement) =>
       placement.physics && !nonPhysicsAnimatedTileIds.has(placement.tile.id),
   );
+  const tableFlipSettings = useMemo(
+    () =>
+      createTableFlipSettings(roundKey, {
+        originPlayer: tableFlipOriginPlayerFromEvent(roundKey, currentEvent),
+        variability: tableFlipDebugSettings.variability,
+      }),
+    [currentEvent, roundKey, tableFlipDebugSettings.variability],
+  );
+  const isTableFlipped = tableFlipSnapshot !== undefined;
+  const isTableFlipPhysicsPaused =
+    tableFlipEnabled &&
+    ((isTableFlipped && !isTableFlipMotionActive) || isTableFlipResetting);
   const playContactSound = useMemo(
     () => createContactSoundHandler(soundDebug),
     [soundDebug],
@@ -311,6 +399,125 @@ export function ThreeGameView({
   const recordDiscardPose = useCallback((tileId: string, pose: TilePose) => {
     discardPoseByTileIdRef.current.set(tileId, pose);
   }, []);
+  const recordRenderedTilePose = useCallback(
+    (tileId: string, pose: TilePose | undefined) => {
+      if (pose) {
+        renderedTilePoseByTileIdRef.current.set(tileId, pose);
+        return;
+      }
+      renderedTilePoseByTileIdRef.current.delete(tileId);
+    },
+    [],
+  );
+  const startTableFlip = useCallback(() => {
+    if (tableFlipDelayTimeoutRef.current !== undefined) {
+      window.clearTimeout(tableFlipDelayTimeoutRef.current);
+      tableFlipDelayTimeoutRef.current = undefined;
+    }
+    if (tableFlipResetFrameRef.current !== undefined) {
+      window.cancelAnimationFrame(tableFlipResetFrameRef.current);
+      tableFlipResetFrameRef.current = undefined;
+    }
+    setIsTableFlipResetting(false);
+    setIsTableFlipMotionActive(false);
+    const poseByTileId = renderedTilePoseByTileIdRef.current;
+    const flipPlacements = layout.tiles.map((placement) => {
+      const pose = replay.ended
+        ? placement.physics
+          ? (discardPoseByTileIdRef.current.get(placement.tile.id) ??
+            poseByTileId.get(placement.tile.id))
+          : undefined
+        : (poseByTileId.get(placement.tile.id) ??
+          discardPoseByTileIdRef.current.get(placement.tile.id));
+      return pose ? { ...placement, ...pose } : placement;
+    });
+    setTableFlipSnapshot(
+      createTableFlipTilePhysics(flipPlacements, roundKey, {
+        variability: tableFlipDebugSettings.variability,
+      }),
+    );
+    setTableFlipRun((run) => run + 1);
+    tableFlipDelayTimeoutRef.current = window.setTimeout(() => {
+      tableFlipDelayTimeoutRef.current = undefined;
+      setIsTableFlipMotionActive(true);
+    }, tableFlipDebugSettings.prepDelayMs);
+  }, [
+    layout.tiles,
+    replay.ended,
+    roundKey,
+    tableFlipDebugSettings.prepDelayMs,
+    tableFlipDebugSettings.variability,
+  ]);
+  const resetTableFlip = useCallback(() => {
+    if (tableFlipDelayTimeoutRef.current !== undefined) {
+      window.clearTimeout(tableFlipDelayTimeoutRef.current);
+      tableFlipDelayTimeoutRef.current = undefined;
+    }
+    if (tableFlipResetFrameRef.current !== undefined) {
+      window.cancelAnimationFrame(tableFlipResetFrameRef.current);
+      tableFlipResetFrameRef.current = undefined;
+    }
+    setIsTableFlipMotionActive(false);
+    setIsTableFlipResetting(true);
+    tableFlipResetFrameRef.current = window.requestAnimationFrame(() => {
+      tableFlipResetFrameRef.current = undefined;
+      setTableFlipSnapshot(undefined);
+      setTableFlipPhysicsKey((key) => key + 1);
+      setTableFlipRun((run) => run + 1);
+      setIsTableFlipResetting(false);
+    });
+  }, []);
+  const previewTableFlipTransition = useCallback(() => {
+    startTableFlip();
+    onTableFlipPreviewTransition?.(
+      tableFlipDebugSettings.prepDelayMs +
+        tableFlipDebugSettings.flipDurationSeconds * 1000 +
+        tableFlipDebugSettings.resetDelayMs,
+    );
+  }, [
+    onTableFlipPreviewTransition,
+    startTableFlip,
+    tableFlipDebugSettings.flipDurationSeconds,
+    tableFlipDebugSettings.prepDelayMs,
+    tableFlipDebugSettings.resetDelayMs,
+  ]);
+
+  useEffect(() => {
+    if (tableFlipRoundKeyRef.current === roundKey) {
+      return;
+    }
+    tableFlipRoundKeyRef.current = roundKey;
+    lastTableFlipTransitionKeyRef.current = undefined;
+    setIsTableFlipMotionActive(false);
+    setIsTableFlipResetting(false);
+    setTableFlipSnapshot(undefined);
+    setTableFlipPhysicsKey((key) => key + 1);
+  });
+
+  useEffect(() => {
+    if (
+      tableFlipTransitionKey === undefined ||
+      tableFlipTransitionKey === lastTableFlipTransitionKeyRef.current ||
+      !sceneVisible ||
+      loading
+    ) {
+      return;
+    }
+    lastTableFlipTransitionKeyRef.current = tableFlipTransitionKey;
+    startTableFlip();
+  }, [loading, sceneVisible, startTableFlip, tableFlipTransitionKey]);
+
+  useEffect(
+    () => () => {
+      if (tableFlipDelayTimeoutRef.current !== undefined) {
+        window.clearTimeout(tableFlipDelayTimeoutRef.current);
+      }
+      if (tableFlipResetFrameRef.current !== undefined) {
+        window.cancelAnimationFrame(tableFlipResetFrameRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!enableTileCollisionSound) {
@@ -365,6 +572,45 @@ export function ThreeGameView({
           onSoundChange={setSoundDebug}
         />
       ) : null}
+      {tableFlipDebug ? (
+        <>
+          <fieldset
+            className="table-flip-controls"
+            aria-label="Table flip controls"
+          >
+            <button
+              type="button"
+              className="primary-button"
+              onClick={startTableFlip}
+              disabled={!sceneVisible || isTableFlipped}
+            >
+              Flip
+            </button>
+            <button
+              type="button"
+              onClick={previewTableFlipTransition}
+              disabled={
+                !sceneVisible ||
+                isTableFlipped ||
+                onTableFlipPreviewTransition === undefined
+              }
+            >
+              Transition
+            </button>
+            <button
+              type="button"
+              onClick={resetTableFlip}
+              disabled={!isTableFlipped}
+            >
+              Reset
+            </button>
+          </fieldset>
+          <TableFlipDebugPanel
+            settings={tableFlipDebugSettings}
+            onChange={setTableFlipDebugSettings}
+          />
+        </>
+      ) : null}
       {!sceneVisible && !suppressLoadingOverlay ? (
         <div className="three-loading-overlay" aria-live="polite">
           Loading...
@@ -380,6 +626,7 @@ export function ThreeGameView({
           near: 0.1,
           far: 100,
         }}
+        onPointerDown={() => setIsCameraUserControlled(true)}
       >
         <CameraPresetSync preset={cameraPreset} />
         <color attach="background" args={["#0f1112"]} />
@@ -415,47 +662,82 @@ export function ThreeGameView({
         />
         <CameraShoulderFill intensity={lightingDebug.cameraFillIntensity} />
         <HandFaceFill intensity={lightingDebug.handFaceFillIntensity} />
-        <TableSurface />
+        {!tableFlipEnabled || (isTableFlipped && !isTableFlipMotionActive) ? (
+          <TableSurface />
+        ) : null}
         <Suspense fallback={null}>
           {lightingDebug.environment ? <Environment preset="studio" /> : null}
-          <Physics gravity={[0, -9.81, 0]}>
-            <CuboidCollider
-              position={[0, -tableSlabDepth / 2, 0]}
-              args={[tableHalfSize, tableSlabDepth / 2, tableHalfSize]}
-              friction={flickDebug.tableFriction}
-              restitution={0.02}
-            />
-            {discardTiles.map((placement) => (
-              <DiscardPhysicsTile
-                key={placement.tile.id}
-                placement={
-                  flickByTileId.has(placement.tile.id)
-                    ? {
-                        ...placement,
-                        position: flickByTileId.get(placement.tile.id)!
-                          .position,
-                        rotation: flickByTileId.get(placement.tile.id)!
-                          .rotation,
-                      }
-                    : placement
-                }
-                flick={flickByTileId.get(placement.tile.id)}
-                handoffKey={
-                  flickByTileId.has(placement.tile.id)
-                    ? `${roundKey}:${eventIndex}:${placement.tile.id}`
-                    : undefined
-                }
-                settings={flickDebug}
-                onContactSound={playContactSound}
-                onFlickStarted={hideAnimatedTileForHandoff}
-                onPoseChange={recordDiscardPose}
-                visible={sceneVisible}
+          <Physics
+            key={tableFlipEnabled ? tableFlipPhysicsKey : "main"}
+            gravity={[0, -9.81, 0]}
+            timeStep={tableFlipEnabled ? 1 / 90 : undefined}
+            numSolverIterations={tableFlipEnabled ? 10 : undefined}
+            numInternalPgsIterations={tableFlipEnabled ? 2 : undefined}
+            maxCcdSubsteps={tableFlipEnabled ? 4 : undefined}
+            paused={isTableFlipPhysicsPaused}
+          >
+            {tableFlipEnabled ? (
+              <FlipTable
+                key={tableFlipRun}
+                active={isTableFlipMotionActive}
+                showSurface={isTableFlipMotionActive}
+                settings={tableFlipSettings}
+                debugSettings={tableFlipDebugSettings}
+                tableFriction={flickDebug.tableFriction}
               />
-            ))}
+            ) : (
+              <CuboidCollider
+                position={[0, -tableSlabDepth / 2, 0]}
+                args={[tableHalfSize, tableSlabDepth / 2, tableHalfSize]}
+                friction={flickDebug.tableFriction}
+                restitution={0.02}
+              />
+            )}
+            {isTableFlipped
+              ? tableFlipSnapshot?.map((tilePhysics) => (
+                  <TableFlipPhysicsTile
+                    key={`${tableFlipRun}:${tilePhysics.placement.tile.id}`}
+                    tilePhysics={tilePhysics}
+                    settings={tableFlipDebugSettings}
+                    onContactSound={playContactSound}
+                    visible={sceneVisible}
+                  />
+                ))
+              : discardTiles.map((placement) => (
+                  <DiscardPhysicsTile
+                    key={placement.tile.id}
+                    placement={
+                      flickByTileId.has(placement.tile.id)
+                        ? {
+                            ...placement,
+                            position: flickByTileId.get(placement.tile.id)!
+                              .position,
+                            rotation: flickByTileId.get(placement.tile.id)!
+                              .rotation,
+                          }
+                        : placement
+                    }
+                    flick={flickByTileId.get(placement.tile.id)}
+                    handoffKey={
+                      flickByTileId.has(placement.tile.id)
+                        ? `${roundKey}:${eventIndex}:${placement.tile.id}`
+                        : undefined
+                    }
+                    settings={flickDebug}
+                    onContactSound={playContactSound}
+                    onFlickStarted={hideAnimatedTileForHandoff}
+                    onPoseChange={recordDiscardPose}
+                    visible={sceneVisible}
+                  />
+                ))}
           </Physics>
-          <group visible={sceneVisible}>
+          <group visible={sceneVisible && !isTableFlipped}>
             {staticTiles.map((placement) => (
-              <TileMesh key={placement.tile.id} placement={placement} />
+              <TileMesh
+                key={placement.tile.id}
+                placement={placement}
+                onPoseChange={recordRenderedTilePose}
+              />
             ))}
             {renderedAnimations.map((animation) => (
               <AnimatedTile
@@ -476,6 +758,7 @@ export function ThreeGameView({
                     : undefined
                 }
                 registerHandoff={registerAnimatedTileHandoff}
+                onPoseChange={recordRenderedTilePose}
               />
             ))}
           </group>
@@ -492,9 +775,16 @@ export function ThreeGameView({
           maxDistance={cameraPreset.maxDistance}
           maxPolarAngle={cameraPreset.maxPolarAngle}
           minPolarAngle={cameraPreset.minPolarAngle}
-          onStart={() => setIsCameraUserControlled(true)}
         />
       </Canvas>
+      <div
+        className={
+          sceneTransitionOverlayActive
+            ? "round-transition-overlay active"
+            : "round-transition-overlay"
+        }
+        aria-hidden="true"
+      />
     </section>
   );
 }
@@ -680,43 +970,101 @@ function clampColor(value: number): number {
 }
 
 function CenterTableMark() {
-  const [texture, setTexture] = useState<THREE.Texture>();
-
-  useEffect(() => {
-    let isMounted = true;
-    const loader = new THREE.TextureLoader();
-    loader.load(`${import.meta.env.BASE_URL ?? "/"}marks/huang.svg`, (mark) => {
-      if (!isMounted) {
-        mark.dispose();
-        return;
-      }
-      mark.colorSpace = THREE.SRGBColorSpace;
-      mark.anisotropy = 4;
-      mark.needsUpdate = true;
-      setTexture(mark);
-    });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => () => texture?.dispose(), [texture]);
+  const loadedTexture = useCenterTableMarkTexture();
+  const fallbackTexture = useMemo(() => centerTableFallbackTexture(), []);
+  const texture = loadedTexture ?? fallbackTexture;
 
   if (!texture) {
     return null;
   }
 
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, -0.12]}>
+    <mesh
+      renderOrder={2}
+      rotation={[-Math.PI / 2, 0, 0]}
+      position={[0, 0.012, -0.12]}
+    >
       <planeGeometry args={[3.44, 3.44]} />
       <meshBasicMaterial
         map={texture}
         transparent
+        depthTest={false}
         depthWrite={false}
         toneMapped={false}
       />
     </mesh>
   );
+}
+
+function useCenterTableMarkTexture(): THREE.Texture | undefined {
+  const [texture, setTexture] = useState(centerTableMarkTextureEntry.texture);
+
+  useEffect(() => {
+    const entry = centerTableMarkTextureEntry;
+    entry.listeners.add(setTexture);
+    if (entry.texture || entry.isLoading || entry.didFail) {
+      setTexture(entry.texture);
+      return () => {
+        entry.listeners.delete(setTexture);
+      };
+    }
+
+    entry.isLoading = true;
+    const loader = new THREE.TextureLoader();
+    loader.load(
+      `${import.meta.env.BASE_URL ?? "/"}marks/huang.svg`,
+      (mark) => {
+        mark.colorSpace = THREE.SRGBColorSpace;
+        mark.anisotropy = 4;
+        mark.needsUpdate = true;
+        entry.texture = mark;
+        entry.isLoading = false;
+        for (const listener of entry.listeners) {
+          listener(mark);
+        }
+      },
+      undefined,
+      () => {
+        entry.didFail = true;
+        entry.isLoading = false;
+        for (const listener of entry.listeners) {
+          listener(undefined);
+        }
+      },
+    );
+
+    return () => {
+      entry.listeners.delete(setTexture);
+    };
+  }, []);
+
+  return texture;
+}
+
+function centerTableFallbackTexture(): THREE.CanvasTexture {
+  centerTableFallbackMarkTexture ??= createCenterTableFallbackTexture();
+  return centerTableFallbackMarkTexture;
+}
+
+function createCenterTableFallbackTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const context = canvas.getContext("2d");
+  if (context) {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "rgba(255, 255, 244, 0.22)";
+    context.font =
+      '700 360px "Noto Serif CJK TC", "Songti TC", "PingFang TC", serif';
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText("\u9ec3", canvas.width / 2, canvas.height / 2 + 16);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  texture.needsUpdate = true;
+  return texture;
 }
 
 function TableRail() {
@@ -1102,6 +1450,129 @@ function SoundDebugControls({
   );
 }
 
+function TableFlipDebugPanel({
+  settings,
+  onChange,
+}: {
+  settings: TableFlipDebugSettings;
+  onChange: (settings: TableFlipDebugSettings) => void;
+}) {
+  return (
+    <aside
+      className="three-debug-panel table-flip-debug-panel"
+      aria-label="Table flip debug settings"
+    >
+      <header>
+        <span>Table flip</span>
+        <button
+          type="button"
+          onClick={() => onChange(defaultTableFlipDebugSettings)}
+        >
+          Defaults
+        </button>
+      </header>
+      <DebugSlider
+        label="Prep delay ms"
+        value={settings.prepDelayMs}
+        min={0}
+        max={1200}
+        step={25}
+        onChange={(prepDelayMs) => onChange({ ...settings, prepDelayMs })}
+      />
+      <DebugSlider
+        label="Flip seconds"
+        value={settings.flipDurationSeconds}
+        min={0.35}
+        max={2.6}
+        step={0.05}
+        onChange={(flipDurationSeconds) =>
+          onChange({ ...settings, flipDurationSeconds })
+        }
+      />
+      <DebugSlider
+        label="Reset delay ms"
+        value={settings.resetDelayMs}
+        min={0}
+        max={10000}
+        step={100}
+        onChange={(resetDelayMs) => onChange({ ...settings, resetDelayMs })}
+      />
+      <DebugSlider
+        label="Flip range"
+        value={settings.flipRange}
+        min={0.35}
+        max={2.4}
+        step={0.05}
+        onChange={(flipRange) => onChange({ ...settings, flipRange })}
+      />
+      <DebugSlider
+        label="Release at"
+        value={settings.releaseAt}
+        min={0.55}
+        max={1}
+        step={0.01}
+        onChange={(releaseAt) => onChange({ ...settings, releaseAt })}
+      />
+      <DebugSlider
+        label="Variability"
+        value={settings.variability}
+        min={0}
+        max={2.5}
+        step={0.05}
+        onChange={(variability) => onChange({ ...settings, variability })}
+      />
+      <DebugSlider
+        label="Table lift"
+        value={settings.tableLift}
+        min={0}
+        max={0.8}
+        step={0.02}
+        onChange={(tableLift) => onChange({ ...settings, tableLift })}
+      />
+      <DebugSlider
+        label="Table slide"
+        value={settings.tableSlide}
+        min={0}
+        max={0.9}
+        step={0.02}
+        onChange={(tableSlide) => onChange({ ...settings, tableSlide })}
+      />
+      <DebugSlider
+        label="Tile impulse"
+        value={settings.tileImpulse}
+        min={0}
+        max={1.8}
+        step={0.05}
+        onChange={(tileImpulse) => onChange({ ...settings, tileImpulse })}
+      />
+      <DebugSlider
+        label="Tile lift"
+        value={settings.tileLift}
+        min={0}
+        max={1.8}
+        step={0.05}
+        onChange={(tileLift) => onChange({ ...settings, tileLift })}
+      />
+      <DebugSlider
+        label="Tile spin"
+        value={settings.tileSpin}
+        min={0}
+        max={1.8}
+        step={0.05}
+        onChange={(tileSpin) => onChange({ ...settings, tileSpin })}
+      />
+      <DebugSlider
+        label="Tile damping"
+        value={settings.tileDamping}
+        min={0}
+        max={2.5}
+        step={0.05}
+        onChange={(tileDamping) => onChange({ ...settings, tileDamping })}
+      />
+    </aside>
+  );
+}
+
 function DebugSlider({
   label,
   value,
@@ -1380,6 +1851,289 @@ function winningPickupControlPoint(from: Vec3, to: Vec3): Vec3 {
   ];
 }
 
+function tableFlipOriginPlayerFromEvent(
+  seed: string,
+  event: GameEvent | undefined,
+): PlayerId | undefined {
+  if (event?.type !== "winDeclared") {
+    return undefined;
+  }
+  return tableFlipOriginPlayer(seed, event.player, event.from);
+}
+
+function FlipTable({
+  active,
+  showSurface,
+  settings,
+  debugSettings,
+  tableFriction,
+}: {
+  active: boolean;
+  showSurface: boolean;
+  settings: TableFlipSettings;
+  debugSettings: TableFlipDebugSettings;
+  tableFriction: number;
+}) {
+  const bodyRef = useRef<RapierRigidBody>(null);
+  const elapsedRef = useRef(0);
+  const didReleaseRef = useRef(false);
+  const previousPoseRef = useRef<
+    | {
+        position: THREE.Vector3;
+        quaternion: THREE.Quaternion;
+        elapsed: number;
+      }
+    | undefined
+  >(undefined);
+
+  useFrame((_, delta) => {
+    if (!bodyRef.current) {
+      return;
+    }
+    if (!active) {
+      didReleaseRef.current = false;
+      elapsedRef.current = 0;
+      previousPoseRef.current = undefined;
+      bodyRef.current.setBodyType(rapierRigidBodyType.kinematicPosition, true);
+      bodyRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      bodyRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      bodyRef.current.setNextKinematicTranslation({
+        x: 0,
+        y: -tableSlabDepth / 2,
+        z: 0,
+      });
+      bodyRef.current.setNextKinematicRotation(
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, 0)),
+      );
+      return;
+    }
+
+    if (didReleaseRef.current) {
+      return;
+    }
+
+    elapsedRef.current = Math.min(
+      elapsedRef.current + delta,
+      debugSettings.flipDurationSeconds + 0.2,
+    );
+    const rawProgress = Math.min(
+      elapsedRef.current / debugSettings.flipDurationSeconds,
+      1,
+    );
+    const progress = easeInOutCubic(rawProgress);
+    const lift =
+      Math.sin(progress * Math.PI) * 0.18 + progress * debugSettings.tableLift;
+    const { position, quaternion } = tableFlipPose(
+      progress,
+      lift,
+      settings,
+      debugSettings,
+    );
+    bodyRef.current.setNextKinematicTranslation({
+      x: position.x,
+      y: position.y,
+      z: position.z,
+    });
+    bodyRef.current.setNextKinematicRotation(quaternion);
+
+    const previousPose = previousPoseRef.current;
+    if (rawProgress >= debugSettings.releaseAt && previousPose) {
+      const elapsedDelta = Math.max(
+        elapsedRef.current - previousPose.elapsed,
+        1 / 90,
+      );
+      const linearVelocity = position
+        .clone()
+        .sub(previousPose.position)
+        .multiplyScalar(1 / elapsedDelta);
+      const deltaQuaternion = quaternion
+        .clone()
+        .multiply(previousPose.quaternion.clone().invert());
+      const axis = new THREE.Vector3();
+      const angle =
+        2 * Math.acos(THREE.MathUtils.clamp(deltaQuaternion.w, -1, 1));
+      const axisScale = Math.sqrt(1 - deltaQuaternion.w * deltaQuaternion.w);
+      if (axisScale > 0.0001) {
+        axis.set(
+          deltaQuaternion.x / axisScale,
+          deltaQuaternion.y / axisScale,
+          deltaQuaternion.z / axisScale,
+        );
+      } else {
+        axis.set(0, 0, 0);
+      }
+      const angularVelocity = axis.multiplyScalar(angle / elapsedDelta);
+      bodyRef.current.setTranslation(position, true);
+      bodyRef.current.setRotation(quaternion, true);
+      bodyRef.current.setBodyType(rapierRigidBodyType.dynamic, true);
+      bodyRef.current.setLinvel(linearVelocity, true);
+      bodyRef.current.setAngvel(angularVelocity, true);
+      didReleaseRef.current = true;
+      return;
+    }
+
+    previousPoseRef.current = {
+      position,
+      quaternion,
+      elapsed: elapsedRef.current,
+    };
+  });
+
+  return (
+    <RigidBody
+      ref={bodyRef}
+      type="kinematicPosition"
+      colliders={false}
+      position={[0, -tableSlabDepth / 2, 0]}
+      rotation={[0, 0, 0]}
+      friction={tableFriction}
+      restitution={0.02}
+    >
+      <CuboidCollider
+        args={[tableHalfSize, tableSlabDepth / 2, tableHalfSize]}
+        friction={tableFriction}
+        restitution={0.02}
+      />
+      {showSurface ? (
+        <group position={[0, tableSlabDepth / 2, 0]}>
+          <TableSurface />
+        </group>
+      ) : null}
+    </RigidBody>
+  );
+}
+
+function tableFlipPose(
+  progress: number,
+  lift: number,
+  settings: TableFlipSettings,
+  debugSettings: TableFlipDebugSettings,
+): { position: THREE.Vector3; quaternion: THREE.Quaternion } {
+  if (settings.originPlayer === undefined) {
+    const slide = settings.flipDirection * progress * debugSettings.tableSlide;
+    const pitch = -settings.flipDirection * progress * debugSettings.flipRange;
+    const roll =
+      settings.flipDirection * progress * debugSettings.flipRange * 0.24;
+    const yaw = settings.yaw * progress;
+    return {
+      position: new THREE.Vector3(
+        slide,
+        -tableSlabDepth / 2 + lift,
+        -progress * 0.22,
+      ),
+      quaternion: new THREE.Quaternion().setFromEuler(
+        new THREE.Euler(pitch, yaw, roll),
+      ),
+    };
+  }
+
+  const forward = new THREE.Vector3(...playerForward(settings.originPlayer));
+  const right = new THREE.Vector3(...playerRight(settings.originPlayer));
+  const primaryRotation = new THREE.Quaternion().setFromAxisAngle(
+    right,
+    -progress * debugSettings.flipRange,
+  );
+  const secondaryRotation = new THREE.Quaternion().setFromAxisAngle(
+    forward,
+    settings.flipDirection * progress * debugSettings.flipRange * 0.2,
+  );
+  const yawRotation = new THREE.Quaternion().setFromAxisAngle(
+    new THREE.Vector3(0, 1, 0),
+    settings.yaw * progress,
+  );
+  const quaternion = yawRotation
+    .multiply(secondaryRotation)
+    .multiply(primaryRotation);
+  const oppositeEdgePivot = forward
+    .clone()
+    .multiplyScalar(-tableHalfSize * 0.82);
+  const rotatedPivot = oppositeEdgePivot.clone().applyQuaternion(quaternion);
+  const hingeCompensation = oppositeEdgePivot.clone().sub(rotatedPivot);
+  const slide = forward
+    .clone()
+    .multiplyScalar(-progress * debugSettings.tableSlide);
+  const position = new THREE.Vector3(0, -tableSlabDepth / 2 + lift, 0)
+    .add(hingeCompensation)
+    .add(slide);
+  return { position, quaternion };
+}
+
+function TableFlipPhysicsTile({
+  tilePhysics,
+  settings,
+  onContactSound,
+  visible,
+}: {
+  tilePhysics: TableFlipTilePhysics;
+  settings: TableFlipDebugSettings;
+  onContactSound: (payload: ContactForcePayload) => void;
+  visible: boolean;
+}) {
+  const bodyRef = useRef<RapierRigidBody>(null);
+  const didApplyImpulseRef = useRef(false);
+
+  useFrame(() => {
+    if (!bodyRef.current || didApplyImpulseRef.current) {
+      return;
+    }
+    didApplyImpulseRef.current = true;
+    bodyRef.current.setLinvel(
+      {
+        x: tilePhysics.linearVelocity[0] * settings.tileImpulse,
+        y: tilePhysics.linearVelocity[1] * settings.tileLift,
+        z: tilePhysics.linearVelocity[2] * settings.tileImpulse,
+      },
+      true,
+    );
+    bodyRef.current.setAngvel(
+      {
+        x: tilePhysics.angularVelocity[0] * settings.tileSpin,
+        y: tilePhysics.angularVelocity[1] * settings.tileSpin,
+        z: tilePhysics.angularVelocity[2] * settings.tileSpin,
+      },
+      true,
+    );
+  });
+
+  return (
+    <RigidBody
+      ref={bodyRef}
+      type="dynamic"
+      userData={{ kind: "discardTile", tileId: tilePhysics.placement.tile.id }}
+      colliders={false}
+      position={[
+        tilePhysics.placement.position[0],
+        tilePhysics.placement.position[1],
+        tilePhysics.placement.position[2],
+      ]}
+      rotation={[
+        tilePhysics.placement.rotation[0],
+        tilePhysics.placement.rotation[1],
+        tilePhysics.placement.rotation[2],
+      ]}
+      restitution={0.02}
+      friction={1.2}
+      linearDamping={settings.tileDamping}
+      angularDamping={settings.tileDamping}
+      ccd
+      softCcdPrediction={0.12}
+      additionalSolverIterations={8}
+      canSleep
+      onContactForce={onContactSound}
+    >
+      <CuboidCollider
+        args={[tileSize.width / 2, tileSize.height / 2, tileSize.depth / 2]}
+      />
+      <group visible={visible}>
+        <TileBlock
+          tile={tilePhysics.placement.tile}
+          faceUp={tilePhysics.placement.faceUp}
+        />
+      </group>
+    </RigidBody>
+  );
+}
+
 function DiscardPhysicsTile({
   placement,
   flick,
@@ -1549,6 +2303,7 @@ function AnimatedTile({
   motion = "arc",
   handoffKey,
   registerHandoff,
+  onPoseChange,
 }: {
   tile: TileInstance;
   from: Vec3;
@@ -1577,6 +2332,7 @@ function AnimatedTile({
     handoffKey: string,
     hideAnimatedTile: (() => void) | undefined,
   ) => void;
+  onPoseChange?: (tileId: string, pose: TilePose | undefined) => void;
 }) {
   const ref = useRef<THREE.Group>(null);
   const elapsedRef = useRef(0);
@@ -1829,6 +2585,20 @@ function AnimatedTile({
     );
   });
 
+  useFrame(() => {
+    const pose = groupTilePose(ref.current);
+    if (pose) {
+      onPoseChange?.(tile.id, pose);
+    }
+  });
+
+  useEffect(
+    () => () => {
+      onPoseChange?.(tile.id, undefined);
+    },
+    [onPoseChange, tile.id],
+  );
+
   return (
     <group ref={ref} position={from} rotation={fromRotation}>
       {motion === "drawConcealed" ? (
@@ -1840,6 +2610,49 @@ function AnimatedTile({
       )}
     </group>
   );
+}
+
+function TileMesh({
+  placement,
+  onPoseChange,
+}: {
+  placement: TilePlacement;
+  onPoseChange?: (tileId: string, pose: TilePose | undefined) => void;
+}) {
+  const ref = useRef<THREE.Group>(null);
+
+  useLayoutEffect(() => {
+    onPoseChange?.(placement.tile.id, groupTilePose(ref.current));
+    return () => onPoseChange?.(placement.tile.id, undefined);
+  }, [onPoseChange, placement.tile.id]);
+
+  useFrame(() => {
+    const pose = groupTilePose(ref.current);
+    if (pose) {
+      onPoseChange?.(placement.tile.id, pose);
+    }
+  });
+
+  return (
+    <group
+      ref={ref}
+      position={placement.position}
+      rotation={placement.rotation}
+    >
+      <TileBlock tile={placement.tile} faceUp={placement.faceUp} />
+    </group>
+  );
+}
+
+function groupTilePose(group: THREE.Group | null): TilePose | undefined {
+  if (!group) {
+    return undefined;
+  }
+  const rotation = new THREE.Euler().setFromQuaternion(group.quaternion);
+  return {
+    position: [group.position.x, group.position.y, group.position.z],
+    rotation: [rotation.x, rotation.y, rotation.z],
+  };
 }
 
 function drawFaceDownWallRotation(rotation: Vec3): THREE.Quaternion {
@@ -1983,14 +2796,6 @@ function applyAnimatedTransform(
     THREE.MathUtils.lerp(fromRotation[0], toRotation[0], progress),
     THREE.MathUtils.lerp(fromRotation[1], toRotation[1], progress),
     THREE.MathUtils.lerp(fromRotation[2], toRotation[2], progress),
-  );
-}
-
-function TileMesh({ placement }: { placement: TilePlacement }) {
-  return (
-    <group position={placement.position} rotation={placement.rotation}>
-      <TileBlock tile={placement.tile} faceUp={placement.faceUp} />
-    </group>
   );
 }
 

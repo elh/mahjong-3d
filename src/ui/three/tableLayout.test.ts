@@ -6,6 +6,12 @@ import { type ReplayState, replayEvents } from "../../sim/replay";
 import { createTileSet } from "../../sim/tiles";
 import { createShuffledWalls } from "../../sim/wall";
 import {
+  createTableFlipTilePhysics,
+  tableFlipAngularVelocity,
+  tableFlipLinearVelocity,
+  tableFlipOriginPlayer,
+} from "./tableFlip";
+import {
   createThreeTableLayout,
   discardDropPosition,
   discardFallPosition,
@@ -44,6 +50,54 @@ describe("3D table layout", () => {
     expect(
       layout.tiles.filter((tile) => tile.owner === "discard" && tile.physics),
     ).toHaveLength(1);
+  });
+
+  test("creates deterministic table-flip physics for every visible tile", () => {
+    const result = simulateTestScenarioRound("test-self-draw-win");
+    const replay = replayEvents(result.events, result.events.length - 1);
+    const layout = createThreeTableLayout(
+      replay,
+      result.events[result.events.length - 1],
+      replayEvents(result.events, result.events.length - 2),
+    );
+    const tilePhysics = createTableFlipTilePhysics(
+      layout.tiles,
+      "test-self-draw-win",
+    );
+
+    expect(tilePhysics).toHaveLength(layout.tiles.length);
+    expect(tilePhysics.map((entry) => entry.placement.tile.id).sort()).toEqual(
+      layout.tiles.map((placement) => placement.tile.id).sort(),
+    );
+
+    const faceStates = new Map(
+      layout.tiles.map((placement) => [placement.tile.id, placement.faceUp]),
+    );
+    for (const entry of tilePhysics) {
+      const faceUp = faceStates.get(entry.placement.tile.id);
+      expect(faceUp).toBeDefined();
+      expect(entry.placement.faceUp).toBe(faceUp ?? false);
+    }
+
+    const sample = layout.tiles[0];
+    expect(tilePhysics[0].linearVelocity).toEqual(
+      tableFlipLinearVelocity(sample, "test-self-draw-win"),
+    );
+    expect(tilePhysics[0].angularVelocity).toEqual(
+      tableFlipAngularVelocity(sample, "test-self-draw-win"),
+    );
+    expect(
+      createTableFlipTilePhysics(layout.tiles, "test-self-draw-win"),
+    ).toEqual(tilePhysics);
+  });
+
+  test("chooses a loser side as the table-flip origin", () => {
+    expect(tableFlipOriginPlayer("discard-win", 2, 0)).toBe(0);
+
+    const selfDrawOrigin = tableFlipOriginPlayer("test-self-draw-win", 0);
+    expect(selfDrawOrigin).not.toBe(0);
+    expect([1, 2, 3]).toContain(selfDrawOrigin);
+    expect(tableFlipOriginPlayer("test-self-draw-win", 0)).toBe(selfDrawOrigin);
   });
 
   test("creates draw and discard animation endpoints from replay events", () => {

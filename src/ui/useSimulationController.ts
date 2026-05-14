@@ -21,10 +21,15 @@ type QueuedRound = {
 
 export function useSimulationController({
   syncSeedToUrl = true,
+  defaultSeed,
 }: {
   syncSeedToUrl?: boolean;
+  defaultSeed?: string;
 } = {}) {
-  const initialSeed = useMemo(() => seedFromUrlOrRandom(), []);
+  const initialSeed = useMemo(
+    () => seedFromUrlOrRandom(defaultSeed),
+    [defaultSeed],
+  );
   const [seedInput, setSeedInput] = useState(initialSeed);
   const [pendingSeed, setPendingSeed] = useState(initialSeed);
   const [game, setGame] = useState<SimulateRoundResult | undefined>();
@@ -70,7 +75,7 @@ export function useSimulationController({
     queueSimulation(initialSeed, { replaceUrl: true });
 
     function syncSeedFromHistory() {
-      const seed = seedFromUrlOrRandom();
+      const seed = seedFromUrlOrRandom(defaultSeed);
       queueSimulation(seed, { replaceUrl: true });
     }
 
@@ -478,9 +483,9 @@ function clampEventIndex(index: number, eventCount: number): number {
   return Math.min(Math.max(0, index), Math.max(eventCount - 1, 0));
 }
 
-function seedFromUrlOrRandom(): string {
+function seedFromUrlOrRandom(defaultSeed?: string): string {
   const seed = new URLSearchParams(window.location.search).get("seed")?.trim();
-  return seed || randomSeed();
+  return seed || defaultSeed || randomSeed();
 }
 
 function randomSeed(): string {

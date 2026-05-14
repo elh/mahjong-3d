@@ -278,15 +278,67 @@ h3 {
   text-transform: uppercase;
 }
 
+.table-flip-controls {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 5;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid rgb(245 245 244 / 14%);
+  border-radius: 8px;
+  background: rgb(19 22 20 / 78%);
+  box-shadow: 0 8px 22px rgb(0 0 0 / 24%);
+  backdrop-filter: blur(8px);
+  margin: 0;
+}
+
+.table-flip-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgb(245 245 244 / 18%);
+  border-radius: 6px;
+  background: rgb(245 245 244 / 10%);
+  color: rgb(245 245 244 / 88%);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.table-flip-controls .primary-button {
+  border-color: rgb(245 245 244 / 8%);
+  background: rgb(245 245 244 / 92%);
+  color: rgb(19 22 20 / 94%);
+}
+
+.table-flip-controls button:hover:not(:disabled),
+.table-flip-controls button:focus-visible:not(:disabled) {
+  background: rgb(245 245 244 / 18%);
+}
+
+.table-flip-controls .primary-button:hover:not(:disabled),
+.table-flip-controls .primary-button:focus-visible:not(:disabled) {
+  background: rgb(255 255 255 / 98%);
+}
+
+.three-debug-panel.table-flip-debug-panel {
+  top: 10px;
+  right: 44px;
+  width: 250px;
+}
+
 .round-transition-overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
-  z-index: 20;
+  z-index: 3;
   pointer-events: none;
-  background: rgb(15 17 18 / 38%);
+  background: #0f1112;
   opacity: 0;
-  transition: opacity 520ms ease-in-out;
-  backdrop-filter: blur(2px);
+  transition: opacity 620ms ease-in-out;
 }
 
 .round-transition-overlay.active {
