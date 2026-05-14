@@ -23,6 +23,12 @@ import type { ReplayState } from "../../sim/replay";
 import type { TileInstance } from "../../sim/tiles";
 import { allTileImageUrls, tileImage } from "../tileImages";
 import {
+  createTableFlipSettings,
+  createTableFlipTilePhysics,
+  type TableFlipSettings,
+  type TableFlipTilePhysics,
+} from "./tableFlip";
+import {
   createThreeTableLayout,
   type TilePlacement,
   tileSize,
@@ -127,6 +133,19 @@ type SoundDebugSettings = {
   minSpeed: number;
 };
 
+type TableFlipDebugSettings = {
+  prepDelayMs: number;
+  flipDurationSeconds: number;
+  flipRange: number;
+  variability: number;
+  tableLift: number;
+  tableSlide: number;
+  tileImpulse: number;
+  tileLift: number;
+  tileSpin: number;
+  tileDamping: number;
+};
+
 const defaultFlickDebugSettings: FlickDebugSettings = {
   force: 1.5,
   lift: 1,
@@ -157,6 +176,19 @@ const defaultSoundDebugSettings: SoundDebugSettings = {
   minSpeed: 0.04,
 };
 
+const defaultTableFlipDebugSettings: TableFlipDebugSettings = {
+  prepDelayMs: 300,
+  flipDurationSeconds: 1.15,
+  flipRange: 1.35,
+  variability: 0.65,
+  tableLift: 0.28,
+  tableSlide: 0.32,
+  tileImpulse: 0.6,
+  tileLift: 0.7,
+  tileSpin: 0.7,
+  tileDamping: 0.9,
+};
+
 type ThreeGameViewProps = {
   replay: ReplayState;
   previousReplay: ReplayState | undefined;
@@ -172,6 +204,7 @@ type ThreeGameViewProps = {
   renderPaused?: boolean;
   suppressLoadingOverlay?: boolean;
   preserveSceneOnRoundChange?: boolean;
+  tableFlipDebug?: boolean;
 };
 
 export function ThreeGameView({
@@ -189,13 +222,24 @@ export function ThreeGameView({
   renderPaused = false,
   suppressLoadingOverlay = false,
   preserveSceneOnRoundChange = false,
+  tableFlipDebug = false,
 }: ThreeGameViewProps) {
   const [flickDebug, setFlickDebug] = useState(defaultFlickDebugSettings);
   const [lightingDebug, setLightingDebug] = useState(
     defaultLightingDebugSettings,
   );
   const [soundDebug, setSoundDebug] = useState(defaultSoundDebugSettings);
+  const [tableFlipDebugSettings, setTableFlipDebugSettings] = useState(
+    defaultTableFlipDebugSettings,
+  );
   const [sceneReady, setSceneReady] = useState(false);
+  const [tableFlipRun, setTableFlipRun] = useState(0);
+  const [tableFlipPhysicsKey, setTableFlipPhysicsKey] = useState(0);
+  const [tableFlipSnapshot, setTableFlipSnapshot] = useState<
+    TableFlipTilePhysics[] | undefined
+  >();
+  const [isTableFlipMotionActive, setIsTableFlipMotionActive] = useState(false);
+  const [isTableFlipResetting, setIsTableFlipResetting] = useState(false);
   const [internalCameraUserControlled, setInternalCameraUserControlled] =
     useState(false);
   const cameraPreset = useResponsiveCameraPreset();
@@ -203,6 +247,9 @@ export function ThreeGameView({
   const initialEventIndexRef = useRef(eventIndex);
   const lastRoundKeyRef = useRef(roundKey);
   const preserveSceneOnRoundChangeRef = useRef(preserveSceneOnRoundChange);
+  const tableFlipRoundKeyRef = useRef(roundKey);
+  const tableFlipDelayTimeoutRef = useRef<number | undefined>(undefined);
+  const tableFlipResetFrameRef = useRef<number | undefined>(undefined);
   const didMountRef = useRef(false);
   const animatedTileHandoffsRef = useRef(new Map<string, () => void>());
   const discardPoseByTileIdRef = useRef(new Map<string, TilePose>());
@@ -241,7 +288,9 @@ export function ThreeGameView({
   const shouldAnimateEvent =
     didMountRef.current && eventIndex !== lastEventIndexRef.current;
   const shouldAnimateInitialEvent =
-    sceneVisible && eventIndex === initialEventIndexRef.current;
+    !tableFlipDebug &&
+    sceneVisible &&
+    eventIndex === initialEventIndexRef.current;
   const animations =
     shouldAnimateEvent || shouldAnimateInitialEvent ? layout.animations : [];
   const renderedAnimations = animations.map((animation) => {
@@ -291,6 +340,17 @@ export function ThreeGameView({
     (placement) =>
       placement.physics && !nonPhysicsAnimatedTileIds.has(placement.tile.id),
   );
+  const tableFlipSettings = useMemo(
+    () =>
+      createTableFlipSettings(roundKey, {
+        variability: tableFlipDebugSettings.variability,
+      }),
+    [roundKey, tableFlipDebugSettings.variability],
+  );
+  const isTableFlipped = tableFlipSnapshot !== undefined;
+  const isTableFlipPhysicsPaused =
+    tableFlipDebug &&
+    ((isTableFlipped && !isTableFlipMotionActive) || isTableFlipResetting);
   const playContactSound = useMemo(
     () => createContactSoundHandler(soundDebug),
     [soundDebug],
@@ -311,6 +371,75 @@ export function ThreeGameView({
   const recordDiscardPose = useCallback((tileId: string, pose: TilePose) => {
     discardPoseByTileIdRef.current.set(tileId, pose);
   }, []);
+  const startTableFlip = useCallback(() => {
+    if (tableFlipDelayTimeoutRef.current !== undefined) {
+      window.clearTimeout(tableFlipDelayTimeoutRef.current);
+      tableFlipDelayTimeoutRef.current = undefined;
+    }
+    if (tableFlipResetFrameRef.current !== undefined) {
+      window.cancelAnimationFrame(tableFlipResetFrameRef.current);
+      tableFlipResetFrameRef.current = undefined;
+    }
+    setIsTableFlipResetting(false);
+    setIsTableFlipMotionActive(false);
+    setTableFlipSnapshot(
+      createTableFlipTilePhysics(layout.tiles, roundKey, {
+        variability: tableFlipDebugSettings.variability,
+      }),
+    );
+    setTableFlipRun((run) => run + 1);
+    tableFlipDelayTimeoutRef.current = window.setTimeout(() => {
+      tableFlipDelayTimeoutRef.current = undefined;
+      setIsTableFlipMotionActive(true);
+    }, tableFlipDebugSettings.prepDelayMs);
+  }, [
+    layout.tiles,
+    roundKey,
+    tableFlipDebugSettings.prepDelayMs,
+    tableFlipDebugSettings.variability,
+  ]);
+  const resetTableFlip = useCallback(() => {
+    if (tableFlipDelayTimeoutRef.current !== undefined) {
+      window.clearTimeout(tableFlipDelayTimeoutRef.current);
+      tableFlipDelayTimeoutRef.current = undefined;
+    }
+    if (tableFlipResetFrameRef.current !== undefined) {
+      window.cancelAnimationFrame(tableFlipResetFrameRef.current);
+      tableFlipResetFrameRef.current = undefined;
+    }
+    setIsTableFlipMotionActive(false);
+    setIsTableFlipResetting(true);
+    tableFlipResetFrameRef.current = window.requestAnimationFrame(() => {
+      tableFlipResetFrameRef.current = undefined;
+      setTableFlipSnapshot(undefined);
+      setTableFlipPhysicsKey((key) => key + 1);
+      setTableFlipRun((run) => run + 1);
+      setIsTableFlipResetting(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (tableFlipRoundKeyRef.current === roundKey) {
+      return;
+    }
+    tableFlipRoundKeyRef.current = roundKey;
+    setIsTableFlipMotionActive(false);
+    setIsTableFlipResetting(false);
+    setTableFlipSnapshot(undefined);
+    setTableFlipPhysicsKey((key) => key + 1);
+  });
+
+  useEffect(
+    () => () => {
+      if (tableFlipDelayTimeoutRef.current !== undefined) {
+        window.clearTimeout(tableFlipDelayTimeoutRef.current);
+      }
+      if (tableFlipResetFrameRef.current !== undefined) {
+        window.cancelAnimationFrame(tableFlipResetFrameRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!enableTileCollisionSound) {
@@ -365,6 +494,34 @@ export function ThreeGameView({
           onSoundChange={setSoundDebug}
         />
       ) : null}
+      {tableFlipDebug ? (
+        <>
+          <fieldset
+            className="table-flip-controls"
+            aria-label="Table flip controls"
+          >
+            <button
+              type="button"
+              className="primary-button"
+              onClick={startTableFlip}
+              disabled={!sceneVisible || isTableFlipped}
+            >
+              Flip
+            </button>
+            <button
+              type="button"
+              onClick={resetTableFlip}
+              disabled={!isTableFlipped}
+            >
+              Reset
+            </button>
+          </fieldset>
+          <TableFlipDebugPanel
+            settings={tableFlipDebugSettings}
+            onChange={setTableFlipDebugSettings}
+          />
+        </>
+      ) : null}
       {!sceneVisible && !suppressLoadingOverlay ? (
         <div className="three-loading-overlay" aria-live="polite">
           Loading...
@@ -415,45 +572,73 @@ export function ThreeGameView({
         />
         <CameraShoulderFill intensity={lightingDebug.cameraFillIntensity} />
         <HandFaceFill intensity={lightingDebug.handFaceFillIntensity} />
-        <TableSurface />
+        {tableFlipDebug ? null : <TableSurface />}
         <Suspense fallback={null}>
           {lightingDebug.environment ? <Environment preset="studio" /> : null}
-          <Physics gravity={[0, -9.81, 0]}>
-            <CuboidCollider
-              position={[0, -tableSlabDepth / 2, 0]}
-              args={[tableHalfSize, tableSlabDepth / 2, tableHalfSize]}
-              friction={flickDebug.tableFriction}
-              restitution={0.02}
-            />
-            {discardTiles.map((placement) => (
-              <DiscardPhysicsTile
-                key={placement.tile.id}
-                placement={
-                  flickByTileId.has(placement.tile.id)
-                    ? {
-                        ...placement,
-                        position: flickByTileId.get(placement.tile.id)!
-                          .position,
-                        rotation: flickByTileId.get(placement.tile.id)!
-                          .rotation,
-                      }
-                    : placement
-                }
-                flick={flickByTileId.get(placement.tile.id)}
-                handoffKey={
-                  flickByTileId.has(placement.tile.id)
-                    ? `${roundKey}:${eventIndex}:${placement.tile.id}`
-                    : undefined
-                }
-                settings={flickDebug}
-                onContactSound={playContactSound}
-                onFlickStarted={hideAnimatedTileForHandoff}
-                onPoseChange={recordDiscardPose}
-                visible={sceneVisible}
+          <Physics
+            key={tableFlipDebug ? tableFlipPhysicsKey : "main"}
+            gravity={[0, -9.81, 0]}
+            timeStep={tableFlipDebug ? 1 / 90 : undefined}
+            numSolverIterations={tableFlipDebug ? 10 : undefined}
+            numInternalPgsIterations={tableFlipDebug ? 2 : undefined}
+            maxCcdSubsteps={tableFlipDebug ? 4 : undefined}
+            paused={isTableFlipPhysicsPaused}
+          >
+            {tableFlipDebug ? (
+              <FlipTable
+                key={tableFlipRun}
+                active={isTableFlipMotionActive}
+                settings={tableFlipSettings}
+                debugSettings={tableFlipDebugSettings}
+                tableFriction={flickDebug.tableFriction}
               />
-            ))}
+            ) : (
+              <CuboidCollider
+                position={[0, -tableSlabDepth / 2, 0]}
+                args={[tableHalfSize, tableSlabDepth / 2, tableHalfSize]}
+                friction={flickDebug.tableFriction}
+                restitution={0.02}
+              />
+            )}
+            {isTableFlipped
+              ? tableFlipSnapshot?.map((tilePhysics) => (
+                  <TableFlipPhysicsTile
+                    key={`${tableFlipRun}:${tilePhysics.placement.tile.id}`}
+                    tilePhysics={tilePhysics}
+                    settings={tableFlipDebugSettings}
+                    onContactSound={playContactSound}
+                    visible={sceneVisible}
+                  />
+                ))
+              : discardTiles.map((placement) => (
+                  <DiscardPhysicsTile
+                    key={placement.tile.id}
+                    placement={
+                      flickByTileId.has(placement.tile.id)
+                        ? {
+                            ...placement,
+                            position: flickByTileId.get(placement.tile.id)!
+                              .position,
+                            rotation: flickByTileId.get(placement.tile.id)!
+                              .rotation,
+                          }
+                        : placement
+                    }
+                    flick={flickByTileId.get(placement.tile.id)}
+                    handoffKey={
+                      flickByTileId.has(placement.tile.id)
+                        ? `${roundKey}:${eventIndex}:${placement.tile.id}`
+                        : undefined
+                    }
+                    settings={flickDebug}
+                    onContactSound={playContactSound}
+                    onFlickStarted={hideAnimatedTileForHandoff}
+                    onPoseChange={recordDiscardPose}
+                    visible={sceneVisible}
+                  />
+                ))}
           </Physics>
-          <group visible={sceneVisible}>
+          <group visible={sceneVisible && !isTableFlipped}>
             {staticTiles.map((placement) => (
               <TileMesh key={placement.tile.id} placement={placement} />
             ))}
@@ -1102,6 +1287,113 @@ function SoundDebugControls({
   );
 }
 
+function TableFlipDebugPanel({
+  settings,
+  onChange,
+}: {
+  settings: TableFlipDebugSettings;
+  onChange: (settings: TableFlipDebugSettings) => void;
+}) {
+  return (
+    <aside
+      className="three-debug-panel table-flip-debug-panel"
+      aria-label="Table flip debug settings"
+    >
+      <header>
+        <span>Table flip</span>
+        <button
+          type="button"
+          onClick={() => onChange(defaultTableFlipDebugSettings)}
+        >
+          Defaults
+        </button>
+      </header>
+      <DebugSlider
+        label="Prep delay ms"
+        value={settings.prepDelayMs}
+        min={0}
+        max={1200}
+        step={25}
+        onChange={(prepDelayMs) => onChange({ ...settings, prepDelayMs })}
+      />
+      <DebugSlider
+        label="Flip seconds"
+        value={settings.flipDurationSeconds}
+        min={0.35}
+        max={2.6}
+        step={0.05}
+        onChange={(flipDurationSeconds) =>
+          onChange({ ...settings, flipDurationSeconds })
+        }
+      />
+      <DebugSlider
+        label="Flip range"
+        value={settings.flipRange}
+        min={0.35}
+        max={2.4}
+        step={0.05}
+        onChange={(flipRange) => onChange({ ...settings, flipRange })}
+      />
+      <DebugSlider
+        label="Variability"
+        value={settings.variability}
+        min={0}
+        max={1.8}
+        step={0.05}
+        onChange={(variability) => onChange({ ...settings, variability })}
+      />
+      <DebugSlider
+        label="Table lift"
+        value={settings.tableLift}
+        min={0}
+        max={0.8}
+        step={0.02}
+        onChange={(tableLift) => onChange({ ...settings, tableLift })}
+      />
+      <DebugSlider
+        label="Table slide"
+        value={settings.tableSlide}
+        min={0}
+        max={0.9}
+        step={0.02}
+        onChange={(tableSlide) => onChange({ ...settings, tableSlide })}
+      />
+      <DebugSlider
+        label="Tile impulse"
+        value={settings.tileImpulse}
+        min={0}
+        max={1.8}
+        step={0.05}
+        onChange={(tileImpulse) => onChange({ ...settings, tileImpulse })}
+      />
+      <DebugSlider
+        label="Tile lift"
+        value={settings.tileLift}
+        min={0}
+        max={1.8}
+        step={0.05}
+        onChange={(tileLift) => onChange({ ...settings, tileLift })}
+      />
+      <DebugSlider
+        label="Tile spin"
+        value={settings.tileSpin}
+        min={0}
+        max={1.8}
+        step={0.05}
+        onChange={(tileSpin) => onChange({ ...settings, tileSpin })}
+      />
+      <DebugSlider
+        label="Tile damping"
+        value={settings.tileDamping}
+        min={0}
+        max={2.5}
+        step={0.05}
+        onChange={(tileDamping) => onChange({ ...settings, tileDamping })}
+      />
+    </aside>
+  );
+}
+
 function DebugSlider({
   label,
   value,
@@ -1378,6 +1670,158 @@ function winningPickupControlPoint(from: Vec3, to: Vec3): Vec3 {
     Math.max(from[1], to[1]) + 0.55,
     (from[2] + to[2]) / 2,
   ];
+}
+
+function FlipTable({
+  active,
+  settings,
+  debugSettings,
+  tableFriction,
+}: {
+  active: boolean;
+  settings: TableFlipSettings;
+  debugSettings: TableFlipDebugSettings;
+  tableFriction: number;
+}) {
+  const bodyRef = useRef<RapierRigidBody>(null);
+  const elapsedRef = useRef(0);
+
+  useFrame((_, delta) => {
+    if (!bodyRef.current) {
+      return;
+    }
+    if (!active) {
+      bodyRef.current.setNextKinematicTranslation({
+        x: 0,
+        y: -tableSlabDepth / 2,
+        z: 0,
+      });
+      bodyRef.current.setNextKinematicRotation(
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, 0)),
+      );
+      return;
+    }
+
+    elapsedRef.current = Math.min(
+      elapsedRef.current + delta,
+      debugSettings.flipDurationSeconds + 0.2,
+    );
+    const progress = easeInOutCubic(
+      Math.min(elapsedRef.current / debugSettings.flipDurationSeconds, 1),
+    );
+    const lift =
+      Math.sin(progress * Math.PI) * 0.18 + progress * debugSettings.tableLift;
+    const slide = settings.flipDirection * progress * debugSettings.tableSlide;
+    const pitch = -settings.flipDirection * progress * debugSettings.flipRange;
+    const roll =
+      settings.flipDirection * progress * debugSettings.flipRange * 0.24;
+    const yaw = settings.yaw * progress;
+    bodyRef.current.setNextKinematicTranslation({
+      x: slide,
+      y: -tableSlabDepth / 2 + lift,
+      z: -progress * 0.22,
+    });
+    bodyRef.current.setNextKinematicRotation(
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(pitch, yaw, roll)),
+    );
+  });
+
+  return (
+    <RigidBody
+      ref={bodyRef}
+      type="kinematicPosition"
+      colliders={false}
+      position={[0, -tableSlabDepth / 2, 0]}
+      rotation={[0, 0, 0]}
+      friction={tableFriction}
+      restitution={0.02}
+    >
+      <CuboidCollider
+        args={[tableHalfSize, tableSlabDepth / 2, tableHalfSize]}
+        friction={tableFriction}
+        restitution={0.02}
+      />
+      <group position={[0, tableSlabDepth / 2, 0]}>
+        <TableSurface />
+      </group>
+    </RigidBody>
+  );
+}
+
+function TableFlipPhysicsTile({
+  tilePhysics,
+  settings,
+  onContactSound,
+  visible,
+}: {
+  tilePhysics: TableFlipTilePhysics;
+  settings: TableFlipDebugSettings;
+  onContactSound: (payload: ContactForcePayload) => void;
+  visible: boolean;
+}) {
+  const bodyRef = useRef<RapierRigidBody>(null);
+  const didApplyImpulseRef = useRef(false);
+
+  useFrame(() => {
+    if (!bodyRef.current || didApplyImpulseRef.current) {
+      return;
+    }
+    didApplyImpulseRef.current = true;
+    bodyRef.current.setLinvel(
+      {
+        x: tilePhysics.linearVelocity[0] * settings.tileImpulse,
+        y: tilePhysics.linearVelocity[1] * settings.tileLift,
+        z: tilePhysics.linearVelocity[2] * settings.tileImpulse,
+      },
+      true,
+    );
+    bodyRef.current.setAngvel(
+      {
+        x: tilePhysics.angularVelocity[0] * settings.tileSpin,
+        y: tilePhysics.angularVelocity[1] * settings.tileSpin,
+        z: tilePhysics.angularVelocity[2] * settings.tileSpin,
+      },
+      true,
+    );
+  });
+
+  return (
+    <RigidBody
+      ref={bodyRef}
+      type="dynamic"
+      userData={{ kind: "discardTile", tileId: tilePhysics.placement.tile.id }}
+      colliders={false}
+      position={[
+        tilePhysics.placement.position[0],
+        tilePhysics.placement.position[1],
+        tilePhysics.placement.position[2],
+      ]}
+      rotation={[
+        tilePhysics.placement.rotation[0],
+        tilePhysics.placement.rotation[1],
+        tilePhysics.placement.rotation[2],
+      ]}
+      restitution={0.02}
+      friction={1.2}
+      linearDamping={settings.tileDamping}
+      angularDamping={settings.tileDamping}
+      ccd
+      softCcdPrediction={0.12}
+      additionalSolverIterations={8}
+      canSleep
+      onContactForce={onContactSound}
+    >
+      <CuboidCollider
+        args={[tileSize.width / 2, tileSize.height / 2, tileSize.depth / 2]}
+      />
+      <group visible={visible}>
+        <TileBlock
+          tile={tilePhysics.placement.tile}
+          faceUp={tilePhysics.placement.faceUp}
+        />
+      </group>
+    </RigidBody>
+  );
 }
 
 function DiscardPhysicsTile({

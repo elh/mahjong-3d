@@ -278,6 +278,31 @@ h3 {
   text-transform: uppercase;
 }
 
+.table-flip-controls {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 5;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid rgb(245 245 244 / 14%);
+  border-radius: 8px;
+  background: rgb(19 22 20 / 78%);
+  box-shadow: 0 8px 22px rgb(0 0 0 / 24%);
+  backdrop-filter: blur(8px);
+}
+
+.table-flip-controls button {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.table-flip-debug-panel {
+  width: 250px;
+}
+
 .round-transition-overlay {
   position: fixed;
   inset: 0;

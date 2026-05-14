@@ -66,9 +66,100 @@ function scrollActiveEventIntoView(
 }
 
 export default function App() {
-  const isDebugRoute =
-    new URLSearchParams(window.location.search).get("view") === "debug";
-  return isDebugRoute ? <DebugApp /> : <SimApp />;
+  const view = new URLSearchParams(window.location.search).get("view");
+  if (view === "debug") {
+    return <DebugApp />;
+  }
+  if (view === "table-flip") {
+    return <TableFlipDebugApp />;
+  }
+  return <SimApp />;
+}
+
+function TableFlipDebugApp() {
+  const simulation = useSimulationController({
+    defaultSeed: "test-self-draw-win",
+  });
+  const {
+    pendingSeed,
+    isGenerating,
+    generationError,
+    eventIndex,
+    events,
+    replay,
+    currentEvent,
+    jumpToEventIndex,
+  } = simulation;
+  const previousReplay = useMemo(
+    () => (eventIndex > 0 ? replayEvents(events, eventIndex - 1) : undefined),
+    [events, eventIndex],
+  );
+  const nextEvent = events[eventIndex + 1];
+  const roundKey =
+    events[0]?.type === "roundStarted" ? events[0].seed : pendingSeed;
+  const isLoadingRound = isGenerating && !generationError;
+  const finalEventIndex = Math.max(events.length - 1, 0);
+  const debugHref = appHref(`?view=debug&seed=${encodeURIComponent(roundKey)}`);
+
+  useEffect(() => {
+    if (
+      !isLoadingRound &&
+      events.length > 0 &&
+      eventIndex !== finalEventIndex
+    ) {
+      jumpToEventIndex(finalEventIndex);
+    }
+  }, [
+    eventIndex,
+    events.length,
+    finalEventIndex,
+    isLoadingRound,
+    jumpToEventIndex,
+  ]);
+
+  return (
+    <main className="sim-shell">
+      {(isGenerating || generationError) && (
+        <section
+          className={
+            generationError ? "generation-pill error" : "generation-pill"
+          }
+          aria-live="polite"
+        >
+          {generationError
+            ? `Could not generate ${pendingSeed}: ${generationError}`
+            : `Generating ${pendingSeed}...`}
+        </section>
+      )}
+      <Suspense
+        fallback={
+          <section
+            className="three-viewer loading"
+            aria-label="Loading 3D view"
+          >
+            Loading 3D view...
+          </section>
+        }
+      >
+        <ThreeGameView
+          replay={replay}
+          previousReplay={previousReplay}
+          currentEvent={currentEvent}
+          nextEvent={nextEvent}
+          eventIndex={eventIndex}
+          roundKey={roundKey}
+          loading={isLoadingRound}
+          simulatorMode
+          cameraAutoRotate={false}
+          tableFlipDebug
+        />
+      </Suspense>
+      <InfoPopover
+        summary={{ title: "Table Flip Debug", detail: `Seed: ${roundKey}` }}
+        routeLink={{ href: debugHref, label: "Debug view" }}
+      />
+    </main>
+  );
 }
 
 function DebugApp() {
