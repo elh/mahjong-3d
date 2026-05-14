@@ -986,7 +986,6 @@ function CenterTableMark() {
       <meshBasicMaterial
         map={texture}
         transparent
-        depthTest={false}
         depthWrite={false}
         toneMapped={false}
       />
