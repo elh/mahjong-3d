@@ -140,6 +140,7 @@ type SoundDebugSettings = {
 type TableFlipDebugSettings = {
   prepDelayMs: number;
   flipDurationSeconds: number;
+  resetDelayMs: number;
   flipRange: number;
   releaseAt: number;
   variability: number;
@@ -184,6 +185,7 @@ const defaultSoundDebugSettings: SoundDebugSettings = {
 const defaultTableFlipDebugSettings: TableFlipDebugSettings = {
   prepDelayMs: 300,
   flipDurationSeconds: 1.15,
+  resetDelayMs: 4000,
   flipRange: 1.8,
   releaseAt: 0.6,
   variability: 2,
@@ -211,6 +213,9 @@ type ThreeGameViewProps = {
   suppressLoadingOverlay?: boolean;
   preserveSceneOnRoundChange?: boolean;
   tableFlipDebug?: boolean;
+  tableFlipTransitionKey?: string;
+  onTableFlipPreviewTransition?: (delayMs: number) => void;
+  sceneTransitionOverlayActive?: boolean;
 };
 
 export function ThreeGameView({
@@ -229,6 +234,9 @@ export function ThreeGameView({
   suppressLoadingOverlay = false,
   preserveSceneOnRoundChange = false,
   tableFlipDebug = false,
+  tableFlipTransitionKey,
+  onTableFlipPreviewTransition,
+  sceneTransitionOverlayActive = false,
 }: ThreeGameViewProps) {
   const [flickDebug, setFlickDebug] = useState(defaultFlickDebugSettings);
   const [lightingDebug, setLightingDebug] = useState(
@@ -254,12 +262,17 @@ export function ThreeGameView({
   const lastRoundKeyRef = useRef(roundKey);
   const preserveSceneOnRoundChangeRef = useRef(preserveSceneOnRoundChange);
   const tableFlipRoundKeyRef = useRef(roundKey);
+  const lastTableFlipTransitionKeyRef = useRef<string | undefined>(undefined);
   const tableFlipDelayTimeoutRef = useRef<number | undefined>(undefined);
   const tableFlipResetFrameRef = useRef<number | undefined>(undefined);
   const didMountRef = useRef(false);
   const animatedTileHandoffsRef = useRef(new Map<string, () => void>());
   const discardPoseByTileIdRef = useRef(new Map<string, TilePose>());
   const roundChanged = roundKey !== lastRoundKeyRef.current;
+  const tableFlipEnabled =
+    tableFlipDebug ||
+    tableFlipTransitionKey !== undefined ||
+    tableFlipSnapshot !== undefined;
   preserveSceneOnRoundChangeRef.current = preserveSceneOnRoundChange;
   if (roundChanged) {
     lastRoundKeyRef.current = roundKey;
@@ -294,7 +307,7 @@ export function ThreeGameView({
   const shouldAnimateEvent =
     didMountRef.current && eventIndex !== lastEventIndexRef.current;
   const shouldAnimateInitialEvent =
-    !tableFlipDebug &&
+    !tableFlipEnabled &&
     sceneVisible &&
     eventIndex === initialEventIndexRef.current;
   const animations =
@@ -355,7 +368,7 @@ export function ThreeGameView({
   );
   const isTableFlipped = tableFlipSnapshot !== undefined;
   const isTableFlipPhysicsPaused =
-    tableFlipDebug &&
+    tableFlipEnabled &&
     ((isTableFlipped && !isTableFlipMotionActive) || isTableFlipResetting);
   const playContactSound = useMemo(
     () => createContactSoundHandler(soundDebug),
@@ -423,17 +436,45 @@ export function ThreeGameView({
       setIsTableFlipResetting(false);
     });
   }, []);
+  const previewTableFlipTransition = useCallback(() => {
+    startTableFlip();
+    onTableFlipPreviewTransition?.(
+      tableFlipDebugSettings.prepDelayMs +
+        tableFlipDebugSettings.flipDurationSeconds * 1000 +
+        tableFlipDebugSettings.resetDelayMs,
+    );
+  }, [
+    onTableFlipPreviewTransition,
+    startTableFlip,
+    tableFlipDebugSettings.flipDurationSeconds,
+    tableFlipDebugSettings.prepDelayMs,
+    tableFlipDebugSettings.resetDelayMs,
+  ]);
 
   useEffect(() => {
     if (tableFlipRoundKeyRef.current === roundKey) {
       return;
     }
     tableFlipRoundKeyRef.current = roundKey;
+    lastTableFlipTransitionKeyRef.current = undefined;
     setIsTableFlipMotionActive(false);
     setIsTableFlipResetting(false);
     setTableFlipSnapshot(undefined);
     setTableFlipPhysicsKey((key) => key + 1);
   });
+
+  useEffect(() => {
+    if (
+      tableFlipTransitionKey === undefined ||
+      tableFlipTransitionKey === lastTableFlipTransitionKeyRef.current ||
+      !sceneVisible ||
+      loading
+    ) {
+      return;
+    }
+    lastTableFlipTransitionKeyRef.current = tableFlipTransitionKey;
+    startTableFlip();
+  }, [loading, sceneVisible, startTableFlip, tableFlipTransitionKey]);
 
   useEffect(
     () => () => {
@@ -516,6 +557,17 @@ export function ThreeGameView({
             </button>
             <button
               type="button"
+              onClick={previewTableFlipTransition}
+              disabled={
+                !sceneVisible ||
+                isTableFlipped ||
+                onTableFlipPreviewTransition === undefined
+              }
+            >
+              Transition
+            </button>
+            <button
+              type="button"
               onClick={resetTableFlip}
               disabled={!isTableFlipped}
             >
@@ -578,19 +630,19 @@ export function ThreeGameView({
         />
         <CameraShoulderFill intensity={lightingDebug.cameraFillIntensity} />
         <HandFaceFill intensity={lightingDebug.handFaceFillIntensity} />
-        {tableFlipDebug ? null : <TableSurface />}
+        {tableFlipEnabled ? null : <TableSurface />}
         <Suspense fallback={null}>
           {lightingDebug.environment ? <Environment preset="studio" /> : null}
           <Physics
-            key={tableFlipDebug ? tableFlipPhysicsKey : "main"}
+            key={tableFlipEnabled ? tableFlipPhysicsKey : "main"}
             gravity={[0, -9.81, 0]}
-            timeStep={tableFlipDebug ? 1 / 90 : undefined}
-            numSolverIterations={tableFlipDebug ? 10 : undefined}
-            numInternalPgsIterations={tableFlipDebug ? 2 : undefined}
-            maxCcdSubsteps={tableFlipDebug ? 4 : undefined}
+            timeStep={tableFlipEnabled ? 1 / 90 : undefined}
+            numSolverIterations={tableFlipEnabled ? 10 : undefined}
+            numInternalPgsIterations={tableFlipEnabled ? 2 : undefined}
+            maxCcdSubsteps={tableFlipEnabled ? 4 : undefined}
             paused={isTableFlipPhysicsPaused}
           >
-            {tableFlipDebug ? (
+            {tableFlipEnabled ? (
               <FlipTable
                 key={tableFlipRun}
                 active={isTableFlipMotionActive}
@@ -686,6 +738,14 @@ export function ThreeGameView({
           onStart={() => setIsCameraUserControlled(true)}
         />
       </Canvas>
+      <div
+        className={
+          sceneTransitionOverlayActive
+            ? "round-transition-overlay active"
+            : "round-transition-overlay"
+        }
+        aria-hidden="true"
+      />
     </section>
   );
 }
@@ -1333,6 +1393,14 @@ function TableFlipDebugPanel({
         }
       />
       <DebugSlider
+        label="Reset delay ms"
+        value={settings.resetDelayMs}
+        min={0}
+        max={10000}
+        step={100}
+        onChange={(resetDelayMs) => onChange({ ...settings, resetDelayMs })}
+      />
+      <DebugSlider
         label="Flip range"
         value={settings.flipRange}
         min={0.35}
@@ -1352,7 +1420,7 @@ function TableFlipDebugPanel({
         label="Variability"
         value={settings.variability}
         min={0}
-        max={1.8}
+        max={2.5}
         step={0.05}
         onChange={(variability) => onChange({ ...settings, variability })}
       />

@@ -1,6 +1,17 @@
 export const infiniteRoundHoldMs = 5000;
-export const infiniteRoundFadeMs = 700;
-export const infiniteRoundSwapMs = 180;
+export const infiniteRoundFadeMs = 620;
+export const infiniteRoundSwapMs = 560;
+export const infiniteRoundFlipPrepMs = 300;
+export const infiniteRoundFlipDurationMs = 1150;
+export const infiniteRoundResetDelayMs = 4000;
+
+export function infiniteRoundFlipTransitionDelayMs(): number {
+  return (
+    infiniteRoundFlipPrepMs +
+    infiniteRoundFlipDurationMs +
+    infiniteRoundResetDelayMs
+  );
+}
 
 export type PromotionDelayInput = {
   isAtRoundEnd: boolean;

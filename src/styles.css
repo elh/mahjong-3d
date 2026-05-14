@@ -332,14 +332,13 @@ h3 {
 }
 
 .round-transition-overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
-  z-index: 20;
+  z-index: 3;
   pointer-events: none;
-  background: rgb(15 17 18 / 38%);
+  background: #0f1112;
   opacity: 0;
-  transition: opacity 520ms ease-in-out;
-  backdrop-filter: blur(2px);
+  transition: opacity 620ms ease-in-out;
 }
 
 .round-transition-overlay.active {
