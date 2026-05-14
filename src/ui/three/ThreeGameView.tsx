@@ -47,6 +47,10 @@ const tableRailWidth = 0.16;
 const tableRailHeight = 0.075;
 const tableRailOuterHalfSize = tableHalfSize + tableRailWidth;
 const cameraTarget: Vec3 = [0, 0, 0];
+const rapierRigidBodyType = {
+  dynamic: 0,
+  kinematicPosition: 2,
+} as const;
 
 type CameraPreset = {
   position: Vec3;
@@ -137,6 +141,7 @@ type TableFlipDebugSettings = {
   prepDelayMs: number;
   flipDurationSeconds: number;
   flipRange: number;
+  releaseAt: number;
   variability: number;
   tableLift: number;
   tableSlide: number;
@@ -179,13 +184,14 @@ const defaultSoundDebugSettings: SoundDebugSettings = {
 const defaultTableFlipDebugSettings: TableFlipDebugSettings = {
   prepDelayMs: 300,
   flipDurationSeconds: 1.15,
-  flipRange: 1.35,
-  variability: 0.65,
+  flipRange: 1.8,
+  releaseAt: 0.6,
+  variability: 2,
   tableLift: 0.28,
   tableSlide: 0.32,
-  tileImpulse: 0.6,
-  tileLift: 0.7,
-  tileSpin: 0.7,
+  tileImpulse: 0,
+  tileLift: 0,
+  tileSpin: 0,
   tileDamping: 0.9,
 };
 
@@ -1335,6 +1341,14 @@ function TableFlipDebugPanel({
         onChange={(flipRange) => onChange({ ...settings, flipRange })}
       />
       <DebugSlider
+        label="Release at"
+        value={settings.releaseAt}
+        min={0.55}
+        max={1}
+        step={0.01}
+        onChange={(releaseAt) => onChange({ ...settings, releaseAt })}
+      />
+      <DebugSlider
         label="Variability"
         value={settings.variability}
         min={0}
@@ -1685,12 +1699,27 @@ function FlipTable({
 }) {
   const bodyRef = useRef<RapierRigidBody>(null);
   const elapsedRef = useRef(0);
+  const didReleaseRef = useRef(false);
+  const previousPoseRef = useRef<
+    | {
+        position: THREE.Vector3;
+        quaternion: THREE.Quaternion;
+        elapsed: number;
+      }
+    | undefined
+  >(undefined);
 
   useFrame((_, delta) => {
     if (!bodyRef.current) {
       return;
     }
     if (!active) {
+      didReleaseRef.current = false;
+      elapsedRef.current = 0;
+      previousPoseRef.current = undefined;
+      bodyRef.current.setBodyType(rapierRigidBodyType.kinematicPosition, true);
+      bodyRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      bodyRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
       bodyRef.current.setNextKinematicTranslation({
         x: 0,
         y: -tableSlabDepth / 2,
@@ -1702,13 +1731,19 @@ function FlipTable({
       return;
     }
 
+    if (didReleaseRef.current) {
+      return;
+    }
+
     elapsedRef.current = Math.min(
       elapsedRef.current + delta,
       debugSettings.flipDurationSeconds + 0.2,
     );
-    const progress = easeInOutCubic(
-      Math.min(elapsedRef.current / debugSettings.flipDurationSeconds, 1),
+    const rawProgress = Math.min(
+      elapsedRef.current / debugSettings.flipDurationSeconds,
+      1,
     );
+    const progress = easeInOutCubic(rawProgress);
     const lift =
       Math.sin(progress * Math.PI) * 0.18 + progress * debugSettings.tableLift;
     const slide = settings.flipDirection * progress * debugSettings.tableSlide;
@@ -1716,14 +1751,62 @@ function FlipTable({
     const roll =
       settings.flipDirection * progress * debugSettings.flipRange * 0.24;
     const yaw = settings.yaw * progress;
-    bodyRef.current.setNextKinematicTranslation({
-      x: slide,
-      y: -tableSlabDepth / 2 + lift,
-      z: -progress * 0.22,
-    });
-    bodyRef.current.setNextKinematicRotation(
-      new THREE.Quaternion().setFromEuler(new THREE.Euler(pitch, yaw, roll)),
+    const position = new THREE.Vector3(
+      slide,
+      -tableSlabDepth / 2 + lift,
+      -progress * 0.22,
     );
+    const quaternion = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(pitch, yaw, roll),
+    );
+    bodyRef.current.setNextKinematicTranslation({
+      x: position.x,
+      y: position.y,
+      z: position.z,
+    });
+    bodyRef.current.setNextKinematicRotation(quaternion);
+
+    const previousPose = previousPoseRef.current;
+    if (rawProgress >= debugSettings.releaseAt && previousPose) {
+      const elapsedDelta = Math.max(
+        elapsedRef.current - previousPose.elapsed,
+        1 / 90,
+      );
+      const linearVelocity = position
+        .clone()
+        .sub(previousPose.position)
+        .multiplyScalar(1 / elapsedDelta);
+      const deltaQuaternion = quaternion
+        .clone()
+        .multiply(previousPose.quaternion.clone().invert());
+      const axis = new THREE.Vector3();
+      const angle =
+        2 * Math.acos(THREE.MathUtils.clamp(deltaQuaternion.w, -1, 1));
+      const axisScale = Math.sqrt(1 - deltaQuaternion.w * deltaQuaternion.w);
+      if (axisScale > 0.0001) {
+        axis.set(
+          deltaQuaternion.x / axisScale,
+          deltaQuaternion.y / axisScale,
+          deltaQuaternion.z / axisScale,
+        );
+      } else {
+        axis.set(0, 0, 0);
+      }
+      const angularVelocity = axis.multiplyScalar(angle / elapsedDelta);
+      bodyRef.current.setTranslation(position, true);
+      bodyRef.current.setRotation(quaternion, true);
+      bodyRef.current.setBodyType(rapierRigidBodyType.dynamic, true);
+      bodyRef.current.setLinvel(linearVelocity, true);
+      bodyRef.current.setAngvel(angularVelocity, true);
+      didReleaseRef.current = true;
+      return;
+    }
+
+    previousPoseRef.current = {
+      position,
+      quaternion,
+      elapsed: elapsedRef.current,
+    };
   });
 
   return (

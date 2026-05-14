@@ -292,14 +292,42 @@ h3 {
   background: rgb(19 22 20 / 78%);
   box-shadow: 0 8px 22px rgb(0 0 0 / 24%);
   backdrop-filter: blur(8px);
+  margin: 0;
 }
 
 .table-flip-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 34px;
   padding: 0 12px;
+  border: 1px solid rgb(245 245 244 / 18%);
+  border-radius: 6px;
+  background: rgb(245 245 244 / 10%);
+  color: rgb(245 245 244 / 88%);
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
-.table-flip-debug-panel {
+.table-flip-controls .primary-button {
+  border-color: rgb(245 245 244 / 8%);
+  background: rgb(245 245 244 / 92%);
+  color: rgb(19 22 20 / 94%);
+}
+
+.table-flip-controls button:hover:not(:disabled),
+.table-flip-controls button:focus-visible:not(:disabled) {
+  background: rgb(245 245 244 / 18%);
+}
+
+.table-flip-controls .primary-button:hover:not(:disabled),
+.table-flip-controls .primary-button:focus-visible:not(:disabled) {
+  background: rgb(255 255 255 / 98%);
+}
+
+.three-debug-panel.table-flip-debug-panel {
+  top: 10px;
+  right: 44px;
   width: 250px;
 }
 
