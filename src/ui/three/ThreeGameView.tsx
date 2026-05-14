@@ -68,10 +68,10 @@ type CameraPreset = {
 
 const cameraPresets = {
   desktop: {
-    position: [0, 2.85, 7.05],
+    position: [0, 2.95, 7.35],
     fov: 40,
     minDistance: 5.6,
-    maxDistance: 8.8,
+    maxDistance: 10.4,
     minPolarAngle: Math.PI / 4.2,
     maxPolarAngle: Math.PI / 2.35,
     target: cameraTarget,
@@ -80,7 +80,7 @@ const cameraPresets = {
     position: [0, 4.8, 9.8],
     fov: 48,
     minDistance: 8.2,
-    maxDistance: 12.4,
+    maxDistance: 14.2,
     minPolarAngle: Math.PI / 4.6,
     maxPolarAngle: Math.PI / 2.6,
     target: cameraTarget,
@@ -89,7 +89,7 @@ const cameraPresets = {
     position: [0, 6.8, 9.8],
     fov: 54,
     minDistance: 10,
-    maxDistance: 13.8,
+    maxDistance: 15.6,
     minPolarAngle: Math.PI / 5.8,
     maxPolarAngle: Math.PI / 3,
     target: cameraTarget,
