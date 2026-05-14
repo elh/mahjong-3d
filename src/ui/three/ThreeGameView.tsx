@@ -321,10 +321,7 @@ export function ThreeGameView({
   const animations =
     shouldAnimateEvent || shouldAnimateInitialEvent ? layout.animations : [];
   const renderedAnimations = animations.map((animation) => {
-    if (
-      animation.event.type !== "winDeclared" ||
-      animation.motion !== "claimToss"
-    ) {
+    if (animation.motion !== "claimToss") {
       return animation;
     }
     const discardPose = discardPoseByTileIdRef.current.get(animation.tile.id);
@@ -338,9 +335,10 @@ export function ThreeGameView({
       via: animation.via
         ? {
             ...animation.via,
-            position: winningPickupControlPoint(
+            position: discardPickupControlPoint(
               discardPose.position,
               animation.to,
+              animation.via.position[1],
             ),
           }
         : animation.via,
@@ -1843,10 +1841,10 @@ function ceramicImpulseBuffer(context: AudioContext): AudioBuffer {
   return buffer;
 }
 
-function winningPickupControlPoint(from: Vec3, to: Vec3): Vec3 {
+function discardPickupControlPoint(from: Vec3, to: Vec3, height: number): Vec3 {
   return [
     (from[0] + to[0]) / 2,
-    Math.max(from[1], to[1]) + 0.55,
+    Math.max(height, from[1], to[1]),
     (from[2] + to[2]) / 2,
   ];
 }
