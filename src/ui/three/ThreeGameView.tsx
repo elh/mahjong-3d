@@ -34,7 +34,6 @@ import {
   createThreeTableLayout,
   playerForward,
   playerRight,
-  type TileAnimation,
   type TilePlacement,
   tileSize,
   type Vec3,
@@ -264,9 +263,6 @@ export function ThreeGameView({
   >();
   const [isTableFlipMotionActive, setIsTableFlipMotionActive] = useState(false);
   const [isTableFlipResetting, setIsTableFlipResetting] = useState(false);
-  const [completedAnimationKeys, setCompletedAnimationKeys] = useState(
-    () => new Set<string>(),
-  );
   const [internalCameraUserControlled, setInternalCameraUserControlled] =
     useState(false);
   const cameraPreset = useResponsiveCameraPreset();
@@ -324,39 +320,32 @@ export function ThreeGameView({
     eventIndex === initialEventIndexRef.current;
   const animations =
     shouldAnimateEvent || shouldAnimateInitialEvent ? layout.animations : [];
-  const renderedAnimations = animations
-    .map((animation) => {
-      if (
-        animation.event.type !== "winDeclared" ||
-        animation.motion !== "claimToss"
-      ) {
-        return animation;
-      }
-      const discardPose = discardPoseByTileIdRef.current.get(animation.tile.id);
-      if (!discardPose) {
-        return animation;
-      }
-      return {
-        ...animation,
-        from: discardPose.position,
-        fromRotation: discardPose.rotation,
-        via: animation.via
-          ? {
-              ...animation.via,
-              position: winningPickupControlPoint(
-                discardPose.position,
-                animation.to,
-              ),
-            }
-          : animation.via,
-      };
-    })
-    .filter(
-      (animation) =>
-        !completedAnimationKeys.has(
-          tableAnimationKey(roundKey, eventIndex, animation),
-        ),
-    );
+  const renderedAnimations = animations.map((animation) => {
+    if (
+      animation.event.type !== "winDeclared" ||
+      animation.motion !== "claimToss"
+    ) {
+      return animation;
+    }
+    const discardPose = discardPoseByTileIdRef.current.get(animation.tile.id);
+    if (!discardPose) {
+      return animation;
+    }
+    return {
+      ...animation,
+      from: discardPose.position,
+      fromRotation: discardPose.rotation,
+      via: animation.via
+        ? {
+            ...animation.via,
+            position: winningPickupControlPoint(
+              discardPose.position,
+              animation.to,
+            ),
+          }
+        : animation.via,
+    };
+  });
   const animatedTileIds = new Set(
     renderedAnimations.map((animation) => animation.tile.id),
   );
@@ -420,16 +409,6 @@ export function ThreeGameView({
     },
     [],
   );
-  const completeTileAnimation = useCallback((animationKey: string) => {
-    setCompletedAnimationKeys((keys) => {
-      if (keys.has(animationKey)) {
-        return keys;
-      }
-      const nextKeys = new Set(keys);
-      nextKeys.add(animationKey);
-      return nextKeys;
-    });
-  }, []);
   const startTableFlip = useCallback(() => {
     if (tableFlipDelayTimeoutRef.current !== undefined) {
       window.clearTimeout(tableFlipDelayTimeoutRef.current);
@@ -443,9 +422,13 @@ export function ThreeGameView({
     setIsTableFlipMotionActive(false);
     const poseByTileId = renderedTilePoseByTileIdRef.current;
     const flipPlacements = layout.tiles.map((placement) => {
-      const pose =
-        poseByTileId.get(placement.tile.id) ??
-        discardPoseByTileIdRef.current.get(placement.tile.id);
+      const pose = replay.ended
+        ? placement.physics
+          ? (discardPoseByTileIdRef.current.get(placement.tile.id) ??
+            poseByTileId.get(placement.tile.id))
+          : undefined
+        : (poseByTileId.get(placement.tile.id) ??
+          discardPoseByTileIdRef.current.get(placement.tile.id));
       return pose ? { ...placement, ...pose } : placement;
     });
     setTableFlipSnapshot(
@@ -460,6 +443,7 @@ export function ThreeGameView({
     }, tableFlipDebugSettings.prepDelayMs);
   }, [
     layout.tiles,
+    replay.ended,
     roundKey,
     tableFlipDebugSettings.prepDelayMs,
     tableFlipDebugSettings.variability,
@@ -556,12 +540,6 @@ export function ThreeGameView({
     didMountRef.current = true;
     lastEventIndexRef.current = eventIndex;
   });
-
-  useEffect(() => {
-    void eventIndex;
-    void roundKey;
-    setCompletedAnimationKeys(new Set());
-  }, [eventIndex, roundKey]);
 
   useEffect(() => {
     void roundKey;
@@ -763,12 +741,7 @@ export function ThreeGameView({
             ))}
             {renderedAnimations.map((animation) => (
               <AnimatedTile
-                key={tableAnimationKey(roundKey, eventIndex, animation)}
-                animationKey={tableAnimationKey(
-                  roundKey,
-                  eventIndex,
-                  animation,
-                )}
+                key={`${animation.tile.id}-${eventIndex}`}
                 tile={animation.tile}
                 from={animation.from}
                 to={animation.to}
@@ -786,7 +759,6 @@ export function ThreeGameView({
                 }
                 registerHandoff={registerAnimatedTileHandoff}
                 onPoseChange={recordRenderedTilePose}
-                onComplete={completeTileAnimation}
               />
             ))}
           </group>
@@ -1889,14 +1861,6 @@ function tableFlipOriginPlayerFromEvent(
   return tableFlipOriginPlayer(seed, event.player, event.from);
 }
 
-function tableAnimationKey(
-  roundKey: string,
-  eventIndex: number,
-  animation: TileAnimation,
-): string {
-  return `${roundKey}:${eventIndex}:${animation.event.type}:${animation.tile.id}`;
-}
-
 function FlipTable({
   active,
   showSurface,
@@ -2327,7 +2291,6 @@ function DiscardPhysicsTile({
 }
 
 function AnimatedTile({
-  animationKey,
   tile,
   from,
   to,
@@ -2341,9 +2304,7 @@ function AnimatedTile({
   handoffKey,
   registerHandoff,
   onPoseChange,
-  onComplete,
 }: {
-  animationKey: string;
   tile: TileInstance;
   from: Vec3;
   to: Vec3;
@@ -2372,11 +2333,9 @@ function AnimatedTile({
     hideAnimatedTile: (() => void) | undefined,
   ) => void;
   onPoseChange?: (tileId: string, pose: TilePose | undefined) => void;
-  onComplete: (animationKey: string) => void;
 }) {
   const ref = useRef<THREE.Group>(null);
   const elapsedRef = useRef(0);
-  const didCompleteRef = useRef(false);
   const [isDrawFaceHidden, setIsDrawFaceHidden] = useState(
     motion === "drawConcealed",
   );
@@ -2439,10 +2398,6 @@ function AnimatedTile({
     const fullDuration = totalDuration + thirdDuration;
     elapsedRef.current = Math.min(elapsedRef.current + delta, fullDuration);
     const elapsed = elapsedRef.current;
-    if (!didCompleteRef.current && elapsed >= fullDuration) {
-      didCompleteRef.current = true;
-      onComplete(animationKey);
-    }
     if (
       motion === "drawConcealed" &&
       isDrawFaceHidden &&
