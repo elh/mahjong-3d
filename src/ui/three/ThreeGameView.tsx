@@ -105,6 +105,11 @@ type TileTextureEntry = {
 };
 
 const tileTextureCache = new Map<string, TileTextureEntry>();
+const centerTableMarkTextureEntry: TileTextureEntry = {
+  isLoading: false,
+  listeners: new Set(),
+};
+let centerTableFallbackMarkTexture: THREE.CanvasTexture | undefined;
 let tileAudioContext: AudioContext | undefined;
 let lastTileSoundAt = 0;
 type FlickDebugSettings = {
@@ -268,11 +273,9 @@ export function ThreeGameView({
   const didMountRef = useRef(false);
   const animatedTileHandoffsRef = useRef(new Map<string, () => void>());
   const discardPoseByTileIdRef = useRef(new Map<string, TilePose>());
+  const renderedTilePoseByTileIdRef = useRef(new Map<string, TilePose>());
   const roundChanged = roundKey !== lastRoundKeyRef.current;
-  const tableFlipEnabled =
-    tableFlipDebug ||
-    tableFlipTransitionKey !== undefined ||
-    tableFlipSnapshot !== undefined;
+  const tableFlipEnabled = tableFlipDebug || tableFlipSnapshot !== undefined;
   preserveSceneOnRoundChangeRef.current = preserveSceneOnRoundChange;
   if (roundChanged) {
     lastRoundKeyRef.current = roundKey;
@@ -280,6 +283,7 @@ export function ThreeGameView({
     lastEventIndexRef.current = eventIndex;
     didMountRef.current = false;
     discardPoseByTileIdRef.current.clear();
+    renderedTilePoseByTileIdRef.current.clear();
   }
   const isCameraUserControlled =
     cameraUserControlled ?? internalCameraUserControlled;
@@ -390,6 +394,16 @@ export function ThreeGameView({
   const recordDiscardPose = useCallback((tileId: string, pose: TilePose) => {
     discardPoseByTileIdRef.current.set(tileId, pose);
   }, []);
+  const recordRenderedTilePose = useCallback(
+    (tileId: string, pose: TilePose | undefined) => {
+      if (pose) {
+        renderedTilePoseByTileIdRef.current.set(tileId, pose);
+        return;
+      }
+      renderedTilePoseByTileIdRef.current.delete(tileId);
+    },
+    [],
+  );
   const startTableFlip = useCallback(() => {
     if (tableFlipDelayTimeoutRef.current !== undefined) {
       window.clearTimeout(tableFlipDelayTimeoutRef.current);
@@ -401,8 +415,15 @@ export function ThreeGameView({
     }
     setIsTableFlipResetting(false);
     setIsTableFlipMotionActive(false);
+    const poseByTileId = renderedTilePoseByTileIdRef.current;
+    const flipPlacements = layout.tiles.map((placement) => {
+      const pose =
+        poseByTileId.get(placement.tile.id) ??
+        discardPoseByTileIdRef.current.get(placement.tile.id);
+      return pose ? { ...placement, ...pose } : placement;
+    });
     setTableFlipSnapshot(
-      createTableFlipTilePhysics(layout.tiles, roundKey, {
+      createTableFlipTilePhysics(flipPlacements, roundKey, {
         variability: tableFlipDebugSettings.variability,
       }),
     );
@@ -595,6 +616,7 @@ export function ThreeGameView({
           near: 0.1,
           far: 100,
         }}
+        onPointerDown={() => setIsCameraUserControlled(true)}
       >
         <CameraPresetSync preset={cameraPreset} />
         <color attach="background" args={["#0f1112"]} />
@@ -630,7 +652,9 @@ export function ThreeGameView({
         />
         <CameraShoulderFill intensity={lightingDebug.cameraFillIntensity} />
         <HandFaceFill intensity={lightingDebug.handFaceFillIntensity} />
-        {tableFlipEnabled ? null : <TableSurface />}
+        {!tableFlipEnabled || (isTableFlipped && !isTableFlipMotionActive) ? (
+          <TableSurface />
+        ) : null}
         <Suspense fallback={null}>
           {lightingDebug.environment ? <Environment preset="studio" /> : null}
           <Physics
@@ -646,6 +670,7 @@ export function ThreeGameView({
               <FlipTable
                 key={tableFlipRun}
                 active={isTableFlipMotionActive}
+                showSurface={isTableFlipMotionActive}
                 settings={tableFlipSettings}
                 debugSettings={tableFlipDebugSettings}
                 tableFriction={flickDebug.tableFriction}
@@ -698,7 +723,11 @@ export function ThreeGameView({
           </Physics>
           <group visible={sceneVisible && !isTableFlipped}>
             {staticTiles.map((placement) => (
-              <TileMesh key={placement.tile.id} placement={placement} />
+              <TileMesh
+                key={placement.tile.id}
+                placement={placement}
+                onPoseChange={recordRenderedTilePose}
+              />
             ))}
             {renderedAnimations.map((animation) => (
               <AnimatedTile
@@ -719,6 +748,7 @@ export function ThreeGameView({
                     : undefined
                 }
                 registerHandoff={registerAnimatedTileHandoff}
+                onPoseChange={recordRenderedTilePose}
               />
             ))}
           </group>
@@ -735,7 +765,6 @@ export function ThreeGameView({
           maxDistance={cameraPreset.maxDistance}
           maxPolarAngle={cameraPreset.maxPolarAngle}
           minPolarAngle={cameraPreset.minPolarAngle}
-          onStart={() => setIsCameraUserControlled(true)}
         />
       </Canvas>
       <div
@@ -931,43 +960,101 @@ function clampColor(value: number): number {
 }
 
 function CenterTableMark() {
-  const [texture, setTexture] = useState<THREE.Texture>();
-
-  useEffect(() => {
-    let isMounted = true;
-    const loader = new THREE.TextureLoader();
-    loader.load(`${import.meta.env.BASE_URL ?? "/"}marks/huang.svg`, (mark) => {
-      if (!isMounted) {
-        mark.dispose();
-        return;
-      }
-      mark.colorSpace = THREE.SRGBColorSpace;
-      mark.anisotropy = 4;
-      mark.needsUpdate = true;
-      setTexture(mark);
-    });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => () => texture?.dispose(), [texture]);
+  const loadedTexture = useCenterTableMarkTexture();
+  const fallbackTexture = useMemo(() => centerTableFallbackTexture(), []);
+  const texture = loadedTexture ?? fallbackTexture;
 
   if (!texture) {
     return null;
   }
 
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, -0.12]}>
+    <mesh
+      renderOrder={2}
+      rotation={[-Math.PI / 2, 0, 0]}
+      position={[0, 0.012, -0.12]}
+    >
       <planeGeometry args={[3.44, 3.44]} />
       <meshBasicMaterial
         map={texture}
         transparent
+        depthTest={false}
         depthWrite={false}
         toneMapped={false}
       />
     </mesh>
   );
+}
+
+function useCenterTableMarkTexture(): THREE.Texture | undefined {
+  const [texture, setTexture] = useState(centerTableMarkTextureEntry.texture);
+
+  useEffect(() => {
+    const entry = centerTableMarkTextureEntry;
+    entry.listeners.add(setTexture);
+    if (entry.texture || entry.isLoading || entry.didFail) {
+      setTexture(entry.texture);
+      return () => {
+        entry.listeners.delete(setTexture);
+      };
+    }
+
+    entry.isLoading = true;
+    const loader = new THREE.TextureLoader();
+    loader.load(
+      `${import.meta.env.BASE_URL ?? "/"}marks/huang.svg`,
+      (mark) => {
+        mark.colorSpace = THREE.SRGBColorSpace;
+        mark.anisotropy = 4;
+        mark.needsUpdate = true;
+        entry.texture = mark;
+        entry.isLoading = false;
+        for (const listener of entry.listeners) {
+          listener(mark);
+        }
+      },
+      undefined,
+      () => {
+        entry.didFail = true;
+        entry.isLoading = false;
+        for (const listener of entry.listeners) {
+          listener(undefined);
+        }
+      },
+    );
+
+    return () => {
+      entry.listeners.delete(setTexture);
+    };
+  }, []);
+
+  return texture;
+}
+
+function centerTableFallbackTexture(): THREE.CanvasTexture {
+  centerTableFallbackMarkTexture ??= createCenterTableFallbackTexture();
+  return centerTableFallbackMarkTexture;
+}
+
+function createCenterTableFallbackTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const context = canvas.getContext("2d");
+  if (context) {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "rgba(255, 255, 244, 0.22)";
+    context.font =
+      '700 360px "Noto Serif CJK TC", "Songti TC", "PingFang TC", serif';
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText("\u9ec3", canvas.width / 2, canvas.height / 2 + 16);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  texture.needsUpdate = true;
+  return texture;
 }
 
 function TableRail() {
@@ -1756,11 +1843,13 @@ function winningPickupControlPoint(from: Vec3, to: Vec3): Vec3 {
 
 function FlipTable({
   active,
+  showSurface,
   settings,
   debugSettings,
   tableFriction,
 }: {
   active: boolean;
+  showSurface: boolean;
   settings: TableFlipSettings;
   debugSettings: TableFlipDebugSettings;
   tableFriction: number;
@@ -1892,9 +1981,11 @@ function FlipTable({
         friction={tableFriction}
         restitution={0.02}
       />
-      <group position={[0, tableSlabDepth / 2, 0]}>
-        <TableSurface />
-      </group>
+      {showSurface ? (
+        <group position={[0, tableSlabDepth / 2, 0]}>
+          <TableSurface />
+        </group>
+      ) : null}
     </RigidBody>
   );
 }
@@ -2144,6 +2235,7 @@ function AnimatedTile({
   motion = "arc",
   handoffKey,
   registerHandoff,
+  onPoseChange,
 }: {
   tile: TileInstance;
   from: Vec3;
@@ -2172,6 +2264,7 @@ function AnimatedTile({
     handoffKey: string,
     hideAnimatedTile: (() => void) | undefined,
   ) => void;
+  onPoseChange?: (tileId: string, pose: TilePose | undefined) => void;
 }) {
   const ref = useRef<THREE.Group>(null);
   const elapsedRef = useRef(0);
@@ -2424,6 +2517,20 @@ function AnimatedTile({
     );
   });
 
+  useFrame(() => {
+    const pose = groupTilePose(ref.current);
+    if (pose) {
+      onPoseChange?.(tile.id, pose);
+    }
+  });
+
+  useEffect(
+    () => () => {
+      onPoseChange?.(tile.id, undefined);
+    },
+    [onPoseChange, tile.id],
+  );
+
   return (
     <group ref={ref} position={from} rotation={fromRotation}>
       {motion === "drawConcealed" ? (
@@ -2435,6 +2542,49 @@ function AnimatedTile({
       )}
     </group>
   );
+}
+
+function TileMesh({
+  placement,
+  onPoseChange,
+}: {
+  placement: TilePlacement;
+  onPoseChange?: (tileId: string, pose: TilePose | undefined) => void;
+}) {
+  const ref = useRef<THREE.Group>(null);
+
+  useLayoutEffect(() => {
+    onPoseChange?.(placement.tile.id, groupTilePose(ref.current));
+    return () => onPoseChange?.(placement.tile.id, undefined);
+  }, [onPoseChange, placement.tile.id]);
+
+  useFrame(() => {
+    const pose = groupTilePose(ref.current);
+    if (pose) {
+      onPoseChange?.(placement.tile.id, pose);
+    }
+  });
+
+  return (
+    <group
+      ref={ref}
+      position={placement.position}
+      rotation={placement.rotation}
+    >
+      <TileBlock tile={placement.tile} faceUp={placement.faceUp} />
+    </group>
+  );
+}
+
+function groupTilePose(group: THREE.Group | null): TilePose | undefined {
+  if (!group) {
+    return undefined;
+  }
+  const rotation = new THREE.Euler().setFromQuaternion(group.quaternion);
+  return {
+    position: [group.position.x, group.position.y, group.position.z],
+    rotation: [rotation.x, rotation.y, rotation.z],
+  };
 }
 
 function drawFaceDownWallRotation(rotation: Vec3): THREE.Quaternion {
@@ -2578,14 +2728,6 @@ function applyAnimatedTransform(
     THREE.MathUtils.lerp(fromRotation[0], toRotation[0], progress),
     THREE.MathUtils.lerp(fromRotation[1], toRotation[1], progress),
     THREE.MathUtils.lerp(fromRotation[2], toRotation[2], progress),
-  );
-}
-
-function TileMesh({ placement }: { placement: TilePlacement }) {
-  return (
-    <group position={placement.position} rotation={placement.rotation}>
-      <TileBlock tile={placement.tile} faceUp={placement.faceUp} />
-    </group>
   );
 }
 

@@ -1,4 +1,4 @@
-export const infiniteRoundHoldMs = 5000;
+export const infiniteRoundHoldMs = 4500;
 export const infiniteRoundFadeMs = 620;
 export const infiniteRoundSwapMs = 560;
 export const infiniteRoundFlipPrepMs = 300;
