@@ -1,3 +1,4 @@
+import type { PlayerId } from "../../sim/state";
 import type { TilePlacement, Vec3 } from "./tableLayout";
 
 export type TableFlipTilePhysics = {
@@ -9,22 +10,43 @@ export type TableFlipTilePhysics = {
 export type TableFlipSettings = {
   seed: string;
   flipDirection: -1 | 1;
+  originPlayer?: PlayerId;
   yaw: number;
 };
 
 export type TableFlipVariabilityOptions = {
   variability?: number;
+  originPlayer?: PlayerId;
 };
 
 export function createTableFlipSettings(
   seed: string,
-  { variability = 1 }: TableFlipVariabilityOptions = {},
+  { variability = 1, originPlayer }: TableFlipVariabilityOptions = {},
 ): TableFlipSettings {
   return {
     seed,
     flipDirection: stableUnit(`${seed}:flip-direction`) < 0.5 ? -1 : 1,
+    originPlayer,
     yaw: (stableUnit(`${seed}:flip-yaw`) - 0.5) * 0.46 * variability,
   };
+}
+
+export function tableFlipOriginPlayer(
+  seed: string,
+  winner: PlayerId,
+  from?: PlayerId,
+): PlayerId {
+  if (from !== undefined && from !== winner) {
+    return from;
+  }
+  const losers = ([0, 1, 2, 3] satisfies PlayerId[]).filter(
+    (player) => player !== winner,
+  );
+  const index = Math.min(
+    losers.length - 1,
+    Math.floor(stableUnit(`${seed}:self-draw-flip-origin`) * losers.length),
+  );
+  return losers[index] ?? (((winner + 1) % 4) as PlayerId);
 }
 
 export function createTableFlipTilePhysics(

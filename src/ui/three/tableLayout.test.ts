@@ -9,6 +9,7 @@ import {
   createTableFlipTilePhysics,
   tableFlipAngularVelocity,
   tableFlipLinearVelocity,
+  tableFlipOriginPlayer,
 } from "./tableFlip";
 import {
   createThreeTableLayout,
@@ -88,6 +89,15 @@ describe("3D table layout", () => {
     expect(
       createTableFlipTilePhysics(layout.tiles, "test-self-draw-win"),
     ).toEqual(tilePhysics);
+  });
+
+  test("chooses a loser side as the table-flip origin", () => {
+    expect(tableFlipOriginPlayer("discard-win", 2, 0)).toBe(0);
+
+    const selfDrawOrigin = tableFlipOriginPlayer("test-self-draw-win", 0);
+    expect(selfDrawOrigin).not.toBe(0);
+    expect([1, 2, 3]).toContain(selfDrawOrigin);
+    expect(tableFlipOriginPlayer("test-self-draw-win", 0)).toBe(selfDrawOrigin);
   });
 
   test("creates draw and discard animation endpoints from replay events", () => {

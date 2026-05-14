@@ -20,6 +20,7 @@ import {
 import * as THREE from "three";
 import type { GameEvent } from "../../sim/events";
 import type { ReplayState } from "../../sim/replay";
+import type { PlayerId } from "../../sim/state";
 import type { TileInstance } from "../../sim/tiles";
 import { allTileImageUrls, tileImage } from "../tileImages";
 import {
@@ -27,9 +28,12 @@ import {
   createTableFlipTilePhysics,
   type TableFlipSettings,
   type TableFlipTilePhysics,
+  tableFlipOriginPlayer,
 } from "./tableFlip";
 import {
   createThreeTableLayout,
+  playerForward,
+  playerRight,
   type TilePlacement,
   tileSize,
   type Vec3,
@@ -366,9 +370,10 @@ export function ThreeGameView({
   const tableFlipSettings = useMemo(
     () =>
       createTableFlipSettings(roundKey, {
+        originPlayer: tableFlipOriginPlayerFromEvent(roundKey, currentEvent),
         variability: tableFlipDebugSettings.variability,
       }),
-    [roundKey, tableFlipDebugSettings.variability],
+    [currentEvent, roundKey, tableFlipDebugSettings.variability],
   );
   const isTableFlipped = tableFlipSnapshot !== undefined;
   const isTableFlipPhysicsPaused =
@@ -1841,6 +1846,16 @@ function winningPickupControlPoint(from: Vec3, to: Vec3): Vec3 {
   ];
 }
 
+function tableFlipOriginPlayerFromEvent(
+  seed: string,
+  event: GameEvent | undefined,
+): PlayerId | undefined {
+  if (event?.type !== "winDeclared") {
+    return undefined;
+  }
+  return tableFlipOriginPlayer(seed, event.player, event.from);
+}
+
 function FlipTable({
   active,
   showSurface,
@@ -1903,18 +1918,11 @@ function FlipTable({
     const progress = easeInOutCubic(rawProgress);
     const lift =
       Math.sin(progress * Math.PI) * 0.18 + progress * debugSettings.tableLift;
-    const slide = settings.flipDirection * progress * debugSettings.tableSlide;
-    const pitch = -settings.flipDirection * progress * debugSettings.flipRange;
-    const roll =
-      settings.flipDirection * progress * debugSettings.flipRange * 0.24;
-    const yaw = settings.yaw * progress;
-    const position = new THREE.Vector3(
-      slide,
-      -tableSlabDepth / 2 + lift,
-      -progress * 0.22,
-    );
-    const quaternion = new THREE.Quaternion().setFromEuler(
-      new THREE.Euler(pitch, yaw, roll),
+    const { position, quaternion } = tableFlipPose(
+      progress,
+      lift,
+      settings,
+      debugSettings,
     );
     bodyRef.current.setNextKinematicTranslation({
       x: position.x,
@@ -1988,6 +1996,61 @@ function FlipTable({
       ) : null}
     </RigidBody>
   );
+}
+
+function tableFlipPose(
+  progress: number,
+  lift: number,
+  settings: TableFlipSettings,
+  debugSettings: TableFlipDebugSettings,
+): { position: THREE.Vector3; quaternion: THREE.Quaternion } {
+  if (settings.originPlayer === undefined) {
+    const slide = settings.flipDirection * progress * debugSettings.tableSlide;
+    const pitch = -settings.flipDirection * progress * debugSettings.flipRange;
+    const roll =
+      settings.flipDirection * progress * debugSettings.flipRange * 0.24;
+    const yaw = settings.yaw * progress;
+    return {
+      position: new THREE.Vector3(
+        slide,
+        -tableSlabDepth / 2 + lift,
+        -progress * 0.22,
+      ),
+      quaternion: new THREE.Quaternion().setFromEuler(
+        new THREE.Euler(pitch, yaw, roll),
+      ),
+    };
+  }
+
+  const forward = new THREE.Vector3(...playerForward(settings.originPlayer));
+  const right = new THREE.Vector3(...playerRight(settings.originPlayer));
+  const primaryRotation = new THREE.Quaternion().setFromAxisAngle(
+    right,
+    -progress * debugSettings.flipRange,
+  );
+  const secondaryRotation = new THREE.Quaternion().setFromAxisAngle(
+    forward,
+    settings.flipDirection * progress * debugSettings.flipRange * 0.2,
+  );
+  const yawRotation = new THREE.Quaternion().setFromAxisAngle(
+    new THREE.Vector3(0, 1, 0),
+    settings.yaw * progress,
+  );
+  const quaternion = yawRotation
+    .multiply(secondaryRotation)
+    .multiply(primaryRotation);
+  const oppositeEdgePivot = forward
+    .clone()
+    .multiplyScalar(-tableHalfSize * 0.82);
+  const rotatedPivot = oppositeEdgePivot.clone().applyQuaternion(quaternion);
+  const hingeCompensation = oppositeEdgePivot.clone().sub(rotatedPivot);
+  const slide = forward
+    .clone()
+    .multiplyScalar(-progress * debugSettings.tableSlide);
+  const position = new THREE.Vector3(0, -tableSlabDepth / 2 + lift, 0)
+    .add(hingeCompensation)
+    .add(slide);
+  return { position, quaternion };
 }
 
 function TableFlipPhysicsTile({
