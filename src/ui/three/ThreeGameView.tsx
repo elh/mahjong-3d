@@ -320,9 +320,9 @@ export function ThreeGameView({
     didMountRef.current &&
     eventIndex !== lastEventIndexRef.current;
   const shouldAnimateInitialEvent =
-    (!tableFlipEnabled || isTerminalRevealEvent) &&
     sceneVisible &&
-    eventIndex === initialEventIndexRef.current;
+    ((!tableFlipEnabled && eventIndex === initialEventIndexRef.current) ||
+      isTerminalRevealEvent);
   const animations =
     shouldAnimateEvent || shouldAnimateInitialEvent ? layout.animations : [];
   const renderedAnimations = animations.map((animation) => {

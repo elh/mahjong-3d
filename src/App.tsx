@@ -15,6 +15,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { GameEvent } from "./sim/events";
 import { replayEvents } from "./sim/replay";
 import { EventLog } from "./ui/EventLog";
 import { eventDetail, eventTitle } from "./ui/eventText";
@@ -227,7 +228,10 @@ function TableFlipDebugApp() {
 }
 
 function DebugApp() {
-  const [viewMode, setViewMode] = useState<"debug" | "three">("debug");
+  const [viewMode, setViewMode] = useState<"debug" | "three">(
+    initialDebugViewMode,
+  );
+  const initialJumpRef = useRef(initialDebugJumpTarget());
   const activeEventRef = useRef<HTMLButtonElement | null>(null);
   const eventLogRef = useRef<HTMLElement | null>(null);
   const eventLogScrollFrameRef = useRef<number | undefined>(undefined);
@@ -265,6 +269,18 @@ function DebugApp() {
   const roundKey =
     events[0]?.type === "roundStarted" ? events[0].seed : pendingSeed;
   const isLoadingRound = isGenerating && !generationError;
+
+  useEffect(() => {
+    if (isLoadingRound || events.length === 0 || !initialJumpRef.current) {
+      return;
+    }
+
+    const jumpIndex = debugJumpTargetIndex(initialJumpRef.current, events);
+    initialJumpRef.current = undefined;
+    if (jumpIndex !== undefined) {
+      jumpToEventIndex(jumpIndex);
+    }
+  }, [events, isLoadingRound, jumpToEventIndex]);
 
   useEffect(() => {
     if (!currentEvent) {
@@ -528,6 +544,50 @@ function DebugApp() {
       />
     </main>
   );
+}
+
+function initialDebugViewMode(): "debug" | "three" {
+  return new URLSearchParams(window.location.search).get("mode") === "three"
+    ? "three"
+    : "debug";
+}
+
+function initialDebugJumpTarget(): string | undefined {
+  const searchParams = new URLSearchParams(window.location.search);
+  return (
+    searchParams.get("jump")?.trim() ||
+    searchParams.get("event")?.trim() ||
+    undefined
+  );
+}
+
+function debugJumpTargetIndex(
+  target: string,
+  events: readonly GameEvent[],
+): number | undefined {
+  if (target === "win") {
+    return eventIndexByType(events, "winDeclared");
+  }
+  if (target === "draw") {
+    return eventIndexByType(events, "drawDeclared");
+  }
+  if (target === "end") {
+    return events.length > 0 ? events.length - 1 : undefined;
+  }
+
+  const explicitIndex = Number(target);
+  if (Number.isInteger(explicitIndex)) {
+    return Math.min(Math.max(0, explicitIndex), events.length - 1);
+  }
+  return undefined;
+}
+
+function eventIndexByType(
+  events: readonly GameEvent[],
+  type: GameEvent["type"],
+): number | undefined {
+  const index = events.findIndex((event) => event.type === type);
+  return index === -1 ? undefined : index;
 }
 
 function SimApp() {
