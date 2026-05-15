@@ -32,6 +32,8 @@ import { useSimulationController } from "./ui/useSimulationController";
 const eventAdvanceDelayMs = 1200;
 const setupEventAdvanceDelayMs = 800;
 const turnBoundaryPauseMs = 100;
+const overlayControlsInactiveDelayMs = 5000;
+const overlayControlsMouseLeaveDelayMs = 3000;
 
 const ThreeGameView = lazy(() =>
   import("./ui/three/ThreeGameView").then((module) => ({
@@ -534,6 +536,10 @@ function SimApp() {
   });
   const isDocumentHidden = useDocumentHidden();
   const prefersReducedMotion = usePrefersReducedMotion();
+  const areOverlayControlsVisible = useScreenPointerActivity(
+    overlayControlsInactiveDelayMs,
+    overlayControlsMouseLeaveDelayMs,
+  );
   const [isCameraUserControlled, setIsCameraUserControlled] = useState(false);
   const [isRoundTransitioning, setIsRoundTransitioning] = useState(false);
   const [tableFlipTransitionKey, setTableFlipTransitionKey] = useState<
@@ -732,9 +738,95 @@ function SimApp() {
         routeLink={{ href: debugHref, label: "Debug view" }}
         showAutoOrbitButton={isCameraUserControlled}
         onAutoOrbitButtonClick={() => setIsCameraUserControlled(false)}
+        autoHide={!areOverlayControlsVisible}
       />
     </main>
   );
+}
+
+function useScreenPointerActivity(
+  inactiveDelayMs: number,
+  mouseLeaveDelayMs: number,
+): boolean {
+  const [isActive, setIsActive] = useState(() => {
+    return !window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  });
+
+  useEffect(() => {
+    const hoverQuery = window.matchMedia("(hover: hover) and (pointer: fine)");
+    let inactivityTimeout: number | undefined;
+
+    function clearInactivityTimeout() {
+      if (inactivityTimeout !== undefined) {
+        window.clearTimeout(inactivityTimeout);
+        inactivityTimeout = undefined;
+      }
+    }
+
+    function deactivate(delayMs = 0) {
+      clearInactivityTimeout();
+      if (hoverQuery.matches) {
+        if (delayMs > 0) {
+          inactivityTimeout = window.setTimeout(() => {
+            inactivityTimeout = undefined;
+            setIsActive(false);
+          }, delayMs);
+        } else {
+          setIsActive(false);
+        }
+      }
+    }
+
+    function activate() {
+      if (!hoverQuery.matches) {
+        setIsActive(true);
+        return;
+      }
+
+      setIsActive(true);
+      clearInactivityTimeout();
+      inactivityTimeout = window.setTimeout(() => {
+        inactivityTimeout = undefined;
+        setIsActive(false);
+      }, inactiveDelayMs);
+    }
+
+    function handlePointerMove(event: PointerEvent) {
+      if (event.pointerType === "mouse") {
+        activate();
+      }
+    }
+
+    function handleMouseOut(event: MouseEvent) {
+      if (event.relatedTarget === null) {
+        deactivate(mouseLeaveDelayMs);
+      }
+    }
+
+    function handleHoverCapabilityChange() {
+      if (hoverQuery.matches) {
+        deactivate();
+      } else {
+        setIsActive(true);
+      }
+    }
+
+    handleHoverCapabilityChange();
+    window.addEventListener("pointermove", handlePointerMove, {
+      passive: true,
+    });
+    window.addEventListener("mouseout", handleMouseOut);
+    hoverQuery.addEventListener("change", handleHoverCapabilityChange);
+
+    return () => {
+      clearInactivityTimeout();
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("mouseout", handleMouseOut);
+      hoverQuery.removeEventListener("change", handleHoverCapabilityChange);
+    };
+  }, [inactiveDelayMs, mouseLeaveDelayMs]);
+
+  return isActive;
 }
 
 function useDocumentHidden(): boolean {
@@ -778,6 +870,7 @@ function InfoPopover({
   routeLink,
   showAutoOrbitButton = false,
   onAutoOrbitButtonClick,
+  autoHide = false,
 }: {
   summary?: {
     title: string;
@@ -789,10 +882,13 @@ function InfoPopover({
   };
   showAutoOrbitButton?: boolean;
   onAutoOrbitButtonClick?: () => void;
+  autoHide?: boolean;
 }) {
   const [isInfoOpen, setIsInfoOpen] = useState(false);
+  const [hasOverlayFocus, setHasOverlayFocus] = useState(false);
   const infoButtonRef = useRef<HTMLButtonElement | null>(null);
   const infoModalRef = useRef<HTMLElement | null>(null);
+  const shouldHideOverlay = autoHide && !isInfoOpen && !hasOverlayFocus;
 
   useEffect(() => {
     if (!isInfoOpen) {
@@ -821,7 +917,22 @@ function InfoPopover({
   }, [isInfoOpen]);
 
   return (
-    <>
+    <div
+      className={
+        shouldHideOverlay
+          ? "info-popover-controls is-hidden"
+          : "info-popover-controls"
+      }
+      onFocusCapture={() => setHasOverlayFocus(true)}
+      onBlurCapture={(event) => {
+        if (
+          !(event.relatedTarget instanceof Node) ||
+          !event.currentTarget.contains(event.relatedTarget)
+        ) {
+          setHasOverlayFocus(false);
+        }
+      }}
+    >
       {showAutoOrbitButton && (
         <button
           type="button"
@@ -852,7 +963,7 @@ function InfoPopover({
           routeLink={routeLink}
         />
       )}
-    </>
+    </div>
   );
 }
 
