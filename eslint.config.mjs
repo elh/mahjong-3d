@@ -10,7 +10,9 @@ export default tseslint.config(
     files: ["**/*.{ts,tsx}"],
     languageOptions: {
       parserOptions: {
-        projectService: true,
+        projectService: {
+          allowDefaultProject: ["scripts/*.ts"],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
       globals: {

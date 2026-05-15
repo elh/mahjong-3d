@@ -25,6 +25,7 @@ import {
   infiniteRoundSwapMs,
   nextRoundPromotionDelayMs,
 } from "./ui/infinitePlayback";
+import { PerfPanel } from "./ui/PerfPanel";
 import { playerNames } from "./ui/playerNames";
 import { TileGroup } from "./ui/TileGroup";
 import { useSimulationController } from "./ui/useSimulationController";
@@ -49,6 +50,10 @@ function appHref(search = ""): string {
 function appBasePath(): string {
   const base = import.meta.env.BASE_URL || "/";
   return base.endsWith("/") ? base : `${base}/`;
+}
+
+function perfPanelEnabled(): boolean {
+  return new URLSearchParams(window.location.search).get("perf") === "1";
 }
 
 function scrollActiveEventIntoView(
@@ -109,6 +114,7 @@ function TableFlipDebugApp() {
   const isLoadingRound = isGenerating && !generationError;
   const finalEventIndex = Math.max(events.length - 1, 0);
   const debugHref = appHref(`?view=debug&seed=${encodeURIComponent(roundKey)}`);
+  const showPerfPanel = perfPanelEnabled();
   const [previewRoundVersion, setPreviewRoundVersion] = useState(0);
   const [isPreviewTransitioning, setIsPreviewTransitioning] = useState(false);
   const previewFadeTimeoutRef = useRef<number | undefined>(undefined);
@@ -220,6 +226,14 @@ function TableFlipDebugApp() {
         summary={{ title: "Table Flip Debug", detail: `Seed: ${roundKey}` }}
         routeLink={{ href: debugHref, label: "Debug view" }}
       />
+      {showPerfPanel ? (
+        <PerfPanel
+          seed={roundKey}
+          eventIndex={eventIndex}
+          eventCount={events.length}
+          viewMode="table-flip"
+        />
+      ) : null}
     </main>
   );
 }
@@ -263,6 +277,7 @@ function DebugApp() {
   const roundKey =
     events[0]?.type === "roundStarted" ? events[0].seed : pendingSeed;
   const isLoadingRound = isGenerating && !generationError;
+  const showPerfPanel = perfPanelEnabled();
 
   useEffect(() => {
     if (!currentEvent) {
@@ -524,6 +539,14 @@ function DebugApp() {
         summary={{ title: "Mahjong 3D", detail: `Seed: ${roundKey}` }}
         routeLink={{ href: appHref(), label: "Simulator" }}
       />
+      {showPerfPanel ? (
+        <PerfPanel
+          seed={roundKey}
+          eventIndex={eventIndex}
+          eventCount={events.length}
+          viewMode={viewMode === "three" ? "debug-3d" : "debug-2d"}
+        />
+      ) : null}
     </main>
   );
 }
@@ -567,6 +590,7 @@ function SimApp() {
   const isLoadingRound = isGenerating && !generationError;
   const debugHref = appHref(`?view=debug&seed=${encodeURIComponent(roundKey)}`);
   const isAtRoundEnd = events.length > 0 && eventIndex >= events.length - 1;
+  const showPerfPanel = perfPanelEnabled();
 
   useEffect(() => {
     if (isLoadingRound || generationError || !isAtRoundEnd) {
@@ -738,6 +762,14 @@ function SimApp() {
         onAutoOrbitButtonClick={() => setIsCameraUserControlled(false)}
         autoHide={!areOverlayControlsVisible}
       />
+      {showPerfPanel ? (
+        <PerfPanel
+          seed={roundKey}
+          eventIndex={eventIndex}
+          eventCount={events.length}
+          viewMode="sim"
+        />
+      ) : null}
     </main>
   );
 }

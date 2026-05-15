@@ -1,9 +1,10 @@
-.PHONY: help install dev test typecheck format format-check lint lint-biome lint-eslint knip build clean good
+.PHONY: help install dev test typecheck format format-check lint lint-biome lint-eslint knip build clean good bench-sim
 
 help:
 	@printf "%s\n" \
 		"install       Install dependencies" \
 		"dev           Start the Vite dev server" \
+		"bench-sim     Run deterministic simulation benchmarks" \
 		"test          Run tests" \
 		"typecheck     Run TypeScript checks" \
 		"format        Run Biome formatter" \
@@ -19,6 +20,9 @@ install:
 
 dev:
 	bun run dev
+
+bench-sim:
+	bun run bench:sim
 
 test:
 	bun run test
