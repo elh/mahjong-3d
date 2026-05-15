@@ -668,7 +668,7 @@ export function ThreeGameView({
         />
         <CameraShoulderFill intensity={lightingDebug.cameraFillIntensity} />
         <HandFaceFill intensity={lightingDebug.handFaceFillIntensity} />
-        {!tableFlipEnabled || (isTableFlipped && !isTableFlipMotionActive) ? (
+        {!tableFlipEnabled || !isTableFlipMotionActive ? (
           <TableSurface />
         ) : null}
         <Suspense fallback={null}>
