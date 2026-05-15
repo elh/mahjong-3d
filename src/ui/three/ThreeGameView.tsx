@@ -312,10 +312,15 @@ export function ThreeGameView({
     tileFacesReady &&
     (!roundChanged || preserveSceneOnRoundChange) &&
     !loading;
+  const isTerminalRevealEvent =
+    currentEvent?.type === "winDeclared" ||
+    currentEvent?.type === "drawDeclared";
   const shouldAnimateEvent =
-    didMountRef.current && eventIndex !== lastEventIndexRef.current;
+    sceneVisible &&
+    didMountRef.current &&
+    eventIndex !== lastEventIndexRef.current;
   const shouldAnimateInitialEvent =
-    !tableFlipEnabled &&
+    (!tableFlipEnabled || isTerminalRevealEvent) &&
     sceneVisible &&
     eventIndex === initialEventIndexRef.current;
   const animations =
@@ -535,6 +540,9 @@ export function ThreeGameView({
   }, []);
 
   useEffect(() => {
+    if (!sceneVisible) {
+      return;
+    }
     didMountRef.current = true;
     lastEventIndexRef.current = eventIndex;
   });

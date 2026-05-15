@@ -745,6 +745,16 @@ h3 {
   outline: 0;
 }
 
+.info-popover-controls {
+  opacity: 1;
+  transition: opacity 220ms ease;
+}
+
+.info-popover-controls.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .auto-orbit-button {
   right: 44px;
 }
