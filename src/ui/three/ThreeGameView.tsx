@@ -884,6 +884,36 @@ function TableSurface() {
           bumpScale={0.038}
           roughness={0.98}
           metalness={0.01}
+          customProgramCacheKey={() => "mahjong-table-felt-nap"}
+          onBeforeCompile={(shader) => {
+            shader.vertexShader = shader.vertexShader.replace(
+              "#include <common>",
+              "#include <common>\nvarying vec3 vFeltLocalPosition;",
+            );
+            shader.vertexShader = shader.vertexShader.replace(
+              "#include <begin_vertex>",
+              "#include <begin_vertex>\nvFeltLocalPosition = position;",
+            );
+            shader.fragmentShader = shader.fragmentShader.replace(
+              "#include <common>",
+              "#include <common>\nvarying vec3 vFeltLocalPosition;",
+            );
+            shader.fragmentShader = shader.fragmentShader.replace(
+              "#include <map_fragment>",
+              `
+              #include <map_fragment>
+              vec2 feltUv = vFeltLocalPosition.xz / ${(tableHalfSize * 2).toFixed(5)};
+              float topMask = smoothstep(${(tableSlabDepth * 0.28).toFixed(5)}, ${(tableSlabDepth * 0.48).toFixed(5)}, vFeltLocalPosition.y);
+              float centerFocus = 1.0 - smoothstep(0.08, 0.72, length(feltUv));
+              float edgeFalloff = smoothstep(0.38, 0.58, max(abs(feltUv.x), abs(feltUv.y)));
+              float napDirection = dot(normalize(vec2(0.78, -0.62)), feltUv);
+              float napWeave = sin(napDirection * 74.0) * 0.5 + sin((feltUv.x - feltUv.y) * 118.0) * 0.25;
+              float napSheen = smoothstep(-0.15, 0.72, napDirection) * 0.055 + napWeave * 0.018;
+              diffuseColor.rgb *= 1.0 + topMask * (centerFocus * 0.13 + napSheen - edgeFalloff * 0.08);
+              diffuseColor.rgb += topMask * centerFocus * vec3(0.015, 0.035, 0.022);
+              `,
+            );
+          }}
         />
       </RoundedBox>
       <CenterTableMark />
@@ -3033,6 +3063,8 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
             float sideEdge = max(tileUv.x, tileUv.z);
             float bevelShade = smoothstep(0.74, 1.0, max(sideEdge, tileUv.y));
             float faceLift = 1.0 - smoothstep(0.12, 0.92, length(tileUv.xz));
+            float backRim = smoothstep(0.56, 0.98, sideEdge) * (1.0 - smoothstep(0.94, 1.0, tileUv.y)) * backMask;
+            float backFaceGlow = (1.0 - smoothstep(0.14, 0.86, length(tileUv.xz))) * backMask;
             float panelX = 1.0 - smoothstep(0.8, 0.86, tileUv.x);
             float panelZ = 1.0 - smoothstep(0.84, 0.9, tileUv.z);
             float facePanel = panelX * panelZ * (1.0 - backMask) * ${orientation === "faceUp" ? "1.0" : "0.0"};
@@ -3041,6 +3073,8 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
             vec3 tileColor = mix(tileIvory, tileGreen, backMask);
             tileColor = mix(tileColor, vec3(0.975, 0.94, 0.855), 0.18 * faceLift * (1.0 - backMask));
             tileColor = mix(tileColor, vec3(0.0, 0.42, 0.16), 0.12 * faceLift * backMask);
+            tileColor = mix(tileColor, vec3(0.16, 0.66, 0.32), 0.2 * backRim);
+            tileColor = mix(tileColor, vec3(0.03, 0.39, 0.15), 0.08 * backFaceGlow);
             tileColor = mix(tileColor, vec3(0.9, 0.835, 0.705), 0.13 * facePanel);
             tileColor *= 1.0 - 0.08 * min(panelBorder, 1.0);
             tileColor *= 1.0 - 0.16 * bevelShade;
