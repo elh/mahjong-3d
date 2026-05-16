@@ -1,6 +1,7 @@
 import { createBaselineBots } from "../src/bots/baselineBot";
 import {
   benchSeedCases,
+  defaultBenchSweepCount,
   deterministicBenchSweepSeeds,
 } from "../src/sim/benchSeeds";
 import { simulateRound } from "../src/sim/engine";
@@ -114,7 +115,7 @@ function printSummary(
 function parseSweepCount(argv: readonly string[]): number {
   const sweepArg = argv.find((arg) => arg.startsWith("--sweep="));
   if (!sweepArg) {
-    return 1000;
+    return defaultBenchSweepCount;
   }
   const value = Number(sweepArg.slice("--sweep=".length));
   if (!Number.isInteger(value) || value < 0) {

@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { benchSeedCases, deterministicBenchSweepSeeds } from "./benchSeeds";
+import {
+  benchSeedCases,
+  defaultBenchSweepCount,
+  deterministicBenchSweepSeeds,
+} from "./benchSeeds";
 
 describe("benchmark seeds", () => {
   test("keeps a stable named corpus", () => {
@@ -22,5 +26,10 @@ describe("benchmark seeds", () => {
       "bench-0001",
       "bench-0002",
     ]);
+  });
+
+  test("defaults to a compact timing sweep", () => {
+    expect(defaultBenchSweepCount).toBe(25);
+    expect(deterministicBenchSweepSeeds()).toHaveLength(25);
   });
 });

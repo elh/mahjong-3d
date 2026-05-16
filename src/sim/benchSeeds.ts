@@ -37,7 +37,11 @@ export const benchSeedCases = [
   },
 ] as const satisfies readonly BenchSeedCase[];
 
-export function deterministicBenchSweepSeeds(count = 1000): string[] {
+export const defaultBenchSweepCount = 25;
+
+export function deterministicBenchSweepSeeds(
+  count = defaultBenchSweepCount,
+): string[] {
   return Array.from(
     { length: count },
     (_, index) => `bench-${index.toString().padStart(4, "0")}`,

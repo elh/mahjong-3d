@@ -175,6 +175,146 @@ describe("bots", () => {
       expect(discarded && tileKey(discarded.kind)).toBe("wind-east");
     }
   });
+
+  test("baseline bot prefers disposable isolated terminals in discard ties", () => {
+    const hand = tilesByKinds([
+      ["c1", 1],
+      ["c2", 1],
+      ["c3", 1],
+      ["c5", 1],
+      ["c6", 1],
+      ["c7", 1],
+      ["d1", 1],
+      ["d2", 1],
+      ["d3", 1],
+      ["b1", 1],
+      ["b2", 1],
+      ["b3", 1],
+      ["dragon-red", 2],
+      ["c9", 1],
+      ["d5", 1],
+    ]);
+    const legalActions = hand.map((tile) => ({
+      type: "discard" as const,
+      tileId: tile.id,
+    }));
+
+    const action = createBaselineBot().chooseAction({
+      player: 0,
+      legalActions,
+      visibleTiles: [],
+      hand,
+      melds: [],
+      wallCount: 60,
+      turn: 0,
+    });
+
+    expect(action.type).toBe("discard");
+    if (action.type === "discard") {
+      const discarded = hand.find((tile) => tile.id === action.tileId);
+      expect(discarded && tileKey(discarded.kind)).toBe("c9");
+    }
+  });
+
+  test("baseline bot chooses the strongest chow option", () => {
+    const hand = tilesByKinds([
+      ["c3", 1],
+      ["c4", 1],
+      ["c6", 1],
+      ["c7", 1],
+      ["d1", 1],
+      ["d2", 1],
+      ["d3", 1],
+      ["b1", 1],
+      ["b2", 1],
+      ["b3", 1],
+      ["wind-east", 2],
+      ["dragon-red", 2],
+      ["dragon-green", 2],
+    ]);
+    const discarded = tilesByKinds([["c5", 1]])[0];
+    const c3 = hand.find((tile) => tileKey(tile.kind) === "c3");
+    const c4 = hand.find((tile) => tileKey(tile.kind) === "c4");
+    const c6 = hand.find((tile) => tileKey(tile.kind) === "c6");
+    const c7 = hand.find((tile) => tileKey(tile.kind) === "c7");
+    if (!c3 || !c4 || !c6 || !c7) {
+      throw new Error("missing chow test tiles");
+    }
+
+    const action = createBaselineBot().chooseAction({
+      player: 1,
+      legalActions: [
+        { type: "pass" },
+        {
+          type: "claim",
+          claim: "chow",
+          tileId: discarded.id,
+          consumedTileIds: [c4.id, c6.id],
+        },
+        {
+          type: "claim",
+          claim: "chow",
+          tileId: discarded.id,
+          consumedTileIds: [c6.id, c7.id],
+        },
+        {
+          type: "claim",
+          claim: "chow",
+          tileId: discarded.id,
+          consumedTileIds: [c3.id, c4.id],
+        },
+      ],
+      visibleTiles: [discarded],
+      hand,
+      melds: [],
+      wallCount: 60,
+      turn: 0,
+    });
+
+    expect(action).toEqual({
+      type: "claim",
+      claim: "chow",
+      tileId: discarded.id,
+      consumedTileIds: [c3.id, c4.id],
+    });
+  });
+
+  test("baseline bot skips claimed kongs that reduce live waits", () => {
+    const c5Tiles = tilesByKinds([["c5", 4]]);
+    const hand = [
+      ...tilesByKinds([
+        ["c3", 1],
+        ["c4", 1],
+        ["c6", 1],
+        ["c7", 1],
+        ["d1", 1],
+        ["d2", 1],
+        ["d3", 1],
+        ["b1", 1],
+        ["b2", 1],
+        ["b3", 1],
+        ["wind-east", 2],
+        ["dragon-red", 1],
+      ]),
+      ...c5Tiles.slice(0, 3),
+    ];
+    const discarded = c5Tiles[3];
+
+    const action = createBaselineBot().chooseAction({
+      player: 1,
+      legalActions: [
+        { type: "pass" },
+        { type: "claim", claim: "kong", tileId: discarded.id },
+      ],
+      visibleTiles: [discarded],
+      hand,
+      melds: [],
+      wallCount: 60,
+      turn: 0,
+    });
+
+    expect(action).toEqual({ type: "pass" });
+  });
 });
 
 describe("Taiwanese rule expectations", () => {
