@@ -1,6 +1,6 @@
 # mahjong-3d
 
-A Taiwanese Mahjong 3D viz, game debug UI, rules implementation, and basic bot.
+Infinite Taiwanese Mahjong simulator made with React Three Fiber and Rapier.
 
 <img width="1498" height="779" alt="Mahjong simulation" src="https://github.com/user-attachments/assets/3a183131-a560-40a4-8453-fd05f3b82c2a" />
 
@@ -12,3 +12,7 @@ A Taiwanese Mahjong 3D viz, game debug UI, rules implementation, and basic bot.
 make dev     # start app
 make good    # run all checks
 ```
+
+## Attribution
+
+Tile art adapted from [DemChing/Cangjie6](https://demching.itch.io/mahjong), [CC BY-SA 4.0](public/tiles/ATTRIBUTION.md).

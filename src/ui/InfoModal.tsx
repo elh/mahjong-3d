@@ -1,19 +1,11 @@
-import { tileAttributionUrl } from "./tileImages";
-
 export function InfoModal({
   modalRef,
-  summary,
-  routeLink,
+  seed,
+  links = [],
 }: {
   modalRef: React.RefObject<HTMLElement | null>;
-  summary?: {
-    title: string;
-    detail: string;
-  };
-  routeLink: {
-    href: string;
-    label: string;
-  };
+  seed: string;
+  links?: readonly InfoModalLink[];
 }) {
   return (
     <section
@@ -23,24 +15,28 @@ export function InfoModal({
       aria-labelledby="info-modal-title"
     >
       <header>
-        <h2 id="info-modal-title">{summary?.title ?? "About"}</h2>
-        {summary ? <p>{summary.detail}</p> : null}
+        <h2 id="info-modal-title">Mahjong 3D</h2>
+        <p className="info-modal-subtitle">Infinite Taiwanese Mahjong sim</p>
       </header>
-      <p>
-        A Taiwanese Mahjong 3d viz, game debug UI, rules implementation, and
-        basic bot.
-      </p>
-      <p>
+      <p className="info-modal-meta">
         Github: <a href="https://github.com/elh/mahjong-3d">elh/mahjong-3d</a>
       </p>
-      <p>
-        Alternative view: <a href={routeLink.href}>{routeLink.label}</a>
-      </p>
-      <p>
-        Tile art adapted from{" "}
-        <a href="https://demching.itch.io/mahjong">DemChing/Cangjie6</a>,{" "}
-        <a href={tileAttributionUrl()}>CC BY-SA 4.0</a>.
-      </p>
+      {links.length > 0 ? (
+        <p className="info-modal-meta">
+          {links.map((link, index) => (
+            <span key={link.href}>
+              {index > 0 ? " · " : null}
+              <a href={link.href}>{link.label}</a>
+            </span>
+          ))}
+        </p>
+      ) : null}
+      <p className="info-modal-meta">Seed: {seed}</p>
     </section>
   );
 }
+
+export type InfoModalLink = {
+  href: string;
+  label: string;
+};

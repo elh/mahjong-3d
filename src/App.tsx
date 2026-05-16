@@ -19,6 +19,7 @@ import { replayEvents } from "./sim/replay";
 import { EventLog } from "./ui/EventLog";
 import { eventDetail, eventTitle } from "./ui/eventText";
 import { InfoModal } from "./ui/InfoModal";
+import type { InfoModalLink } from "./ui/InfoModal";
 import {
   infiniteRoundFadeMs,
   infiniteRoundFlipTransitionDelayMs,
@@ -30,11 +31,14 @@ import { playerNames } from "./ui/playerNames";
 import { TileGroup } from "./ui/TileGroup";
 import { useSimulationController } from "./ui/useSimulationController";
 
+declare const __DEBUG_ROUTES_ENABLED__: boolean;
+
 const eventAdvanceDelayMs = 1200;
 const setupEventAdvanceDelayMs = 800;
 const turnBoundaryPauseMs = 100;
 const overlayControlsInactiveDelayMs = 5000;
 const overlayControlsMouseLeaveDelayMs = 3000;
+const debugRoutesEnabled = __DEBUG_ROUTES_ENABLED__;
 
 const ThreeGameView = lazy(() =>
   import("./ui/three/ThreeGameView").then((module) => ({
@@ -42,18 +46,28 @@ const ThreeGameView = lazy(() =>
   })),
 );
 
+function perfPanelEnabled(): boolean {
+  return new URLSearchParams(window.location.search).get("perf") === "1";
+}
+
 function appHref(search = ""): string {
-  const basePath = appBasePath();
+  const base = import.meta.env.BASE_URL || "/";
+  const basePath = base.endsWith("/") ? base : `${base}/`;
   return `${basePath}${search}`;
 }
 
-function appBasePath(): string {
-  const base = import.meta.env.BASE_URL || "/";
-  return base.endsWith("/") ? base : `${base}/`;
-}
+function debugRouteLinks(
+  seed: string,
+  routes: readonly ("debug" | "debug-table-flip")[],
+): InfoModalLink[] {
+  if (!debugRoutesEnabled) {
+    return [];
+  }
 
-function perfPanelEnabled(): boolean {
-  return new URLSearchParams(window.location.search).get("perf") === "1";
+  return routes.map((view) => ({
+    href: appHref(`?view=${view}&seed=${encodeURIComponent(seed)}`),
+    label: view === "debug" ? "Debug view" : "Table flip debug",
+  }));
 }
 
 function scrollActiveEventIntoView(
@@ -81,12 +95,18 @@ function scrollActiveEventIntoView(
     (eventLog.clientHeight - activeEvent.offsetHeight) / 2;
 }
 
+/**
+ * Supported query params:
+ * - seed: initial round seed.
+ * - perf=1: show the performance panel.
+ * - view=debug | debug-table-flip: debug-only routes, enabled by passing DEBUG.
+ */
 export default function App() {
   const view = new URLSearchParams(window.location.search).get("view");
-  if (view === "debug") {
+  if (debugRoutesEnabled && view === "debug") {
     return <DebugApp />;
   }
-  if (view === "debug-table-flip") {
+  if (debugRoutesEnabled && view === "debug-table-flip") {
     return <TableFlipDebugApp />;
   }
   return <SimApp />;
@@ -113,7 +133,6 @@ function TableFlipDebugApp() {
     events[0]?.type === "roundStarted" ? events[0].seed : pendingSeed;
   const isLoadingRound = isGenerating && !generationError;
   const finalEventIndex = Math.max(events.length - 1, 0);
-  const debugHref = appHref(`?view=debug&seed=${encodeURIComponent(roundKey)}`);
   const showPerfPanel = perfPanelEnabled();
   const [previewRoundVersion, setPreviewRoundVersion] = useState(0);
   const [isPreviewTransitioning, setIsPreviewTransitioning] = useState(false);
@@ -223,8 +242,8 @@ function TableFlipDebugApp() {
         />
       </Suspense>
       <InfoPopover
-        summary={{ title: "Table Flip Debug", detail: `Seed: ${roundKey}` }}
-        routeLink={{ href: debugHref, label: "Debug view" }}
+        seed={roundKey}
+        links={debugRouteLinks(roundKey, ["debug"])}
       />
       {showPerfPanel ? (
         <PerfPanel
@@ -536,8 +555,8 @@ function DebugApp() {
       )}
 
       <InfoPopover
-        summary={{ title: "Mahjong 3D", detail: `Seed: ${roundKey}` }}
-        routeLink={{ href: appHref(), label: "Simulator" }}
+        seed={roundKey}
+        links={debugRouteLinks(roundKey, ["debug-table-flip"])}
       />
       {showPerfPanel ? (
         <PerfPanel
@@ -588,7 +607,6 @@ function SimApp() {
   const roundKey =
     events[0]?.type === "roundStarted" ? events[0].seed : pendingSeed;
   const isLoadingRound = isGenerating && !generationError;
-  const debugHref = appHref(`?view=debug&seed=${encodeURIComponent(roundKey)}`);
   const isAtRoundEnd = events.length > 0 && eventIndex >= events.length - 1;
   const showPerfPanel = perfPanelEnabled();
 
@@ -756,8 +774,8 @@ function SimApp() {
         />
       </Suspense>
       <InfoPopover
-        summary={{ title: "Mahjong 3D", detail: `Seed: ${roundKey}` }}
-        routeLink={{ href: debugHref, label: "Debug view" }}
+        seed={roundKey}
+        links={debugRouteLinks(roundKey, ["debug", "debug-table-flip"])}
         showAutoOrbitButton={isCameraUserControlled}
         onAutoOrbitButtonClick={() => setIsCameraUserControlled(false)}
         autoHide={!areOverlayControlsVisible}
@@ -896,20 +914,14 @@ function usePrefersReducedMotion(): boolean {
 }
 
 function InfoPopover({
-  summary,
-  routeLink,
+  seed,
+  links,
   showAutoOrbitButton = false,
   onAutoOrbitButtonClick,
   autoHide = false,
 }: {
-  summary?: {
-    title: string;
-    detail: string;
-  };
-  routeLink: {
-    href: string;
-    label: string;
-  };
+  seed: string;
+  links?: readonly InfoModalLink[];
   showAutoOrbitButton?: boolean;
   onAutoOrbitButtonClick?: () => void;
   autoHide?: boolean;
@@ -987,11 +999,7 @@ function InfoPopover({
       </button>
 
       {isInfoOpen && (
-        <InfoModal
-          modalRef={infoModalRef}
-          summary={summary}
-          routeLink={routeLink}
-        />
+        <InfoModal modalRef={infoModalRef} seed={seed} links={links} />
       )}
     </div>
   );

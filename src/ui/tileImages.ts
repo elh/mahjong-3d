@@ -13,10 +13,6 @@ export function allTileImageUrls(): string[] {
   return allTileImageUrlCache;
 }
 
-export function tileAttributionUrl(): string {
-  return publicAssetPath("tiles/ATTRIBUTION.md");
-}
-
 export function tileAlt(tile: TileInstance): string {
   return tileLabel(tile);
 }
