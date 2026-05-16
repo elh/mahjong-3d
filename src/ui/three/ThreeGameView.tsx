@@ -653,7 +653,7 @@ export function ThreeGameView({
         <directionalLight
           castShadow
           intensity={lightingDebug.keyIntensity}
-          color="#ffd7a3"
+          color="#ffe1bf"
           position={[
             lightingDebug.keyX,
             lightingDebug.keyY,
@@ -673,7 +673,7 @@ export function ThreeGameView({
           distance={7.5}
           decay={2}
           position={[2.8, 2.4, -3.2]}
-          color="#d0b18f"
+          color="#cab9a5"
         />
         <CameraShoulderFill intensity={lightingDebug.cameraFillIntensity} />
         <HandFaceFill intensity={lightingDebug.handFaceFillIntensity} />
@@ -1211,7 +1211,7 @@ function HandFaceFill({ intensity }: { intensity: number }) {
           key={position.join(",")}
           intensity={intensity}
           position={position}
-          color="#ffe8c9"
+          color="#fff0dc"
         />
       ))}
     </>
