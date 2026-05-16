@@ -50,6 +50,9 @@ const tableSlabDepth = 0.24;
 const tableRailWidth = 0.16;
 const tableRailHeight = 0.075;
 const tableRailOuterHalfSize = tableHalfSize + tableRailWidth;
+const sceneBackgroundColor = "#101514";
+const sceneToneMapping = THREE.ACESFilmicToneMapping;
+const sceneToneMappingExposure = 1.12;
 const cameraTarget: Vec3 = [0, 0, 0];
 const rapierRigidBodyType = {
   dynamic: 0,
@@ -172,14 +175,14 @@ const defaultFlickDebugSettings: FlickDebugSettings = {
 };
 
 const defaultLightingDebugSettings: LightingDebugSettings = {
-  ambientIntensity: 0.36,
-  fillIntensity: 0.48,
-  keyIntensity: 3.8,
-  keyX: -3.4,
-  keyY: 5.8,
-  keyZ: 2.6,
-  cameraFillIntensity: 0.3,
-  handFaceFillIntensity: 0.52,
+  ambientIntensity: 0.24,
+  fillIntensity: 0.34,
+  keyIntensity: 4.7,
+  keyX: -3.8,
+  keyY: 5.4,
+  keyZ: 2.2,
+  cameraFillIntensity: 0.2,
+  handFaceFillIntensity: 0.38,
   environment: false,
 };
 
@@ -632,19 +635,25 @@ export function ThreeGameView({
           near: 0.1,
           far: 100,
         }}
+        onCreated={({ gl }) => {
+          gl.outputColorSpace = THREE.SRGBColorSpace;
+          gl.toneMapping = sceneToneMapping;
+          gl.toneMappingExposure = sceneToneMappingExposure;
+        }}
         onPointerDown={() => setIsCameraUserControlled(true)}
       >
         <CameraPresetSync preset={cameraPreset} />
-        <color attach="background" args={["#0f1112"]} />
+        <color attach="background" args={[sceneBackgroundColor]} />
         <ambientLight intensity={lightingDebug.ambientIntensity} />
         <hemisphereLight
           intensity={lightingDebug.fillIntensity}
-          color="#ececeb"
-          groundColor="#181b1a"
+          color="#d9e6ff"
+          groundColor="#120f0b"
         />
         <directionalLight
           castShadow
           intensity={lightingDebug.keyIntensity}
+          color="#ffd7a3"
           position={[
             lightingDebug.keyX,
             lightingDebug.keyY,
@@ -664,7 +673,7 @@ export function ThreeGameView({
           distance={7.5}
           decay={2}
           position={[2.8, 2.4, -3.2]}
-          color="#c2c7c4"
+          color="#d0b18f"
         />
         <CameraShoulderFill intensity={lightingDebug.cameraFillIntensity} />
         <HandFaceFill intensity={lightingDebug.handFaceFillIntensity} />
@@ -869,10 +878,10 @@ function TableSurface() {
         position={[0, -tableSlabDepth / 2, 0]}
       >
         <meshStandardMaterial
-          color="#245f50"
+          color="#23624f"
           map={feltTextures.color}
           bumpMap={feltTextures.bump}
-          bumpScale={0.032}
+          bumpScale={0.038}
           roughness={0.98}
           metalness={0.01}
         />
@@ -903,7 +912,7 @@ function createFeltTextures(): {
     };
   }
 
-  colorContext.fillStyle = "#266454";
+  colorContext.fillStyle = "#245f4d";
   colorContext.fillRect(0, 0, size, size);
   const image = colorContext.getImageData(0, 0, size, size);
   const bumpImage = bumpContext.createImageData(size, size);
@@ -915,9 +924,9 @@ function createFeltTextures(): {
       Math.sin(x * 0.58) * 7 +
       Math.sin(y * 0.72) * 6 +
       (stableFeltNoise(x, y) - 0.5) * 28;
-    image.data[index] = clampColor(37 + weave * 1.05);
-    image.data[index + 1] = clampColor(96 + weave * 0.95);
-    image.data[index + 2] = clampColor(80 + weave * 0.85);
+    image.data[index] = clampColor(32 + weave * 0.92);
+    image.data[index + 1] = clampColor(88 + weave * 0.84);
+    image.data[index + 2] = clampColor(70 + weave * 0.76);
     image.data[index + 3] = 255;
 
     const bumpValue = clampColor(124 + weave * 2.1);
@@ -929,8 +938,8 @@ function createFeltTextures(): {
   colorContext.putImageData(image, 0, 0);
   bumpContext.putImageData(bumpImage, 0, 0);
 
-  colorContext.globalAlpha = 0.14;
-  colorContext.strokeStyle = "#d9f2df";
+  colorContext.globalAlpha = 0.12;
+  colorContext.strokeStyle = "#c4dfc5";
   colorContext.lineWidth = 0.5;
   for (let index = 0; index < 160; index += 1) {
     const x = stableFeltNoise(index, 3) * size;
@@ -1076,7 +1085,12 @@ function TableRail() {
   const railY = tableRailHeight / 2;
   const railLength = tableRailOuterHalfSize * 2;
   const railMaterial = (
-    <meshStandardMaterial color="#102d28" roughness={0.9} metalness={0.01} />
+    <meshStandardMaterial
+      color="#0d2c25"
+      roughness={0.68}
+      metalness={0.02}
+      envMapIntensity={0.28}
+    />
   );
 
   return (
@@ -1148,7 +1162,7 @@ function CameraShoulderFill({ intensity }: { intensity: number }) {
   });
 
   return (
-    <directionalLight ref={lightRef} intensity={intensity} color="#eef6ff" />
+    <directionalLight ref={lightRef} intensity={intensity} color="#dce8ff" />
   );
 }
 
@@ -1167,7 +1181,7 @@ function HandFaceFill({ intensity }: { intensity: number }) {
           key={position.join(",")}
           intensity={intensity}
           position={position}
-          color="#fff6e8"
+          color="#ffe8c9"
         />
       ))}
     </>
