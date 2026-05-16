@@ -3003,7 +3003,7 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
     >
       <meshStandardMaterial
         color="#efe2c5"
-        roughness={orientation === "faceUp" ? 0.5 : 0.46}
+        roughness={orientation === "faceUp" ? 0.42 : 0.38}
         metalness={0.01}
         customProgramCacheKey={() => `mahjong-tile-body-${orientation}`}
         onBeforeCompile={(shader) => {
@@ -3022,11 +3022,29 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
           shader.fragmentShader = shader.fragmentShader.replace(
             "vec4 diffuseColor = vec4( diffuse, opacity );",
             `
-            vec3 tileIvory = vec3(0.93, 0.875, 0.74);
-            vec3 tileGreen = vec3(0.0, 0.28, 0.075);
+            vec3 tileIvory = vec3(0.94, 0.895, 0.795);
+            vec3 tileGreen = vec3(0.0, 0.33, 0.12);
             float backMask = step(${backThreshold.toFixed(5)}, ${backDirection.toFixed(1)} * vTileLocalPosition.y);
+            vec3 tileUv = vec3(
+              abs(vTileLocalPosition.x) / ${(tileSize.width / 2).toFixed(5)},
+              abs(vTileLocalPosition.y) / ${(tileSize.height / 2).toFixed(5)},
+              abs(vTileLocalPosition.z) / ${(tileSize.depth / 2).toFixed(5)}
+            );
+            float sideEdge = max(tileUv.x, tileUv.z);
+            float bevelShade = smoothstep(0.74, 1.0, max(sideEdge, tileUv.y));
+            float faceLift = 1.0 - smoothstep(0.12, 0.92, length(tileUv.xz));
+            float panelX = 1.0 - smoothstep(0.8, 0.86, tileUv.x);
+            float panelZ = 1.0 - smoothstep(0.84, 0.9, tileUv.z);
+            float facePanel = panelX * panelZ * (1.0 - backMask) * ${orientation === "faceUp" ? "1.0" : "0.0"};
+            float panelBorder = (smoothstep(0.68, 0.82, tileUv.x) + smoothstep(0.72, 0.86, tileUv.z)) * facePanel;
+            float materialNoise = fract(sin(dot(vTileLocalPosition.xz, vec2(31.7, 47.3))) * 43758.5453) - 0.5;
             vec3 tileColor = mix(tileIvory, tileGreen, backMask);
-            tileColor = mix(tileColor, vec3(0.965, 0.925, 0.82), 0.16 * (1.0 - backMask));
+            tileColor = mix(tileColor, vec3(0.975, 0.94, 0.855), 0.18 * faceLift * (1.0 - backMask));
+            tileColor = mix(tileColor, vec3(0.0, 0.42, 0.16), 0.12 * faceLift * backMask);
+            tileColor = mix(tileColor, vec3(0.9, 0.835, 0.705), 0.13 * facePanel);
+            tileColor *= 1.0 - 0.08 * min(panelBorder, 1.0);
+            tileColor *= 1.0 - 0.16 * bevelShade;
+            tileColor += materialNoise * vec3(0.012, 0.01, 0.007);
             vec4 diffuseColor = vec4(tileColor, opacity);
             `,
           );
