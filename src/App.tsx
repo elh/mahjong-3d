@@ -26,6 +26,7 @@ import type { InfoModalLink } from "./ui/InfoModal";
 import {
   infiniteRoundFadeMs,
   infiniteRoundFlipTransitionDelayMs,
+  infiniteRoundHoldMs,
   infiniteRoundSwapMs,
   nextRoundPromotionDelayMs,
 } from "./ui/infinitePlayback";
@@ -739,6 +740,7 @@ function SimApp({
 
   useEffect(() => {
     if (
+      runtimeOptions.isScreenSaver ||
       !runtimeOptions.isPlaybackActive ||
       !runtimeOptions.preloadEnabled ||
       !isAtRoundEnd ||
@@ -798,11 +800,86 @@ function SimApp({
     eventIndex,
     hasQueuedNextRound,
     isAtRoundEnd,
+    runtimeOptions.isScreenSaver,
     runtimeOptions.isPlaybackActive,
     runtimeOptions.preloadEnabled,
     prefersReducedMotion,
     promoteQueuedRound,
     roundKey,
+  ]);
+
+  useEffect(() => {
+    if (
+      !runtimeOptions.isScreenSaver ||
+      !runtimeOptions.isPlaybackActive ||
+      !runtimeOptions.preloadEnabled ||
+      !isAtRoundEnd ||
+      !hasQueuedNextRound ||
+      terminalReachedAtRef.current === undefined
+    ) {
+      return;
+    }
+
+    const holdMs = infiniteRoundHoldMs;
+    const flipDelayMs =
+      prefersReducedMotion || !runtimeOptions.tableFlipTransitionsEnabled
+        ? 0
+        : infiniteRoundFlipTransitionDelayMs();
+    const promotionDelayMs = holdMs + flipDelayMs;
+    const flipKey = `${roundKey}:${eventIndex}`;
+    let startedAtMs: number | undefined;
+    let didStartFlip = false;
+    let didPromote = false;
+
+    const handleNativeFrame = (event: Event) => {
+      if (didPromote) {
+        return;
+      }
+      const timestampMs = screenSaverFrameTimestampFromEvent(
+        event,
+        performance.now(),
+      );
+      startedAtMs ??= timestampMs;
+      const elapsedMs = timestampMs - startedAtMs;
+      if (
+        !didStartFlip &&
+        elapsedMs >= holdMs &&
+        runtimeOptions.tableFlipTransitionsEnabled &&
+        !prefersReducedMotion
+      ) {
+        didStartFlip = true;
+        setTableFlipTransitionKey(flipKey);
+        postScreenSaverDiagnostic(
+          `app nativeTerminalFlip key=${flipKey} seed=${roundKey}`,
+        );
+      }
+      if (elapsedMs < promotionDelayMs) {
+        return;
+      }
+
+      didPromote = true;
+      if (promoteQueuedRound()) {
+        terminalReachedAtRef.current = undefined;
+        setTableFlipTransitionKey(undefined);
+        postScreenSaverDiagnostic(`app nativePromote seed=${roundKey}`);
+      }
+    };
+
+    window.addEventListener(screenSaverFrameEventName, handleNativeFrame);
+    return () => {
+      window.removeEventListener(screenSaverFrameEventName, handleNativeFrame);
+    };
+  }, [
+    eventIndex,
+    hasQueuedNextRound,
+    isAtRoundEnd,
+    prefersReducedMotion,
+    promoteQueuedRound,
+    roundKey,
+    runtimeOptions.isPlaybackActive,
+    runtimeOptions.isScreenSaver,
+    runtimeOptions.preloadEnabled,
+    runtimeOptions.tableFlipTransitionsEnabled,
   ]);
 
   useEffect(() => {

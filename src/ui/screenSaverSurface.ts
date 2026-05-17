@@ -107,9 +107,9 @@ export function screenSaverRuntimeOptions({
     isSurfaceActive,
     isPlaybackActive,
     allowInitialRenderWhilePaused: isScreenSaver,
-    preloadEnabled: !isScreenSaver,
+    preloadEnabled: !isScreenSaver || isFullscreenScreenSaver,
     workerEnabled: !isScreenSaver,
-    tableFlipTransitionsEnabled: !isScreenSaver,
+    tableFlipTransitionsEnabled: !isScreenSaver || !isPreview,
     renderDpr: isScreenSaver ? [1, 1] : [1, 1.75],
   };
 }

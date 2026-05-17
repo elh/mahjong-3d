@@ -516,6 +516,11 @@ export function ThreeGameView({
       }),
     );
     setTableFlipRun((run) => run + 1);
+    if (screenSaverFrameDriver) {
+      setIsTableFlipMotionActive(true);
+      return;
+    }
+
     tableFlipDelayTimeoutRef.current = window.setTimeout(() => {
       tableFlipDelayTimeoutRef.current = undefined;
       setIsTableFlipMotionActive(true);
@@ -524,6 +529,7 @@ export function ThreeGameView({
     layout.tiles,
     replay.ended,
     roundKey,
+    screenSaverFrameDriver,
     tableFlipDebugSettings.prepDelayMs,
     tableFlipDebugSettings.variability,
   ]);

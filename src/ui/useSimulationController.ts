@@ -548,8 +548,7 @@ export function useSimulationController({
     clearFallbackGeneration();
     workerRef.current?.terminate();
     workerRef.current = null;
-    fallbackGenerationTimeoutRef.current = window.setTimeout(() => {
-      fallbackGenerationTimeoutRef.current = undefined;
+    const generate = () => {
       if (!active || requestId !== requestIdRef.current) {
         return;
       }
@@ -568,6 +567,14 @@ export function useSimulationController({
           error instanceof Error ? error.message : "Simulation failed.",
         );
       }
+    };
+    if (!workerEnabled) {
+      generate();
+      return;
+    }
+    fallbackGenerationTimeoutRef.current = window.setTimeout(() => {
+      fallbackGenerationTimeoutRef.current = undefined;
+      generate();
     }, 0);
   }
 
@@ -579,8 +586,7 @@ export function useSimulationController({
     preloadWorkerRef.current?.terminate();
     preloadWorkerRef.current = null;
     setNextRoundPreloading(true);
-    fallbackPreloadTimeoutRef.current = window.setTimeout(() => {
-      fallbackPreloadTimeoutRef.current = undefined;
+    const preload = () => {
       if (
         !active ||
         !preloadEnabled ||
@@ -598,6 +604,14 @@ export function useSimulationController({
       } catch {
         retryPreloadNextRound();
       }
+    };
+    if (!workerEnabled) {
+      preload();
+      return;
+    }
+    fallbackPreloadTimeoutRef.current = window.setTimeout(() => {
+      fallbackPreloadTimeoutRef.current = undefined;
+      preload();
     }, 0);
   }
 

@@ -100,9 +100,9 @@ describe("screen saver surface", () => {
       isPreview: false,
       isPlaybackActive: true,
       allowInitialRenderWhilePaused: true,
-      preloadEnabled: false,
+      preloadEnabled: true,
       workerEnabled: false,
-      tableFlipTransitionsEnabled: false,
+      tableFlipTransitionsEnabled: true,
       renderDpr: [1, 1],
     });
   });
