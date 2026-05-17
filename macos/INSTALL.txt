@@ -1,4 +1,4 @@
-Install Mahjong 3D.saver
+Install Mahjong3D.saver
 
 Double-click Mahjong3D.saver, or copy it to:
 

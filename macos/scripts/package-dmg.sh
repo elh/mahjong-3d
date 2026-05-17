@@ -8,9 +8,12 @@ BUNDLE="$BUILD_DIR/Mahjong3D.saver"
 DMG_STAGING="$BUILD_DIR/dmg-staging"
 DMG="$BUILD_DIR/Mahjong3D.dmg"
 
-if [ ! -d "$BUNDLE" ]; then
-  bash "$MACOS_DIR/scripts/build-saver.sh"
+if [ -n "${NOTARY_PROFILE:-}" ] && [ -z "${SIGN_IDENTITY:-}" ]; then
+  echo "NOTARY_PROFILE requires SIGN_IDENTITY so the nested saver is rebuilt and signed for distribution." >&2
+  exit 1
 fi
+
+bash "$MACOS_DIR/scripts/build-saver.sh"
 
 rm -rf "$DMG_STAGING" "$DMG"
 mkdir -p "$DMG_STAGING"
