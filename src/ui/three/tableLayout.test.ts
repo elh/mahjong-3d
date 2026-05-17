@@ -725,6 +725,98 @@ describe("3D table layout", () => {
     );
   });
 
+  test("reveals multiple discard winners with one physical winning tile", () => {
+    const tiles = createTileSet();
+    const winningTile = tiles[0];
+    const firstWinnerHand = tiles.slice(1, 4);
+    const secondWinnerHand = tiles.slice(4, 8);
+    const previousReplay = emptyReplayState();
+    previousReplay.ended = true;
+    previousReplay.winners = [1];
+    previousReplay.players[1].hand = firstWinnerHand;
+    previousReplay.players[1].winningTile = winningTile;
+    previousReplay.players[2].hand = secondWinnerHand;
+
+    const replay = emptyReplayState();
+    replay.ended = true;
+    replay.winners = [1, 2];
+    replay.players[1].hand = firstWinnerHand;
+    replay.players[1].winningTile = winningTile;
+    replay.players[2].hand = secondWinnerHand;
+    replay.players[2].winningTile = winningTile;
+    const event: GameEvent = {
+      type: "winDeclared",
+      phase: "turn",
+      groupId: "turn-1",
+      turn: 1,
+      player: 2,
+      from: 0,
+      tile: winningTile,
+    };
+
+    const layout = createThreeTableLayout(replay, event, previousReplay);
+    const firstWinnerTiles = layout.tiles.filter(
+      (placement) => placement.owner === "hand" && placement.player === 1,
+    );
+    const secondWinnerTiles = layout.tiles.filter(
+      (placement) => placement.owner === "hand" && placement.player === 2,
+    );
+    const physicalWinningTiles = layout.tiles.filter(
+      (placement) => placement.tile.id === winningTile.id,
+    );
+    const secondWinnerAnimations = layout.animations.filter(
+      (animation) => animation.event.type === "winDeclared",
+    );
+
+    expect(firstWinnerTiles).toHaveLength(firstWinnerHand.length + 1);
+    expect(secondWinnerTiles).toHaveLength(secondWinnerHand.length);
+    expect(physicalWinningTiles).toHaveLength(1);
+    expect(physicalWinningTiles[0].player).toBe(1);
+    expect(
+      secondWinnerAnimations.some(
+        (animation) => animation.tile.id === winningTile.id,
+      ),
+    ).toBe(false);
+    expect(secondWinnerAnimations).toHaveLength(secondWinnerHand.length);
+    expectUniqueTileIds(layout.tiles);
+  });
+
+  test("test-multi-discard-win reveals both winners without duplicate physical tiles", () => {
+    const result = simulateTestScenarioRound("test-multi-discard-win");
+    const winIndexes = result.events
+      .map((event, index) => ({ event, index }))
+      .filter(({ event }) => event.type === "winDeclared")
+      .map(({ index }) => index);
+    const secondWinIndex = winIndexes.at(-1);
+    if (secondWinIndex === undefined) {
+      throw new Error("missing multi-winner fixture win");
+    }
+
+    const winEvent = result.events[secondWinIndex];
+    const previousReplay = replayEvents(result.events, secondWinIndex - 1);
+    const replay = replayEvents(result.events, secondWinIndex);
+    const layout = createThreeTableLayout(replay, winEvent, previousReplay);
+    const firstWinnerTiles = layout.tiles.filter(
+      (placement) => placement.owner === "hand" && placement.player === 1,
+    );
+    const secondWinnerTiles = layout.tiles.filter(
+      (placement) => placement.owner === "hand" && placement.player === 2,
+    );
+
+    expect(winEvent?.type).toBe("winDeclared");
+    expect(replay.winners).toEqual([1, 2]);
+    expect(firstWinnerTiles).toHaveLength(17);
+    expect(secondWinnerTiles).toHaveLength(16);
+    if (winEvent?.type === "winDeclared") {
+      const winningTilePlacements = layout.tiles.filter(
+        (placement) => placement.tile.id === winEvent.tile.id,
+      );
+      expect(winningTilePlacements).toHaveLength(1);
+      expect(winningTilePlacements[0].player).toBe(1);
+    }
+    expectUniqueTileIds(layout.tiles);
+  });
+
   test("reveals concealed kong melds when a player wins", () => {
     const tiles = createTileSet();
     const concealedKongTiles = tiles.slice(20, 24);
@@ -930,6 +1022,65 @@ describe("3D table layout", () => {
     }
   });
 
+  test("reveals multiple robbed-kong winners with one physical winning tile", () => {
+    const tiles = createTileSet();
+    const robbedTile = tiles[0];
+    const declarerMeldTiles = tiles.slice(1, 4);
+    const firstWinnerHand = tiles.slice(4, 7);
+    const secondWinnerHand = tiles.slice(7, 11);
+    const previousReplay = emptyReplayState();
+    previousReplay.ended = true;
+    previousReplay.winners = [1];
+    previousReplay.players[0].melds = [
+      { type: "pong", tiles: declarerMeldTiles, claimedFrom: 3 },
+    ];
+    previousReplay.players[1].hand = firstWinnerHand;
+    previousReplay.players[1].winningTile = robbedTile;
+    previousReplay.players[2].hand = secondWinnerHand;
+
+    const replay = emptyReplayState();
+    replay.ended = true;
+    replay.winners = [1, 2];
+    replay.players[0].melds = [
+      { type: "pong", tiles: declarerMeldTiles, claimedFrom: 3 },
+    ];
+    replay.players[1].hand = firstWinnerHand;
+    replay.players[1].winningTile = robbedTile;
+    replay.players[2].hand = secondWinnerHand;
+    replay.players[2].winningTile = robbedTile;
+    const event: GameEvent = {
+      type: "winDeclared",
+      phase: "turn",
+      groupId: "turn-1",
+      turn: 1,
+      player: 2,
+      from: 0,
+      tile: robbedTile,
+    };
+
+    const layout = createThreeTableLayout(replay, event, previousReplay);
+    const firstWinnerTiles = layout.tiles.filter(
+      (placement) => placement.owner === "hand" && placement.player === 1,
+    );
+    const secondWinnerTiles = layout.tiles.filter(
+      (placement) => placement.owner === "hand" && placement.player === 2,
+    );
+    const physicalRobbedTiles = layout.tiles.filter(
+      (placement) => placement.tile.id === robbedTile.id,
+    );
+
+    expect(firstWinnerTiles).toHaveLength(firstWinnerHand.length + 1);
+    expect(secondWinnerTiles).toHaveLength(secondWinnerHand.length);
+    expect(physicalRobbedTiles).toHaveLength(1);
+    expect(physicalRobbedTiles[0].player).toBe(1);
+    expect(
+      layout.animations.some(
+        (animation) => animation.tile.id === robbedTile.id,
+      ),
+    ).toBe(false);
+    expectUniqueTileIds(layout.tiles);
+  });
+
   test("keeps melds and flowers on one fixed auxiliary row", () => {
     const tiles = createTileSet();
     const replay = emptyReplayState();
@@ -984,6 +1135,12 @@ function distance(
   right: [number, number, number],
 ) {
   return Math.hypot(left[0] - right[0], left[2] - right[2]);
+}
+
+function expectUniqueTileIds(tiles: { tile: { id: string } }[]): void {
+  expect(new Set(tiles.map((placement) => placement.tile.id)).size).toBe(
+    tiles.length,
+  );
 }
 
 function emptyReplayState(): ReplayState {

@@ -131,22 +131,25 @@ function createStaticThreeTableLayout(
   nextEvent?: GameEvent,
 ): TilePlacement[] {
   const stagedDraw = stagedWinningDraw(currentEvent, nextEvent);
+  const winningTileOwners = winningTileOwnerMap(replay);
   const tiles: TilePlacement[] = [
     ...layoutWall(replay.wall, "wall", replay.seed),
     ...layoutWall(replay.deadWall, "deadWall", replay.seed),
     ...replay.players.flatMap((player) => {
-      const revealedWinningTile = winningRevealTile(
+      const reveal = winningReveal(
         replay,
         currentEvent,
         player.id,
+        winningTileOwners,
       );
       return [
-        ...(revealedWinningTile
+        ...(reveal
           ? [
               ...layoutWinningPlayerArea(
                 player.hand,
-                revealedWinningTile,
+                reveal.tile,
                 player.id,
+                reveal.showWinningTile,
               ),
               ...layoutPlayerAuxiliaryRow(
                 player.melds,
@@ -178,24 +181,46 @@ function createStaticThreeTableLayout(
   return tiles;
 }
 
-function winningRevealTile(
+function winningReveal(
   replay: ReplayState,
   currentEvent: GameEvent | undefined,
   player: PlayerId,
-): TileInstance | undefined {
-  if (currentEvent?.type === "winDeclared" && currentEvent.player === player) {
-    return replay.players[player].winningTile ?? currentEvent.tile;
+  winningTileOwners: Map<string, PlayerId>,
+): { tile: TileInstance; showWinningTile: boolean } | undefined {
+  const replayPlayer = replay.players[player];
+  const tile =
+    currentEvent?.type === "winDeclared" && currentEvent.player === player
+      ? (replayPlayer.winningTile ?? currentEvent.tile)
+      : replayPlayer.winningTile;
+  if (!tile) {
+    return undefined;
   }
 
-  const replayPlayer = replay.players[player];
-  if (
-    replay.ended &&
-    replayPlayer.winningTile !== undefined &&
-    currentEvent?.type !== "winDeclared"
-  ) {
-    return replayPlayer.winningTile;
+  if (currentEvent?.type === "winDeclared") {
+    const winners = replay.winners ?? [currentEvent.player];
+    if (!winners.includes(player)) {
+      return undefined;
+    }
+  } else if (!replay.ended) {
+    return undefined;
   }
-  return undefined;
+
+  return {
+    tile,
+    showWinningTile: winningTileOwners.get(tile.id) === player,
+  };
+}
+
+function winningTileOwnerMap(replay: ReplayState): Map<string, PlayerId> {
+  const owners = new Map<string, PlayerId>();
+  const winners = replay.winners ?? replay.players.map((player) => player.id);
+  for (const player of winners) {
+    const tile = replay.players[player].winningTile;
+    if (tile && !owners.has(tile.id)) {
+      owners.set(tile.id, player);
+    }
+  }
+  return owners;
 }
 
 export function playerAngle(player: PlayerId): number {
@@ -400,6 +425,7 @@ function layoutWinningPlayerArea(
   hand: readonly TileInstance[],
   winningTile: TileInstance,
   player: PlayerId,
+  showWinningTile = true,
 ): TilePlacement[] {
   const revealedHand = removeFirstTileById(hand, winningTile.id);
   return [
@@ -412,15 +438,19 @@ function layoutWinningPlayerArea(
       faceUp: true,
       physics: false,
     })),
-    {
-      tile: winningTile,
-      owner: "hand",
-      player,
-      position: playerWinningTilePosition(player, revealedHand.length),
-      rotation: playerTileRotation(player),
-      faceUp: true,
-      physics: false,
-    },
+    ...(showWinningTile
+      ? [
+          {
+            tile: winningTile,
+            owner: "hand" as const,
+            player,
+            position: playerWinningTilePosition(player, revealedHand.length),
+            rotation: playerTileRotation(player),
+            faceUp: true,
+            physics: false,
+          },
+        ]
+      : []),
   ];
 }
 

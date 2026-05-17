@@ -33,6 +33,7 @@ export const testScenarioSeeds = [
   "test-concealed-kong",
   "test-added-kong",
   "test-rob-added-kong",
+  "test-multi-discard-win",
   "test-self-draw-win",
   "test-setup-flowers",
 ] as const;
@@ -71,6 +72,9 @@ export function createTestScenarioStartingState(
   }
   if (seed === "test-rob-added-kong") {
     return createAddedKongStartingState(seed, true);
+  }
+  if (seed === "test-multi-discard-win") {
+    return createMultiDiscardWinStartingState(seed);
   }
   if (seed === "test-self-draw-win") {
     return createSelfDrawWinStartingState(seed);
@@ -189,6 +193,44 @@ function createSelfDrawWinStartingState(seed: string): RoundState {
     createFixtureWalls(seed, state.dealer, pool, [winningTile]),
   );
   return state;
+}
+
+function createMultiDiscardWinStartingState(seed: string): RoundState {
+  const pool = createTilePool();
+  const state = emptyRoundState(0, 0);
+  const discard = pool.take("c1", 1)[0];
+
+  state.needsDiscard = 0;
+  state.discardSource = "draw";
+  state.players[0].hand = sortTiles([
+    discard,
+    ...pool.take("c4", 2),
+    ...pool.take("c5", 2),
+    ...pool.take("c6", 2),
+    ...pool.take("c7", 2),
+    ...pool.take("c8", 2),
+    ...pool.take("c9", 2),
+    ...pool.take("wind-north", 4),
+  ]);
+  state.players[1].hand = discardWinWait(pool, "wind-east", "dragon-red");
+  state.players[2].hand = discardWinWait(pool, "wind-south", "dragon-green");
+
+  fillPlayerHands(pool, state);
+  assignWalls(state, createFixtureWalls(seed, state.dealer, pool));
+  return state;
+}
+
+function discardWinWait(
+  pool: TilePool,
+  tripletKey: string,
+  pairKey: string,
+): TileInstance[] {
+  return sortTiles([
+    ...pool.takeOneEach(["c2", "c3", "d1", "d2", "d3", "d4", "d5", "d6"]),
+    ...pool.takeOneEach(["b1", "b2", "b3"]),
+    ...pool.take(tripletKey, 3),
+    ...pool.take(pairKey, 2),
+  ]);
 }
 
 function createSetupFlowersScenario(seed: string): TestScenarioRound {

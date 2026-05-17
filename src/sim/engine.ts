@@ -22,7 +22,7 @@ import {
   type TestScenarioSeed,
 } from "./testScenarios";
 import { removeTile } from "./tileCollections";
-import { isFlower, sortTiles, type TileInstance } from "./tiles";
+import { isFlower, sortTiles, tileKey, type TileInstance } from "./tiles";
 import { createShuffledWalls, drawLiveTile, drawSupplementTile } from "./wall";
 import { isWinningHand } from "./win";
 
@@ -172,8 +172,26 @@ function testScenarioBots(
       );
     },
   };
+  const discardC1: MahjongBot = {
+    name: "Test Discard C1",
+    chooseAction(context) {
+      const c1 = context.hand.find((tile) => tileKey(tile.kind) === "c1");
+      return (
+        (c1
+          ? context.legalActions.find(
+              (action) => action.type === "discard" && action.tileId === c1.id,
+            )
+          : undefined) ??
+        context.legalActions.find((action) => action.type === "discard") ??
+        context.legalActions[0]
+      );
+    },
+  };
   if (seed === "test-setup-flowers") {
     return [passClaims, passClaims, passClaims, passClaims];
+  }
+  if (seed === "test-multi-discard-win") {
+    return [discardC1, winClaims, winClaims, passClaims];
   }
   return seed === "test-rob-added-kong"
     ? [kongThenDiscard, winClaims, passClaims, passClaims]

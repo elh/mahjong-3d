@@ -1130,6 +1130,26 @@ describe("simulation", () => {
     expect(result.finalState.players[1].winningTile).toBeDefined();
   });
 
+  test("test-multi-discard-win demonstrates two winners on one discard", () => {
+    const result = simulateTestScenarioRound("test-multi-discard-win");
+    const discard = result.events.find(
+      (event) => event.type === "tileDiscarded",
+    );
+    const wins = result.events.filter((event) => event.type === "winDeclared");
+
+    expect(result.events.some((event) => event.type === "rulesError")).toBe(
+      false,
+    );
+    expect(discard?.type).toBe("tileDiscarded");
+    expect(wins).toHaveLength(2);
+    expect(result.finalState.winners).toEqual([1, 2]);
+    if (discard?.type === "tileDiscarded") {
+      expect(wins.every((event) => event.tile.id === discard.tile.id)).toBe(
+        true,
+      );
+    }
+  });
+
   test("test-self-draw-win demonstrates a self-drawn win", () => {
     const result = simulateTestScenarioRound("test-self-draw-win");
     const drawIndex = result.events.findIndex(
