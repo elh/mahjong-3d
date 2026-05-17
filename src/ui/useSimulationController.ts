@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SimulateRoundResult } from "../sim/engine";
 import type { GameEvent } from "../sim/events";
 import { replayEvents } from "../sim/replay";
-import { simulateRoundForSeed } from "../sim/runSimulation";
 import type {
   SimulationRequest,
   SimulationResponse,
@@ -548,12 +547,12 @@ export function useSimulationController({
     clearFallbackGeneration();
     workerRef.current?.terminate();
     workerRef.current = null;
-    const generate = () => {
+    const generate = async () => {
       if (!active || requestId !== requestIdRef.current) {
         return;
       }
       try {
-        const result = simulateRoundForSeed(seed);
+        const result = await simulateRoundForSeedWithoutWorker(seed);
         if (requestId !== requestIdRef.current) {
           return;
         }
@@ -569,12 +568,12 @@ export function useSimulationController({
       }
     };
     if (!workerEnabled) {
-      generate();
+      void generate();
       return;
     }
     fallbackGenerationTimeoutRef.current = window.setTimeout(() => {
       fallbackGenerationTimeoutRef.current = undefined;
-      generate();
+      void generate();
     }, 0);
   }
 
@@ -586,7 +585,7 @@ export function useSimulationController({
     preloadWorkerRef.current?.terminate();
     preloadWorkerRef.current = null;
     setNextRoundPreloading(true);
-    const preload = () => {
+    const preload = async () => {
       if (
         !active ||
         !preloadEnabled ||
@@ -595,7 +594,14 @@ export function useSimulationController({
         return;
       }
       try {
-        const result = simulateRoundForSeed(seed);
+        const result = await simulateRoundForSeedWithoutWorker(seed);
+        if (
+          !active ||
+          !preloadEnabled ||
+          requestId !== preloadRequestIdRef.current
+        ) {
+          return;
+        }
         setQueuedPreloadRound({
           seed: result.seed,
           result,
@@ -606,12 +612,12 @@ export function useSimulationController({
       }
     };
     if (!workerEnabled) {
-      preload();
+      void preload();
       return;
     }
     fallbackPreloadTimeoutRef.current = window.setTimeout(() => {
       fallbackPreloadTimeoutRef.current = undefined;
-      preload();
+      void preload();
     }, 0);
   }
 
@@ -743,4 +749,11 @@ function groupEvents(events: readonly GameEvent[]): EventGroup[] {
     groups.set(event.groupId, group);
   });
   return [...groups.values()];
+}
+
+async function simulateRoundForSeedWithoutWorker(
+  seed: string,
+): Promise<SimulateRoundResult> {
+  const { simulateRoundForSeed } = await import("../sim/runSimulation");
+  return simulateRoundForSeed(seed);
 }

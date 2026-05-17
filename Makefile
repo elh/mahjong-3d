@@ -2,20 +2,20 @@
 
 help:
 	@printf "%s\n" \
-		"install       Install dependencies" \
-		"dev           Start the Vite dev server" \
-		"bench-sim     Run deterministic simulation benchmarks" \
-		"test          Run tests" \
-		"typecheck     Run TypeScript checks" \
-		"format        Run Biome formatter" \
-		"format-check  Check formatting" \
-		"lint          Run Biome and ESLint" \
-		"knip          Run Knip workspace hygiene checks" \
-		"build         Run production build" \
-		"build-screensaver Run local-bundle-safe screen saver web build" \
-		"install-screensaver Build and install the macOS screen saver locally" \
-		"clean         Remove build output" \
-		"good          Run format check, lint, knip, typecheck, tests, and build"
+		"install                Install dependencies" \
+		"dev                    Start the Vite dev server" \
+		"bench-sim              Run deterministic simulation benchmarks" \
+		"test                   Run tests" \
+		"typecheck              Run TypeScript checks" \
+		"format                 Run Biome formatter" \
+		"format-check           Check formatting" \
+		"lint                   Run Biome and ESLint" \
+		"knip                   Run Knip workspace hygiene checks" \
+		"build                  Run production build" \
+		"build-screensaver      Run local-bundle-safe screen saver web build" \
+		"install-screensaver    Build and install the macOS screen saver locally" \
+		"clean                  Remove build output" \
+		"good                   Run format check, lint, knip, typecheck, tests, and build"
 
 install:
 	bun install
