@@ -8,15 +8,23 @@ NATIVE_DIR="$MACOS_DIR/Mahjong3D"
 WEB_DIST="$ROOT_DIR/dist-screensaver"
 BUNDLE="$BUILD_DIR/Mahjong3D.saver"
 EXECUTABLE="$BUNDLE/Contents/MacOS/Mahjong3D"
+ASSET_BUILD_DIR="$BUILD_DIR/assets"
+NATIVE_RESOURCE_DIR="$NATIVE_DIR/Resources"
 ARCHS="${ARCHS:-arm64 x86_64}"
 DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-13.0}"
+export CLANG_MODULE_CACHE_PATH="$BUILD_DIR/module-cache"
 
 cd "$ROOT_DIR"
 bun run build:screensaver
 
+rm -rf "$ASSET_BUILD_DIR"
+mkdir -p "$ASSET_BUILD_DIR" "$CLANG_MODULE_CACHE_PATH"
+xcrun swift "$MACOS_DIR/scripts/generate-dmg-assets.swift" "$ROOT_DIR" "$ASSET_BUILD_DIR"
+
 rm -rf "$BUNDLE"
 mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources/Web"
 cp "$NATIVE_DIR/Info.plist" "$BUNDLE/Contents/Info.plist"
+cp "$NATIVE_RESOURCE_DIR/Mahjong3D.icns" "$BUNDLE/Contents/Resources/Mahjong3D.icns"
 rsync -a --delete "$WEB_DIST/" "$BUNDLE/Contents/Resources/Web/"
 
 arch_outputs=()

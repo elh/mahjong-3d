@@ -8,6 +8,8 @@
 	<string>Mahjong 3D</string>
 	<key>CFBundleExecutable</key>
 	<string>Mahjong3D</string>
+	<key>CFBundleIconFile</key>
+	<string>Mahjong3D</string>
 	<key>CFBundleIdentifier</key>
 	<string>io.github.elh.mahjong-3d.saver</string>
 	<key>CFBundleInfoDictionaryVersion</key>

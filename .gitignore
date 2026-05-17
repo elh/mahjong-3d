@@ -7,5 +7,8 @@ macos/build
 .vite
 .DS_Store
 *.local
+.env
+.env.*
+!.env.example
 *.log
 *.tsbuildinfo
