@@ -576,9 +576,16 @@ final class BundledWebSchemeHandler: NSObject, WKURLSchemeHandler {
 
 final class ScreenSaverLog {
     private let logger = Logger(subsystem: "io.github.elh.mahjong-3d.saver", category: "ScreenSaver")
+    private let isEnabled: Bool
     private let fileURL: URL?
 
     init() {
+        self.isEnabled = ProcessInfo.processInfo.environment["MAHJONG3D_SCREENSAVER_LOG"] == "1"
+        guard isEnabled else {
+            self.fileURL = nil
+            return
+        }
+
         let directoryURL = FileManager.default
             .homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/Mahjong3D", isDirectory: true)
@@ -587,6 +594,10 @@ final class ScreenSaverLog {
     }
 
     func write(_ message: String) {
+        guard isEnabled else {
+            return
+        }
+
         let line = "\(Date()) \(message)\n"
         logger.info("\(message, privacy: .public)")
         guard

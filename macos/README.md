@@ -60,7 +60,8 @@ incidental cleanup:
   document hidden. The tiny System Settings preview can still pause when
   inactive.
 
-Diagnostics and JavaScript errors are written to:
+Native lifecycle diagnostics and JavaScript errors are disabled by default. Set
+`MAHJONG3D_SCREENSAVER_LOG=1` in the screen saver host environment to write:
 
 ```text
 ~/Library/Containers/com.apple.ScreenSaver.Engine.legacyScreenSaver/Data/Library/Logs/Mahjong3D/screensaver.log

@@ -89,6 +89,13 @@ Baseline bots should be legal and plausible, not optimal.
 - Keep the Canvas/Rapier world stable during loading and stepping. Prefer loading overlays and cached assets over remounting the 3D scene.
 - Hidden debug/audio controls may exist behind explicit constants, but should not appear in the normal debug UI unless intentionally re-enabled.
 
+## macOS Screen Saver Scope
+
+- `macos/` should stay a minimal native wrapper around the existing React Three Fiber app.
+- The wrapper's job is to make the web renderer run reliably as a macOS screen saver: local resource loading, ScreenSaver lifecycle, frame delivery, install/package/signing scripts.
+- Keep rules, bots, replay semantics, and 3D presentation logic in the existing web code unless a native concern truly requires otherwise.
+- See `macos/README.md` for screen saver architecture details, build commands, diagnostics, and packaging notes.
+
 ## Assets and Licensing
 
 - Tile art lives in `public/tiles/`.
