@@ -76,7 +76,7 @@ describe("screen saver surface", () => {
     });
   });
 
-  test("uses the conservative fullscreen screen saver profile", () => {
+  test("uses the full-quality fullscreen screen saver profile", () => {
     const config = screenSaverSurfaceFromSearch("?surface=screensaver");
     expect(
       screenSaverRuntimeOptions({
@@ -92,7 +92,7 @@ describe("screen saver surface", () => {
       preloadEnabled: true,
       workerEnabled: false,
       tableFlipTransitionsEnabled: true,
-      renderDpr: [1, 1],
+      renderDpr: [1, 1.75],
     });
   });
 

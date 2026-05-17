@@ -9,6 +9,8 @@ export type ScreenSaverLifecycle = {
 };
 
 export const screenSaverFrameEventName = "mahjong-screen-saver-frame";
+const defaultRenderDpr: [number, number] = [1, 1.75];
+const previewRenderDpr: [number, number] = [1, 1];
 
 export type ScreenSaverFrameEventDetail = {
   timestampMs: number;
@@ -103,7 +105,7 @@ export function screenSaverRuntimeOptions({
     preloadEnabled: !isScreenSaver || isFullscreenScreenSaver,
     workerEnabled: !isScreenSaver,
     tableFlipTransitionsEnabled: !isScreenSaver || !isPreview,
-    renderDpr: isScreenSaver ? [1, 1] : [1, 1.75],
+    renderDpr: isPreview ? previewRenderDpr : defaultRenderDpr,
   };
 }
 
