@@ -29,6 +29,32 @@ and terminal round promotion. Worker-backed generation is disabled in the saver;
 round generation and preloading use the no-worker fallback so the bundle works
 entirely from local files.
 
+## Implementation Notes
+
+Several pieces of this setup are intentional and should not be treated as
+incidental cleanup:
+
+- `WKWebView` loads the app through `WKURLSchemeHandler`, not a `file://` URL.
+  The custom origin keeps ESM chunks, SVG tile assets, and WASM-style resources
+  under one bundled same-origin URL without adding a local HTTP server.
+- `ScreenSaverView.animateOneFrame()` is the render clock for fullscreen saver
+  mode. Swift calls `window.mahjongScreenSaver.renderFrame(performance.now())`;
+  the web app dispatches a frame event; R3F advances its manual frame loop from
+  that event.
+- The frame bridge is guarded by `renderFrameInFlight` so the native host does
+  not queue unbounded `evaluateJavaScript` calls if WebKit falls behind.
+- `startAnimation()`/`stopAnimation()` are noisy. `stopAnimation()` schedules a
+  debounced inactive state instead of immediately pausing the web app; teardown
+  paths still force an immediate inactive update.
+- Every native lifecycle update first writes
+  `window.__mahjongScreenSaverNativeState`, then calls the React bridge if it is
+  registered. React bootstraps from that global so early native calls are not
+  lost while the bundle is still loading.
+- Fullscreen saver playback intentionally ignores some host visibility noise:
+  fullscreen `surface=screensaver` stays active even if WebKit reports the
+  document hidden. The tiny System Settings preview can still pause when
+  inactive.
+
 Diagnostics and JavaScript errors are written to:
 
 ```text
