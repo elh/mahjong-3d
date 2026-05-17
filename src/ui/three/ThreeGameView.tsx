@@ -1001,7 +1001,9 @@ function ScreenSaverFrameDriver({
 
     const renderFrame = (timestampMs: number, source: "initial" | "native") => {
       frameRef.current += 1;
-      advance(timestampMs, true);
+      // R3F's manual frameloop stores clock elapsed time in seconds, while the
+      // native bridge and browser Performance API use milliseconds.
+      advance(timestampMs / 1000, true);
       if (frameRef.current === 1 || frameRef.current % 60 === 0) {
         postScreenSaverDiagnostic(
           [
