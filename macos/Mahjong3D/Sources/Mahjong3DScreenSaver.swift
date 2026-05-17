@@ -13,6 +13,7 @@ final class Mahjong3DScreenSaverView: ScreenSaverView, WKNavigationDelegate {
     private var webSchemeHandler: BundledWebSchemeHandler?
     private let previewMode: Bool
     private let log = ScreenSaverLog()
+    private let targetFrameInterval = 1.0 / 60.0
     private var lifecycleSequence = 0
     private var inactiveWorkItem: DispatchWorkItem?
     private var webActive = true
@@ -23,7 +24,7 @@ final class Mahjong3DScreenSaverView: ScreenSaverView, WKNavigationDelegate {
         self.previewMode = isPreview
         self.webPreview = isPreview
         super.init(frame: frame, isPreview: isPreview)
-        animationTimeInterval = 1.0 / 30.0
+        animationTimeInterval = targetFrameInterval
         log.write("lifecycle[\(nextLifecycleSequence())] init preview=\(isPreview) frame=\(frame)")
         configureWebView()
     }
@@ -32,7 +33,7 @@ final class Mahjong3DScreenSaverView: ScreenSaverView, WKNavigationDelegate {
         self.previewMode = false
         self.webPreview = false
         super.init(coder: coder)
-        animationTimeInterval = 1.0 / 30.0
+        animationTimeInterval = targetFrameInterval
         log.write("lifecycle[\(nextLifecycleSequence())] init coder preview=false frame=\(frame)")
         configureWebView()
     }

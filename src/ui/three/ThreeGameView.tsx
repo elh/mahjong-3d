@@ -675,7 +675,6 @@ export function ThreeGameView({
           alpha: false,
           antialias: true,
           powerPreference: "high-performance",
-          preserveDrawingBuffer: true,
         }}
         style={{
           position: "absolute",
