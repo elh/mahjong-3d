@@ -125,6 +125,7 @@ const centerTableMarkTextureEntry: TileTextureEntry = {
   listeners: new Set(),
 };
 let centerTableFallbackMarkTexture: THREE.CanvasTexture | undefined;
+const centerTableMarkUrl = `${import.meta.env.BASE_URL ?? "/"}marks/huang.svg`;
 let tileAudioContext: AudioContext | undefined;
 let lastTileSoundAt = 0;
 type FlickDebugSettings = {
@@ -331,10 +332,12 @@ export function ThreeGameView({
   );
   const requiredTileTextureUrls = useMemo(() => allTileImageUrls(), []);
   const tileFacesReady = useTileTexturesReady(requiredTileTextureUrls);
+  const centerTableMarkReady = useCenterTableMarkReady();
   const sceneVisible =
     sceneReady &&
     tileFacesReady &&
-    (!roundChanged || preserveSceneOnRoundChange) &&
+    centerTableMarkReady &&
+    !roundChanged &&
     !loading;
   const effectiveRenderPaused =
     renderPaused && (!allowInitialRenderWhilePaused || hasSceneBeenVisible);
@@ -584,12 +587,11 @@ export function ThreeGameView({
 
   useEffect(() => {
     void roundKey;
-    if (preserveSceneOnRoundChangeRef.current) {
-      return;
-    }
     setSceneReady(false);
     setHasSceneBeenVisible(false);
-    setInternalCameraUserControlled(false);
+    if (!preserveSceneOnRoundChangeRef.current) {
+      setInternalCameraUserControlled(false);
+    }
     let timeout: number | undefined;
     let frame: number | undefined;
     const markReady = () => {
@@ -1105,8 +1107,9 @@ function clampColor(value: number): number {
 
 function CenterTableMark() {
   const loadedTexture = useCenterTableMarkTexture();
-  const fallbackTexture = useMemo(() => centerTableFallbackTexture(), []);
-  const texture = loadedTexture ?? fallbackTexture;
+  const texture =
+    loadedTexture ??
+    (centerTableMarkTextureEntry.didFail ? centerTableFallbackTexture() : null);
 
   if (!texture) {
     return null;
@@ -1133,38 +1136,9 @@ function useCenterTableMarkTexture(): THREE.Texture | undefined {
   const [texture, setTexture] = useState(centerTableMarkTextureEntry.texture);
 
   useEffect(() => {
-    const entry = centerTableMarkTextureEntry;
+    const entry = ensureCenterTableMarkLoading();
     entry.listeners.add(setTexture);
-    if (entry.texture || entry.isLoading || entry.didFail) {
-      setTexture(entry.texture);
-      return () => {
-        entry.listeners.delete(setTexture);
-      };
-    }
-
-    entry.isLoading = true;
-    const loader = new THREE.TextureLoader();
-    loader.load(
-      `${import.meta.env.BASE_URL ?? "/"}marks/huang.svg`,
-      (mark) => {
-        mark.colorSpace = THREE.SRGBColorSpace;
-        mark.anisotropy = 4;
-        mark.needsUpdate = true;
-        entry.texture = mark;
-        entry.isLoading = false;
-        for (const listener of entry.listeners) {
-          listener(mark);
-        }
-      },
-      undefined,
-      () => {
-        entry.didFail = true;
-        entry.isLoading = false;
-        for (const listener of entry.listeners) {
-          listener(undefined);
-        }
-      },
-    );
+    setTexture(entry.texture);
 
     return () => {
       entry.listeners.delete(setTexture);
@@ -1172,6 +1146,64 @@ function useCenterTableMarkTexture(): THREE.Texture | undefined {
   }, []);
 
   return texture;
+}
+
+function useCenterTableMarkReady(): boolean {
+  const [isReady, setIsReady] = useState(() => isCenterTableMarkReady());
+
+  useEffect(() => {
+    const entry = ensureCenterTableMarkLoading();
+    if (isCenterTableMarkReady()) {
+      setIsReady(true);
+      return;
+    }
+
+    const listener = () => setIsReady(isCenterTableMarkReady());
+    entry.listeners.add(listener);
+    return () => {
+      entry.listeners.delete(listener);
+    };
+  }, []);
+
+  return isReady;
+}
+
+function isCenterTableMarkReady(): boolean {
+  return (
+    centerTableMarkTextureEntry.texture !== undefined ||
+    centerTableMarkTextureEntry.didFail === true
+  );
+}
+
+function ensureCenterTableMarkLoading(): TileTextureEntry {
+  const entry = centerTableMarkTextureEntry;
+  if (entry.texture || entry.isLoading || entry.didFail) {
+    return entry;
+  }
+
+  entry.isLoading = true;
+  new THREE.TextureLoader().load(
+    centerTableMarkUrl,
+    (mark) => {
+      mark.colorSpace = THREE.SRGBColorSpace;
+      mark.anisotropy = 4;
+      mark.needsUpdate = true;
+      entry.texture = mark;
+      entry.isLoading = false;
+      for (const listener of entry.listeners) {
+        listener(mark);
+      }
+    },
+    undefined,
+    () => {
+      entry.didFail = true;
+      entry.isLoading = false;
+      for (const listener of entry.listeners) {
+        listener(undefined);
+      }
+    },
+  );
+  return entry;
 }
 
 function centerTableFallbackTexture(): THREE.CanvasTexture {
