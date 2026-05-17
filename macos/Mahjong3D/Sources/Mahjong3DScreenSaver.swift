@@ -8,7 +8,6 @@ import WebKit
 final class Mahjong3DScreenSaverView: ScreenSaverView, WKNavigationDelegate {
     fileprivate static let webScheme = "mahjong3d-saver"
     private static let inactiveDebounceSeconds = 1.5
-    private static let diagnosticSurfaceOverride: String? = nil
 
     private var webView: WKWebView?
     private var webSchemeHandler: BundledWebSchemeHandler?
@@ -19,7 +18,6 @@ final class Mahjong3DScreenSaverView: ScreenSaverView, WKNavigationDelegate {
     private var webActive = true
     private var webPreview: Bool
     private var renderFrameInFlight = false
-    private var renderFrameSequence = 0
 
     override init?(frame: NSRect, isPreview: Bool) {
         self.previewMode = isPreview
@@ -136,10 +134,9 @@ final class Mahjong3DScreenSaverView: ScreenSaverView, WKNavigationDelegate {
         components.scheme = Self.webScheme
         components.host = "app"
         components.path = "/index.html"
-        let surface = Self.diagnosticSurfaceOverride ?? "screensaver"
         components.query = previewMode
-            ? "surface=\(surface)&preview=1"
-            : "surface=\(surface)"
+            ? "surface=screensaver&preview=1"
+            : "surface=screensaver"
 
         guard let appURL = components.url else {
             log.write("failed to build app URL")
@@ -167,7 +164,6 @@ final class Mahjong3DScreenSaverView: ScreenSaverView, WKNavigationDelegate {
     private func syncWebViewFrame() {
         webView?.frame = bounds
         webView?.layer?.backgroundColor = NSColor.black.cgColor
-        log.write("syncWebViewFrame bounds=\(bounds) webFrame=\(webView?.frame ?? .zero)")
     }
 
     private func nextLifecycleSequence() -> Int {
@@ -236,19 +232,14 @@ final class Mahjong3DScreenSaverView: ScreenSaverView, WKNavigationDelegate {
         }
 
         renderFrameInFlight = true
-        renderFrameSequence += 1
-        let frameSequence = renderFrameSequence
         webView.evaluateJavaScript(
             """
-            window.__mahjongScreenSaverNativeFrameCount = (window.__mahjongScreenSaverNativeFrameCount || 0) + 1;
             window.mahjongScreenSaver && window.mahjongScreenSaver.renderFrame && window.mahjongScreenSaver.renderFrame(performance.now());
             """,
             completionHandler: { [weak self, log] _, error in
                 self?.renderFrameInFlight = false
                 if let error {
-                    log.write("renderFrame[\(frameSequence)] failed: \(error.localizedDescription)")
-                } else if frameSequence == 1 || frameSequence % 60 == 0 {
-                    log.write("renderFrame[\(frameSequence)] delivered")
+                    log.write("renderFrame failed: \(error.localizedDescription)")
                 }
             }
         )

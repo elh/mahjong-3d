@@ -14,24 +14,13 @@ describe("screen saver surface", () => {
       preview: false,
     });
     expect(
-      screenSaverSurfaceFromSearch("?surface=screensaver-diagnostic"),
-    ).toEqual({
-      surface: "screensaver-diagnostic",
-      preview: false,
-    });
-    expect(
-      screenSaverSurfaceFromSearch("?surface=screensaver-r3f-diagnostic"),
-    ).toEqual({
-      surface: "screensaver-r3f-diagnostic",
-      preview: false,
-    });
-    expect(
       screenSaverSurfaceFromSearch("?surface=screensaver&preview=1"),
     ).toEqual({
       surface: "screensaver",
       preview: true,
     });
     expect(screenSaverSurfaceFromSearch("?view=debug")).toBeUndefined();
+    expect(screenSaverSurfaceFromSearch("?surface=unknown")).toBeUndefined();
   });
 
   test("keeps normal web playback at the existing render profile", () => {

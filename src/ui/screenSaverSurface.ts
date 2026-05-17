@@ -1,8 +1,5 @@
 export type ScreenSaverSurfaceConfig = {
-  surface:
-    | "screensaver"
-    | "screensaver-diagnostic"
-    | "screensaver-r3f-diagnostic";
+  surface: "screensaver";
   preview: boolean;
 };
 
@@ -42,11 +39,7 @@ export function screenSaverSurfaceFromSearch(
 ): ScreenSaverSurfaceConfig | undefined {
   const params = new URLSearchParams(search);
   const surface = params.get("surface");
-  if (
-    surface !== "screensaver" &&
-    surface !== "screensaver-diagnostic" &&
-    surface !== "screensaver-r3f-diagnostic"
-  ) {
+  if (surface !== "screensaver") {
     return undefined;
   }
   return {
@@ -112,31 +105,6 @@ export function screenSaverRuntimeOptions({
     tableFlipTransitionsEnabled: !isScreenSaver || !isPreview,
     renderDpr: isScreenSaver ? [1, 1] : [1, 1.75],
   };
-}
-
-type ScreenSaverWebKitBridge = Window & {
-  __mahjongScreenSaverNativeState?: NativeScreenSaverState;
-  webkit?: {
-    messageHandlers?: {
-      mahjong3DLog?: {
-        postMessage(message: string): void;
-      };
-    };
-  };
-};
-
-export function postScreenSaverDiagnostic(message: string): void {
-  const handler = (window as ScreenSaverWebKitBridge).webkit?.messageHandlers
-    ?.mahjong3DLog;
-  if (!handler) {
-    return;
-  }
-
-  try {
-    handler.postMessage(`web ${message}`);
-  } catch {
-    // Diagnostics must never affect the screen saver runtime.
-  }
 }
 
 export function screenSaverFrameTimestampFromEvent(
