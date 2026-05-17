@@ -7,49 +7,61 @@ import WebKit
 @objc(Mahjong3DScreenSaverView)
 final class Mahjong3DScreenSaverView: ScreenSaverView, WKNavigationDelegate {
     fileprivate static let webScheme = "mahjong3d-saver"
+    private static let inactiveDebounceSeconds = 1.5
+    private static let diagnosticSurfaceOverride: String? = nil
 
     private var webView: WKWebView?
     private var webSchemeHandler: BundledWebSchemeHandler?
     private let previewMode: Bool
     private let log = ScreenSaverLog()
+    private var lifecycleSequence = 0
+    private var inactiveWorkItem: DispatchWorkItem?
+    private var webActive = true
+    private var webPreview: Bool
+    private var renderFrameInFlight = false
+    private var renderFrameSequence = 0
 
     override init?(frame: NSRect, isPreview: Bool) {
         self.previewMode = isPreview
+        self.webPreview = isPreview
         super.init(frame: frame, isPreview: isPreview)
         animationTimeInterval = 1.0 / 30.0
-        log.write("init preview=\(isPreview) frame=\(frame)")
+        log.write("lifecycle[\(nextLifecycleSequence())] init preview=\(isPreview) frame=\(frame)")
         configureWebView()
     }
 
     required init?(coder: NSCoder) {
         self.previewMode = false
+        self.webPreview = false
         super.init(coder: coder)
         animationTimeInterval = 1.0 / 30.0
-        log.write("init coder preview=false frame=\(frame)")
+        log.write("lifecycle[\(nextLifecycleSequence())] init coder preview=false frame=\(frame)")
         configureWebView()
     }
 
     override func startAnimation() {
         super.startAnimation()
-        log.write("startAnimation frame=\(frame) bounds=\(bounds)")
+        let sequence = nextLifecycleSequence()
+        log.write("lifecycle[\(sequence)] startAnimation frame=\(frame) bounds=\(bounds)")
+        cancelInactiveTransition(reason: "startAnimation", sequence: sequence)
         syncWebViewFrame()
-        setWebActive(true)
+        setWebActive(true, reason: "startAnimation", sequence: sequence)
     }
 
     override func stopAnimation() {
-        log.write("stopAnimation")
-        setWebActive(false)
+        let sequence = nextLifecycleSequence()
+        log.write("lifecycle[\(sequence)] stopAnimation")
+        scheduleInactiveTransition(sequence: sequence)
         super.stopAnimation()
     }
 
     override func animateOneFrame() {
-        // Rendering is driven by the embedded web app; native animation only
-        // exists so ScreenSaverEngine can deliver lifecycle callbacks.
+        renderWebFrame()
     }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
-        log.write("setFrameSize \(newSize)")
+        log.write("lifecycle[\(nextLifecycleSequence())] setFrameSize \(newSize)")
         syncWebViewFrame()
     }
 
@@ -59,13 +71,19 @@ final class Mahjong3DScreenSaverView: ScreenSaverView, WKNavigationDelegate {
     }
 
     override func removeFromSuperview() {
-        log.write("removeFromSuperview")
+        let sequence = nextLifecycleSequence()
+        log.write("lifecycle[\(sequence)] removeFromSuperview")
+        cancelInactiveTransition(reason: "removeFromSuperview", sequence: sequence)
+        setWebActive(false, reason: "teardown", sequence: sequence)
         tearDownWebView()
         super.removeFromSuperview()
     }
 
     deinit {
-        log.write("deinit")
+        let sequence = nextLifecycleSequence()
+        log.write("lifecycle[\(sequence)] deinit")
+        cancelInactiveTransition(reason: "deinit", sequence: sequence)
+        setWebActive(false, reason: "deinit", sequence: sequence)
         tearDownWebView()
     }
 
@@ -118,9 +136,10 @@ final class Mahjong3DScreenSaverView: ScreenSaverView, WKNavigationDelegate {
         components.scheme = Self.webScheme
         components.host = "app"
         components.path = "/index.html"
+        let surface = Self.diagnosticSurfaceOverride ?? "screensaver"
         components.query = previewMode
-            ? "surface=screensaver&preview=1"
-            : "surface=screensaver"
+            ? "surface=\(surface)&preview=1"
+            : "surface=\(surface)"
 
         guard let appURL = components.url else {
             log.write("failed to build app URL")
@@ -135,6 +154,8 @@ final class Mahjong3DScreenSaverView: ScreenSaverView, WKNavigationDelegate {
         guard let view = webView else {
             return
         }
+        inactiveWorkItem?.cancel()
+        inactiveWorkItem = nil
         view.stopLoading()
         view.navigationDelegate = nil
         view.configuration.userContentController.removeScriptMessageHandler(forName: "mahjong3DLog")
@@ -149,29 +170,96 @@ final class Mahjong3DScreenSaverView: ScreenSaverView, WKNavigationDelegate {
         log.write("syncWebViewFrame bounds=\(bounds) webFrame=\(webView?.frame ?? .zero)")
     }
 
-    private func setWebActive(_ active: Bool) {
-        evaluateBridgeCall("setActive(\(active ? "true" : "false"))")
+    private func nextLifecycleSequence() -> Int {
+        lifecycleSequence += 1
+        return lifecycleSequence
     }
 
-    private func setWebPreview(_ preview: Bool) {
-        evaluateBridgeCall("setPreview(\(preview ? "true" : "false"))")
+    private func scheduleInactiveTransition(sequence: Int) {
+        inactiveWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else {
+                return
+            }
+            self.log.write("lifecycle[\(sequence)] inactive debounce fired")
+            self.setWebActive(false, reason: "debouncedStopAnimation", sequence: sequence)
+            self.inactiveWorkItem = nil
+        }
+        inactiveWorkItem = workItem
+        log.write("lifecycle[\(sequence)] inactive debounce scheduled \(Self.inactiveDebounceSeconds)s")
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + Self.inactiveDebounceSeconds,
+            execute: workItem
+        )
     }
 
-    private func evaluateBridgeCall(_ call: String) {
+    private func cancelInactiveTransition(reason: String, sequence: Int) {
+        guard let inactiveWorkItem else {
+            return
+        }
+        inactiveWorkItem.cancel()
+        self.inactiveWorkItem = nil
+        log.write("lifecycle[\(sequence)] inactive debounce canceled reason=\(reason)")
+    }
+
+    private func setWebActive(_ active: Bool, reason: String, sequence: Int) {
+        webActive = active
+        evaluateBridgeCall("setActive(\(active ? "true" : "false"))", reason: reason, sequence: sequence)
+    }
+
+    private func setWebPreview(_ preview: Bool, reason: String, sequence: Int) {
+        webPreview = preview
+        evaluateBridgeCall("setPreview(\(preview ? "true" : "false"))", reason: reason, sequence: sequence)
+    }
+
+    private func evaluateBridgeCall(_ call: String, reason: String, sequence: Int) {
+        let activeLiteral = webActive ? "true" : "false"
+        let previewLiteral = webPreview ? "true" : "false"
         webView?.evaluateJavaScript(
-            "window.mahjongScreenSaver && window.mahjongScreenSaver.\(call);",
+            """
+            window.__mahjongScreenSaverNativeState = { active: \(activeLiteral), preview: \(previewLiteral) };
+            window.mahjongScreenSaver && window.mahjongScreenSaver.\(call);
+            """,
             completionHandler: { [log] _, error in
                 if let error {
-                    log.write("bridge \(call) failed: \(error.localizedDescription)")
+                    log.write("lifecycle[\(sequence)] bridge \(call) reason=\(reason) failed: \(error.localizedDescription)")
+                } else {
+                    log.write("lifecycle[\(sequence)] bridge \(call) reason=\(reason) active=\(activeLiteral) preview=\(previewLiteral)")
+                }
+            }
+        )
+    }
+
+    private func renderWebFrame() {
+        guard webActive, let webView, !renderFrameInFlight else {
+            return
+        }
+
+        renderFrameInFlight = true
+        renderFrameSequence += 1
+        let frameSequence = renderFrameSequence
+        webView.evaluateJavaScript(
+            """
+            window.__mahjongScreenSaverNativeFrameCount = (window.__mahjongScreenSaverNativeFrameCount || 0) + 1;
+            window.mahjongScreenSaver && window.mahjongScreenSaver.renderFrame && window.mahjongScreenSaver.renderFrame(performance.now());
+            """,
+            completionHandler: { [weak self, log] _, error in
+                self?.renderFrameInFlight = false
+                if let error {
+                    log.write("renderFrame[\(frameSequence)] failed: \(error.localizedDescription)")
+                } else if frameSequence == 1 || frameSequence % 60 == 0 {
+                    log.write("renderFrame[\(frameSequence)] delivered")
                 }
             }
         )
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        log.write("didFinish \(webView.url?.absoluteString ?? "unknown")")
-        setWebPreview(previewMode)
-        setWebActive(true)
+        let sequence = nextLifecycleSequence()
+        log.write("lifecycle[\(sequence)] didFinish \(webView.url?.absoluteString ?? "unknown")")
+        cancelInactiveTransition(reason: "didFinish", sequence: sequence)
+        setWebPreview(previewMode, reason: "didFinish", sequence: sequence)
+        setWebActive(true, reason: "didFinish", sequence: sequence)
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {

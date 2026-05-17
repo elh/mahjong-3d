@@ -5,29 +5,55 @@ This folder contains the native macOS wrapper for the web screen saver build.
 ## Current Status
 
 This is a working checkpoint for the native wrapper and local bundle build, but
-it is not ready for public distribution yet.
+it is not ready for public distribution until fullscreen animation quality is
+fixed and the saver is verified end to end on macOS Sequoia.
 
-On macOS Sequoia, the saver is selectable in System Settings and the small
-System Settings thumbnail preview animates. Fullscreen preview currently reaches
-the bundled web app and renders the dark scene background, but remains on the
-`Loading...` overlay.
+The current implementation keeps the `.saver` architecture: a Swift
+`ScreenSaverView` hosts a local `WKWebView` over the custom
+`mahjong3d-saver://` scheme. Screen saver mode uses the bundled Vite build, no
+network, no module workers, no preloading, and conservative render settings.
 
-The current diagnostics show:
+The initial Sequoia tests showed that the small System Settings thumbnail
+preview animated, while fullscreen preview loaded the bundled web app but either
+stayed on `Loading...` or rendered only the background. Diagnostics showed:
 
 - the fullscreen `WKWebView` loads `mahjong3d-saver://app/index.html?surface=screensaver`;
 - round generation completes without the module worker;
 - tile face textures finish loading;
-- the tiny preview receives `active=true`, enters `preview=true`, and advances
-  events;
-- the fullscreen instances are receiving `stopAnimation()` immediately around
-  load and report `active=false`, so the scene never becomes ready.
+- DOM, CSS, raw 2D canvas, raw WebGL, and imperative Three probes render in
+  fullscreen;
+- R3F can create WebGL2 renderers in fullscreen, but its normal
+  `requestAnimationFrame` loop does not reliably present frames inside the
+  Sequoia legacy screen saver host.
 
-Next investigation should focus on Sequoia's third-party `ScreenSaverView`
-lifecycle and the recommended architecture for web-backed screen savers. The
-most likely areas are `ScreenSaverEngine`/`legacyScreenSaver.appex` lifecycle
-behavior, whether `WKWebView` rendering should be driven from a different native
-entry point, and whether fullscreen screen savers need a different activation
-contract than System Settings thumbnail previews.
+Diagnostic builds using `surface=screensaver-r3f-diagnostic` proved the
+important path forward:
+
+- JS `setInterval` rendering makes R3F visible in fullscreen, but is throttled
+  to roughly 2 FPS by the screen saver host;
+- native `ScreenSaverView.animateOneFrame()` delivering
+  `mahjongScreenSaver.renderFrame(performance.now())` into the web bridge makes
+  the R3F diagnostic animate at native screen saver speed.
+
+The current real saver build loads `surface=screensaver` again. In that path,
+`ThreeGameView` uses `frameloop="never"` and advances R3F from native
+`animateOneFrame()` so the table, tiles, and auto-orbiting camera render in
+fullscreen. Replay advancement also uses the native frame event because both
+`setTimeout` and `requestAnimationFrame` proved unreliable for gameplay
+scheduling inside the Sequoia screen saver host.
+
+The remaining blocker is animation quality. The game now progresses, but tile
+movement is choppy: drawn tiles and discarded tiles appear to jump to their next
+placement instead of showing continuous in-flight motion. The next investigation
+should focus on where tile animation state still depends on browser RAF, React
+commit timing, or event-index transitions that are too coarse for the native
+frame driver. The native lifecycle debounce and
+`window.__mahjongScreenSaverNativeState` bootstrap should stay, because they
+protect startup and teardown when ScreenSaverEngine sends early
+`stopAnimation()` calls.
+
+If fullscreen regresses, test `?surface=screensaver-diagnostic` in the same
+native wrapper to isolate WebKit/ScreenSaver behavior from Three/Rapier.
 
 Diagnostics are written to:
 

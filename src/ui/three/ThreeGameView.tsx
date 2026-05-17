@@ -23,7 +23,11 @@ import type { GameEvent } from "../../sim/events";
 import type { ReplayState } from "../../sim/replay";
 import type { PlayerId } from "../../sim/state";
 import type { TileInstance } from "../../sim/tiles";
-import { postScreenSaverDiagnostic } from "../screenSaverSurface";
+import {
+  postScreenSaverDiagnostic,
+  screenSaverFrameEventName,
+  screenSaverFrameTimestampFromEvent,
+} from "../screenSaverSurface";
 import { allTileImageUrls, tileImage } from "../tileImages";
 import {
   createTableFlipSettings,
@@ -63,6 +67,7 @@ const rapierRigidBodyType = {
   dynamic: 0,
   kinematicPosition: 2,
 } as const;
+let threeGameViewInstanceCounter = 0;
 
 type CameraPreset = {
   position: Vec3;
@@ -230,6 +235,10 @@ type ThreeGameViewProps = {
   renderDpr?: Dpr;
   pointerControlsEnabled?: boolean;
   audioEnabled?: boolean;
+  sceneReadyMode?: "raf" | "timer";
+  screenSaverFrameDriver?: boolean;
+  allowInitialRenderWhilePaused?: boolean;
+  debugProbes?: boolean;
   suppressLoadingOverlay?: boolean;
   preserveSceneOnRoundChange?: boolean;
   tableFlipDebug?: boolean;
@@ -254,6 +263,10 @@ export function ThreeGameView({
   renderDpr = [1, 1.75],
   pointerControlsEnabled = true,
   audioEnabled = true,
+  sceneReadyMode = "raf",
+  screenSaverFrameDriver = false,
+  allowInitialRenderWhilePaused = false,
+  debugProbes = false,
   suppressLoadingOverlay = false,
   preserveSceneOnRoundChange = false,
   tableFlipDebug = false,
@@ -270,6 +283,7 @@ export function ThreeGameView({
     defaultTableFlipDebugSettings,
   );
   const [sceneReady, setSceneReady] = useState(false);
+  const [hasSceneBeenVisible, setHasSceneBeenVisible] = useState(false);
   const [tableFlipRun, setTableFlipRun] = useState(0);
   const [tableFlipPhysicsKey, setTableFlipPhysicsKey] = useState(0);
   const [tableFlipSnapshot, setTableFlipSnapshot] = useState<
@@ -279,6 +293,8 @@ export function ThreeGameView({
   const [isTableFlipResetting, setIsTableFlipResetting] = useState(false);
   const [internalCameraUserControlled, setInternalCameraUserControlled] =
     useState(false);
+  const instanceIdRef = useRef(++threeGameViewInstanceCounter);
+  const instanceId = instanceIdRef.current;
   const cameraPreset = useResponsiveCameraPreset();
   const lastEventIndexRef = useRef(eventIndex);
   const initialEventIndexRef = useRef(eventIndex);
@@ -326,28 +342,10 @@ export function ThreeGameView({
     tileFacesReady &&
     (!roundChanged || preserveSceneOnRoundChange) &&
     !loading;
-  useEffect(() => {
-    postScreenSaverDiagnostic(
-      [
-        "three",
-        `round=${roundKey}`,
-        `visible=${sceneVisible}`,
-        `sceneReady=${sceneReady}`,
-        `tileFacesReady=${tileFacesReady}`,
-        `roundChanged=${roundChanged}`,
-        `preserve=${preserveSceneOnRoundChange}`,
-        `loading=${loading}`,
-      ].join(" "),
-    );
-  }, [
-    loading,
-    preserveSceneOnRoundChange,
-    roundChanged,
-    roundKey,
-    sceneReady,
-    sceneVisible,
-    tileFacesReady,
-  ]);
+  const effectiveRenderPaused =
+    renderPaused && (!allowInitialRenderWhilePaused || hasSceneBeenVisible);
+  const canvasFrameloop =
+    screenSaverFrameDriver || effectiveRenderPaused ? "never" : "always";
   const isTerminalRevealEvent =
     currentEvent?.type === "winDeclared" ||
     currentEvent?.type === "drawDeclared";
@@ -406,6 +404,48 @@ export function ThreeGameView({
     (placement) =>
       placement.physics && !nonPhysicsAnimatedTileIds.has(placement.tile.id),
   );
+  useEffect(() => {
+    postScreenSaverDiagnostic(
+      [
+        "three",
+        `instance=${instanceId}`,
+        `round=${roundKey}`,
+        `visible=${sceneVisible}`,
+        `sceneReady=${sceneReady}`,
+        `tileFacesReady=${tileFacesReady}`,
+        `renderPaused=${renderPaused}`,
+        `effectiveRenderPaused=${effectiveRenderPaused}`,
+        `frameDriver=${screenSaverFrameDriver}`,
+        `hasSceneBeenVisible=${hasSceneBeenVisible}`,
+        `eventIndex=${eventIndex}`,
+        `layoutTiles=${layout.tiles.length}`,
+        `staticTiles=${staticTiles.length}`,
+        `discardTiles=${discardTiles.length}`,
+        `animations=${renderedAnimations.length}`,
+        `roundChanged=${roundChanged}`,
+        `preserve=${preserveSceneOnRoundChange}`,
+        `loading=${loading}`,
+      ].join(" "),
+    );
+  }, [
+    loading,
+    preserveSceneOnRoundChange,
+    roundChanged,
+    roundKey,
+    sceneReady,
+    sceneVisible,
+    renderPaused,
+    effectiveRenderPaused,
+    screenSaverFrameDriver,
+    hasSceneBeenVisible,
+    eventIndex,
+    instanceId,
+    layout.tiles.length,
+    staticTiles.length,
+    discardTiles.length,
+    renderedAnimations.length,
+    tileFacesReady,
+  ]);
   const tableFlipSettings = useMemo(
     () =>
       createTableFlipSettings(roundKey, {
@@ -579,6 +619,7 @@ export function ThreeGameView({
     if (!sceneVisible) {
       return;
     }
+    setHasSceneBeenVisible(true);
     didMountRef.current = true;
     lastEventIndexRef.current = eventIndex;
   });
@@ -589,18 +630,27 @@ export function ThreeGameView({
       return;
     }
     setSceneReady(false);
+    setHasSceneBeenVisible(false);
     setInternalCameraUserControlled(false);
     let timeout: number | undefined;
-    const frame = window.requestAnimationFrame(() => {
+    let frame: number | undefined;
+    const markReady = () => {
       timeout = window.setTimeout(() => setSceneReady(true), 120);
-    });
+    };
+    if (sceneReadyMode === "timer") {
+      markReady();
+    } else {
+      frame = window.requestAnimationFrame(markReady);
+    }
     return () => {
-      window.cancelAnimationFrame(frame);
+      if (frame !== undefined) {
+        window.cancelAnimationFrame(frame);
+      }
       if (timeout !== undefined) {
         window.clearTimeout(timeout);
       }
     };
-  }, [roundKey]);
+  }, [roundKey, sceneReadyMode]);
 
   return (
     <section className="three-viewer" aria-label="3D autonomous game viewer">
@@ -653,15 +703,28 @@ export function ThreeGameView({
           />
         </>
       ) : null}
+      {debugProbes ? <StandaloneThreeDebugProbe /> : null}
       {!sceneVisible && !suppressLoadingOverlay ? (
         <div className="three-loading-overlay" aria-live="polite">
           Loading...
         </div>
       ) : null}
       <Canvas
-        frameloop={renderPaused ? "never" : "always"}
+        className="three-r3f-canvas"
+        frameloop={canvasFrameloop}
         shadows="percentage"
         dpr={renderDpr}
+        gl={{
+          alpha: false,
+          antialias: true,
+          powerPreference: "high-performance",
+          preserveDrawingBuffer: true,
+        }}
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: 2,
+        }}
         camera={{
           position: cameraPreset.position,
           fov: cameraPreset.fov,
@@ -672,6 +735,21 @@ export function ThreeGameView({
           gl.outputColorSpace = THREE.SRGBColorSpace;
           gl.toneMapping = sceneToneMapping;
           gl.toneMappingExposure = sceneToneMappingExposure;
+          const context = gl.getContext();
+          const contextKind =
+            typeof WebGL2RenderingContext !== "undefined" &&
+            context instanceof WebGL2RenderingContext
+              ? "webgl2"
+              : "webgl1";
+          postScreenSaverDiagnostic(
+            [
+              "three renderer",
+              `instance=${instanceId}`,
+              `context=${contextKind}`,
+              `size=${gl.domElement.width}x${gl.domElement.height}`,
+              `client=${gl.domElement.clientWidth}x${gl.domElement.clientHeight}`,
+            ].join(" "),
+          );
         }}
         onPointerDown={() => {
           if (pointerControlsEnabled) {
@@ -680,7 +758,15 @@ export function ThreeGameView({
         }}
       >
         <CameraPresetSync preset={cameraPreset} />
+        {screenSaverFrameDriver ? (
+          <ScreenSaverFrameDriver
+            active={!effectiveRenderPaused}
+            instanceId={instanceId}
+          />
+        ) : null}
+        {debugProbes ? <R3FRendererPixelProbe instanceId={instanceId} /> : null}
         <color attach="background" args={[sceneBackgroundColor]} />
+        {debugProbes ? <ScreenSaverThreeDebugProbes /> : null}
         <ambientLight intensity={lightingDebug.ambientIntensity} />
         <hemisphereLight
           intensity={lightingDebug.fillIntensity}
@@ -714,6 +800,7 @@ export function ThreeGameView({
         />
         <CameraShoulderFill intensity={lightingDebug.cameraFillIntensity} />
         <HandFaceFill intensity={lightingDebug.handFaceFillIntensity} />
+        {debugProbes ? <R3FUnwrappedDebugProbe /> : null}
         {!tableFlipEnabled || !isTableFlipMotionActive ? (
           <TableSurface />
         ) : null}
@@ -895,6 +982,268 @@ function CameraPresetSync({ preset }: { preset: CameraPreset }) {
   }, [camera, preset]);
 
   return null;
+}
+
+function ScreenSaverFrameDriver({
+  active,
+  instanceId,
+}: {
+  active: boolean;
+  instanceId: number;
+}) {
+  const advance = useThree((state) => state.advance);
+  const frameRef = useRef(0);
+
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+
+    const renderFrame = (timestampMs: number, source: "initial" | "native") => {
+      frameRef.current += 1;
+      advance(timestampMs, true);
+      if (frameRef.current === 1 || frameRef.current % 60 === 0) {
+        postScreenSaverDiagnostic(
+          [
+            "three nativeFrame",
+            `instance=${instanceId}`,
+            `frame=${frameRef.current}`,
+            `source=${source}`,
+          ].join(" "),
+        );
+      }
+    };
+
+    const handleNativeFrame = (event: Event) => {
+      renderFrame(
+        screenSaverFrameTimestampFromEvent(event, performance.now()),
+        "native",
+      );
+    };
+
+    renderFrame(performance.now(), "initial");
+    window.addEventListener(screenSaverFrameEventName, handleNativeFrame);
+    return () => {
+      window.removeEventListener(screenSaverFrameEventName, handleNativeFrame);
+    };
+  }, [active, advance, instanceId]);
+
+  return null;
+}
+
+function R3FRendererPixelProbe({ instanceId }: { instanceId: number }) {
+  const { camera, gl, scene, size } = useThree();
+  const frameRef = useRef(0);
+
+  useFrame(() => {
+    frameRef.current += 1;
+    if (frameRef.current !== 1 && frameRef.current % 60 !== 0) {
+      return;
+    }
+
+    gl.render(scene, camera);
+    const context = gl.getContext();
+    const pixels = new Uint8Array(4);
+    context.readPixels(
+      Math.floor(gl.domElement.width / 2),
+      Math.floor(gl.domElement.height / 2),
+      1,
+      1,
+      context.RGBA,
+      context.UNSIGNED_BYTE,
+      pixels,
+    );
+    postScreenSaverDiagnostic(
+      [
+        "r3fPixel",
+        `instance=${instanceId}`,
+        `frame=${frameRef.current}`,
+        `size=${Math.round(size.width)}x${Math.round(size.height)}`,
+        `canvas=${gl.domElement.width}x${gl.domElement.height}`,
+        `pixel=${Array.from(pixels).join(",")}`,
+      ].join(" "),
+    );
+  }, 1000);
+
+  return null;
+}
+
+function R3FUnwrappedDebugProbe() {
+  const { camera } = useThree();
+  const groupRef = useRef<THREE.Group | null>(null);
+  const directionRef = useRef(new THREE.Vector3());
+
+  useFrame((state) => {
+    const group = groupRef.current;
+    if (!group) {
+      return;
+    }
+
+    camera.getWorldDirection(directionRef.current);
+    group.position
+      .copy(camera.position)
+      .addScaledVector(directionRef.current, 3);
+    group.quaternion.copy(camera.quaternion);
+    group.rotation.z = Math.sin(state.clock.elapsedTime * 1.7) * 0.12;
+  });
+
+  return (
+    <group ref={groupRef} renderOrder={1000}>
+      <mesh position={[0, 0, 0]}>
+        <planeGeometry args={[0.9, 0.5]} />
+        <meshBasicMaterial
+          color="#55f0ff"
+          depthTest={false}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+          toneMapped={false}
+        />
+      </mesh>
+      <mesh position={[0.48, 0.18, 0.02]} rotation={[0, 0, Math.PI / 4]}>
+        <planeGeometry args={[0.42, 0.42]} />
+        <meshBasicMaterial
+          color="#fff06a"
+          depthTest={false}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+          toneMapped={false}
+          wireframe
+        />
+      </mesh>
+      <mesh position={[-0.42, -0.12, 0.03]}>
+        <circleGeometry args={[0.18, 3]} />
+        <meshBasicMaterial
+          color="#ff2bd6"
+          depthTest={false}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+          toneMapped={false}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+function ScreenSaverThreeDebugProbes() {
+  return (
+    <group position={[0, 0.95, 0]}>
+      <mesh position={[0, 0, 0]}>
+        <boxGeometry args={[0.72, 0.72, 0.72]} />
+        <meshBasicMaterial color="#ff2bd6" toneMapped={false} />
+      </mesh>
+      <mesh position={[1.15, 0, 0]} rotation={[0, 0, Math.PI / 4]}>
+        <boxGeometry args={[0.58, 0.58, 0.58]} />
+        <meshBasicMaterial color="#fff06a" toneMapped={false} wireframe />
+      </mesh>
+      <mesh position={[-1.15, 0, 0]}>
+        <sphereGeometry args={[0.38, 24, 16]} />
+        <meshBasicMaterial color="#55f0ff" toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
+function StandaloneThreeDebugProbe() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      postScreenSaverDiagnostic("standaloneThree missing canvas");
+      return;
+    }
+
+    let renderer: THREE.WebGLRenderer | undefined;
+    let animationFrame: number | undefined;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        canvas,
+        alpha: false,
+        antialias: true,
+        powerPreference: "high-performance",
+      });
+    } catch (error) {
+      postScreenSaverDiagnostic(
+        `standaloneThree renderer failed ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return;
+    }
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color("#101014");
+    const camera = new THREE.PerspectiveCamera(45, 220 / 130, 0.1, 100);
+    camera.position.set(0, 0, 4);
+    const cube = new THREE.Mesh(
+      new THREE.BoxGeometry(1.35, 1.35, 1.35),
+      new THREE.MeshBasicMaterial({ color: "#55f0ff", toneMapped: false }),
+    );
+    const cubeMaterial = cube.material;
+    scene.add(cube);
+    const triangleMaterial = new THREE.MeshBasicMaterial({
+      color: "#ff2bd6",
+      toneMapped: false,
+      wireframe: true,
+    });
+    const triangle = new THREE.Mesh(
+      new THREE.CircleGeometry(0.72, 3),
+      triangleMaterial,
+    );
+    triangle.position.set(1.12, 0, 0.15);
+    scene.add(triangle);
+
+    const context = renderer.getContext();
+    const contextKind =
+      typeof WebGL2RenderingContext !== "undefined" &&
+      context instanceof WebGL2RenderingContext
+        ? "webgl2"
+        : "webgl1";
+    postScreenSaverDiagnostic(`standaloneThree context=${contextKind}`);
+
+    let frame = 0;
+    const render = () => {
+      frame += 1;
+      cube.rotation.x += 0.012;
+      cube.rotation.y += 0.018;
+      const scale = window.devicePixelRatio || 1;
+      renderer.setPixelRatio(scale);
+      renderer.setSize(220, 130, false);
+      renderer.render(scene, camera);
+      if (frame === 1 || frame % 60 === 0) {
+        const pixels = new Uint8Array(4);
+        context.readPixels(
+          Math.floor(renderer.domElement.width / 2),
+          Math.floor(renderer.domElement.height / 2),
+          1,
+          1,
+          context.RGBA,
+          context.UNSIGNED_BYTE,
+          pixels,
+        );
+        postScreenSaverDiagnostic(
+          `standaloneThree frame=${frame} pixel=${Array.from(pixels).join(",")}`,
+        );
+      }
+      animationFrame = window.requestAnimationFrame(render);
+    };
+    render();
+
+    return () => {
+      if (animationFrame !== undefined) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      cube.geometry.dispose();
+      triangle.geometry.dispose();
+      cubeMaterial.dispose();
+      triangleMaterial.dispose();
+      renderer.dispose();
+    };
+  }, []);
+
+  return (
+    <canvas ref={canvasRef} className="screensaver-standalone-three-probe" />
+  );
 }
 
 function TableSurface() {

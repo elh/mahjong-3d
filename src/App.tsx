@@ -6,6 +6,7 @@ import {
   RefreshCw,
   SkipBack,
 } from "lucide-react";
+import { Canvas, useThree } from "@react-three/fiber";
 import {
   lazy,
   Suspense,
@@ -15,6 +16,8 @@ import {
   useRef,
   useState,
 } from "react";
+import * as THREE from "three";
+import type { GameEvent } from "./sim/events";
 import { replayEvents } from "./sim/replay";
 import { EventLog } from "./ui/EventLog";
 import { eventDetail, eventTitle } from "./ui/eventText";
@@ -31,8 +34,11 @@ import { playerNames } from "./ui/playerNames";
 import {
   initialScreenSaverLifecycle,
   postScreenSaverDiagnostic,
+  screenSaverFrameEventName,
+  screenSaverFrameTimestampFromEvent,
   screenSaverRuntimeOptions,
   screenSaverSurfaceFromSearch,
+  type ScreenSaverFrameEventDetail,
   type ScreenSaverBridge,
   type ScreenSaverLifecycle,
   type ScreenSaverSurfaceConfig,
@@ -45,6 +51,8 @@ declare const __DEBUG_MODE_ENABLED__: boolean;
 declare global {
   interface Window {
     mahjongScreenSaver?: ScreenSaverBridge;
+    __mahjongScreenSaverNativeState?: Partial<ScreenSaverLifecycle>;
+    __mahjongScreenSaverNativeFrameCount?: number;
   }
 }
 
@@ -60,6 +68,20 @@ const ThreeGameView = lazy(() =>
     default: module.ThreeGameView,
   })),
 );
+
+function eventAutoAdvanceDelay(
+  currentEvent: GameEvent | undefined,
+  nextEvent: GameEvent,
+): number {
+  const isTurnBoundary =
+    currentEvent?.groupId !== nextEvent.groupId && nextEvent.phase === "turn";
+  const isSetupDrawPhase =
+    currentEvent?.phase === "setup" || nextEvent.phase === "setup";
+  const baseDelay = isSetupDrawPhase
+    ? setupEventAdvanceDelayMs
+    : eventAdvanceDelayMs;
+  return baseDelay + (isTurnBoundary ? turnBoundaryPauseMs : 0);
+}
 
 function perfPanelEnabled(): boolean {
   return new URLSearchParams(window.location.search).get("perf") === "1";
@@ -115,6 +137,7 @@ function scrollActiveEventIntoView(
  * - seed: initial round seed.
  * - perf=1: show the performance panel.
  * - surface=screensaver: native macOS screen saver surface.
+ * - surface=screensaver-r3f-diagnostic: minimal R3F screen saver probe.
  * - preview=1: lower-cost System Settings screen saver preview.
  * - view=debug | debug-table-flip: debug-only routes, enabled by passing DEBUG.
  */
@@ -124,6 +147,12 @@ export default function App() {
   const screenSaverSurface = screenSaverSurfaceFromSearch(
     window.location.search,
   );
+  if (screenSaverSurface?.surface === "screensaver-diagnostic") {
+    return <ScreenSaverDiagnosticApp screenSaver={screenSaverSurface} />;
+  }
+  if (screenSaverSurface?.surface === "screensaver-r3f-diagnostic") {
+    return <ScreenSaverR3FDiagnosticApp screenSaver={screenSaverSurface} />;
+  }
   if (screenSaverSurface) {
     return <SimApp screenSaver={screenSaverSurface} />;
   }
@@ -608,7 +637,7 @@ function SimApp({
   });
   const simulation = useSimulationController({
     syncSeedToUrl: false,
-    active: !runtimeOptions.isScreenSaver || screenSaverLifecycle.active,
+    active: runtimeOptions.isPlaybackActive,
     preloadEnabled: runtimeOptions.preloadEnabled,
     workerEnabled: runtimeOptions.workerEnabled,
     workerFallbackEnabled: runtimeOptions.isScreenSaver,
@@ -637,6 +666,7 @@ function SimApp({
     stepEvent,
     preloadNextRound,
     promoteQueuedRound,
+    stepEventImmediate,
   } = simulation;
   const previousReplay = useMemo(
     () => (eventIndex > 0 ? replayEvents(events, eventIndex - 1) : undefined),
@@ -647,6 +677,8 @@ function SimApp({
     events[0]?.type === "roundStarted" ? events[0].seed : pendingSeed;
   const isLoadingRound = isGenerating && !generationError;
   const isAtRoundEnd = events.length > 0 && eventIndex >= events.length - 1;
+  const renderPaused = !runtimeOptions.isPlaybackActive;
+  const showScreenSaverDebugProbes = false;
   const showPerfPanel = !runtimeOptions.isScreenSaver && perfPanelEnabled();
   const showGenerationPill =
     !runtimeOptions.isScreenSaver && (isGenerating || generationError);
@@ -658,12 +690,14 @@ function SimApp({
     postScreenSaverDiagnostic(
       [
         "app",
-        `active=${runtimeOptions.isSurfaceActive}`,
+        `active=${runtimeOptions.isPlaybackActive}`,
+        `lifecycleActive=${runtimeOptions.isSurfaceActive}`,
         `preview=${runtimeOptions.isPreview}`,
         `generating=${isGenerating}`,
         `error=${generationError ?? "none"}`,
         `events=${events.length}`,
         `eventIndex=${eventIndex}`,
+        `renderPaused=${renderPaused}`,
       ].join(" "),
     );
   }, [
@@ -672,13 +706,15 @@ function SimApp({
     generationError,
     isGenerating,
     runtimeOptions.isPreview,
+    runtimeOptions.isPlaybackActive,
     runtimeOptions.isScreenSaver,
     runtimeOptions.isSurfaceActive,
+    renderPaused,
   ]);
 
   useEffect(() => {
     if (
-      !runtimeOptions.isSurfaceActive ||
+      !runtimeOptions.isPlaybackActive ||
       !runtimeOptions.preloadEnabled ||
       isLoadingRound ||
       generationError ||
@@ -696,14 +732,14 @@ function SimApp({
     generationError,
     isAtRoundEnd,
     isLoadingRound,
-    runtimeOptions.isSurfaceActive,
+    runtimeOptions.isPlaybackActive,
     runtimeOptions.preloadEnabled,
     preloadNextRound,
   ]);
 
   useEffect(() => {
     if (
-      !runtimeOptions.isSurfaceActive ||
+      !runtimeOptions.isPlaybackActive ||
       !runtimeOptions.preloadEnabled ||
       !isAtRoundEnd ||
       !hasQueuedNextRound ||
@@ -715,7 +751,7 @@ function SimApp({
     const remainingHoldMs = nextRoundPromotionDelayMs({
       isAtRoundEnd,
       hasQueuedNextRound,
-      isDocumentHidden: !runtimeOptions.isSurfaceActive,
+      isDocumentHidden: !runtimeOptions.isPlaybackActive,
       terminalReachedAt: terminalReachedAtRef.current,
       now: Date.now(),
     });
@@ -762,7 +798,7 @@ function SimApp({
     eventIndex,
     hasQueuedNextRound,
     isAtRoundEnd,
-    runtimeOptions.isSurfaceActive,
+    runtimeOptions.isPlaybackActive,
     runtimeOptions.preloadEnabled,
     prefersReducedMotion,
     promoteQueuedRound,
@@ -771,7 +807,8 @@ function SimApp({
 
   useEffect(() => {
     if (
-      !runtimeOptions.isSurfaceActive ||
+      runtimeOptions.isScreenSaver ||
+      !runtimeOptions.isPlaybackActive ||
       prefersReducedMotion ||
       isLoadingRound ||
       generationError ||
@@ -786,14 +823,7 @@ function SimApp({
     }
 
     const currentEvent = events[eventIndex];
-    const isTurnBoundary =
-      currentEvent?.groupId !== nextEvent.groupId && nextEvent.phase === "turn";
-    const isSetupDrawPhase =
-      currentEvent?.phase === "setup" || nextEvent.phase === "setup";
-    const baseDelay = isSetupDrawPhase
-      ? setupEventAdvanceDelayMs
-      : eventAdvanceDelayMs;
-    const delay = baseDelay + (isTurnBoundary ? turnBoundaryPauseMs : 0);
+    const delay = eventAutoAdvanceDelay(currentEvent, nextEvent);
     const timeout = window.setTimeout(() => stepEvent(1), delay);
 
     return () => {
@@ -803,10 +833,73 @@ function SimApp({
     eventIndex,
     events,
     generationError,
-    runtimeOptions.isSurfaceActive,
+    runtimeOptions.isScreenSaver,
+    runtimeOptions.isPlaybackActive,
     isLoadingRound,
     prefersReducedMotion,
     stepEvent,
+  ]);
+
+  useEffect(() => {
+    if (
+      !runtimeOptions.isScreenSaver ||
+      !runtimeOptions.isPlaybackActive ||
+      prefersReducedMotion ||
+      isLoadingRound ||
+      generationError ||
+      events.length === 0
+    ) {
+      return;
+    }
+
+    const nextEvent = events[eventIndex + 1];
+    if (!nextEvent) {
+      return;
+    }
+
+    const currentEvent = events[eventIndex];
+    const delay = eventAutoAdvanceDelay(currentEvent, nextEvent);
+    let deadlineMs: number | undefined;
+    let didAdvance = false;
+
+    const handleNativeFrame = (event: Event) => {
+      if (didAdvance) {
+        return;
+      }
+      const timestampMs = screenSaverFrameTimestampFromEvent(
+        event,
+        performance.now(),
+      );
+      deadlineMs ??= timestampMs + delay;
+      if (timestampMs < deadlineMs) {
+        return;
+      }
+
+      postScreenSaverDiagnostic(
+        [
+          "app nativeAdvance",
+          `eventIndex=${eventIndex}`,
+          `next=${eventIndex + 1}`,
+          `delay=${delay}`,
+        ].join(" "),
+      );
+      didAdvance = true;
+      stepEventImmediate(1);
+    };
+
+    window.addEventListener(screenSaverFrameEventName, handleNativeFrame);
+    return () => {
+      window.removeEventListener(screenSaverFrameEventName, handleNativeFrame);
+    };
+  }, [
+    eventIndex,
+    events,
+    generationError,
+    runtimeOptions.isScreenSaver,
+    runtimeOptions.isPlaybackActive,
+    isLoadingRound,
+    prefersReducedMotion,
+    stepEventImmediate,
   ]);
 
   return (
@@ -857,10 +950,16 @@ function SimApp({
           onCameraUserControlChange={
             runtimeOptions.isScreenSaver ? undefined : setIsCameraUserControlled
           }
-          renderPaused={!runtimeOptions.isSurfaceActive}
+          renderPaused={renderPaused}
           renderDpr={runtimeOptions.renderDpr}
           pointerControlsEnabled={!runtimeOptions.isScreenSaver}
           audioEnabled={!runtimeOptions.isScreenSaver}
+          sceneReadyMode={runtimeOptions.isScreenSaver ? "timer" : "raf"}
+          screenSaverFrameDriver={runtimeOptions.isScreenSaver}
+          allowInitialRenderWhilePaused={
+            runtimeOptions.allowInitialRenderWhilePaused
+          }
+          debugProbes={showScreenSaverDebugProbes}
           suppressLoadingOverlay={isRoundTransitioning}
           preserveSceneOnRoundChange={isRoundTransitioning}
           tableFlipTransitionKey={
@@ -871,6 +970,25 @@ function SimApp({
           sceneTransitionOverlayActive={isRoundTransitioning}
         />
       </Suspense>
+      {showScreenSaverDebugProbes ? (
+        <>
+          <ScreenSaverCanvas2DProbe />
+          <ScreenSaverRawWebGlProbe />
+          <section className="screensaver-debug-overlay" aria-live="polite">
+            <strong>Mahjong 3D probe</strong>
+            <span>
+              active={String(runtimeOptions.isPlaybackActive)} lifecycle=
+              {String(runtimeOptions.isSurfaceActive)} preview=
+              {String(runtimeOptions.isPreview)}
+            </span>
+            <span>
+              events={events.length} event={eventIndex} renderPaused=
+              {String(renderPaused)}
+            </span>
+            <span>round={roundKey}</span>
+          </section>
+        </>
+      ) : null}
       {!runtimeOptions.isScreenSaver ? (
         <InfoPopover
           seed={roundKey}
@@ -888,6 +1006,427 @@ function SimApp({
           viewMode="sim"
         />
       ) : null}
+    </main>
+  );
+}
+
+function ScreenSaverCanvas2DProbe() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext("2d");
+    if (!canvas || !context) {
+      postScreenSaverDiagnostic("probe2d unavailable");
+      return;
+    }
+
+    let frame = 0;
+    let animationFrame: number | undefined;
+    const draw = () => {
+      frame += 1;
+      const scale = window.devicePixelRatio || 1;
+      const width = 220;
+      const height = 130;
+      canvas.width = Math.round(width * scale);
+      canvas.height = Math.round(height * scale);
+      context.setTransform(scale, 0, 0, scale, 0, 0);
+      context.fillStyle = "#101014";
+      context.fillRect(0, 0, width, height);
+      context.fillStyle = "#ff2bd6";
+      context.fillRect(12, 12, 64, 64);
+      context.fillStyle = "#55f0ff";
+      context.fillRect(84, 12, 64, 64);
+      context.fillStyle = "#fff06a";
+      context.fillRect(156, 12, 52, 64);
+      context.fillStyle = "#ffffff";
+      context.font = "14px ui-monospace, Menlo, monospace";
+      context.fillText(`2d canvas ${frame}`, 12, 104);
+      if (frame === 1 || frame % 60 === 0) {
+        postScreenSaverDiagnostic(`probe2d frame=${frame}`);
+      }
+      animationFrame = window.requestAnimationFrame(draw);
+    };
+
+    draw();
+    return () => {
+      if (animationFrame !== undefined) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} className="screensaver-canvas2d-probe" />;
+}
+
+function ScreenSaverRawWebGlProbe() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext("webgl", {
+      alpha: false,
+      antialias: false,
+      preserveDrawingBuffer: true,
+    });
+    if (!canvas || !context) {
+      postScreenSaverDiagnostic("probeWebGl unavailable");
+      return;
+    }
+
+    const vertexShader = compileProbeShader(
+      context,
+      context.VERTEX_SHADER,
+      "attribute vec2 position; void main() { gl_Position = vec4(position, 0.0, 1.0); }",
+    );
+    const fragmentShader = compileProbeShader(
+      context,
+      context.FRAGMENT_SHADER,
+      "precision mediump float; void main() { gl_FragColor = vec4(1.0, 0.15, 0.84, 1.0); }",
+    );
+    if (!vertexShader || !fragmentShader) {
+      postScreenSaverDiagnostic("probeWebGl shader failed");
+      return;
+    }
+
+    const program = context.createProgram();
+    if (!program) {
+      postScreenSaverDiagnostic("probeWebGl program failed");
+      return;
+    }
+    context.attachShader(program, vertexShader);
+    context.attachShader(program, fragmentShader);
+    context.linkProgram(program);
+    if (!context.getProgramParameter(program, context.LINK_STATUS)) {
+      postScreenSaverDiagnostic(
+        `probeWebGl link failed ${context.getProgramInfoLog(program) ?? ""}`,
+      );
+      return;
+    }
+
+    const buffer = context.createBuffer();
+    context.bindBuffer(context.ARRAY_BUFFER, buffer);
+    context.bufferData(
+      context.ARRAY_BUFFER,
+      new Float32Array([-0.86, -0.72, 0.86, -0.72, 0, 0.78]),
+      context.STATIC_DRAW,
+    );
+    const position = context.getAttribLocation(program, "position");
+    let frame = 0;
+    let animationFrame: number | undefined;
+    const draw = () => {
+      frame += 1;
+      const scale = window.devicePixelRatio || 1;
+      const width = 220;
+      const height = 130;
+      canvas.width = Math.round(width * scale);
+      canvas.height = Math.round(height * scale);
+      context.viewport(0, 0, canvas.width, canvas.height);
+      context.clearColor(0.05, 0.05, 0.08, 1);
+      context.clear(context.COLOR_BUFFER_BIT);
+      context["useProgram"](program);
+      context.enableVertexAttribArray(position);
+      context.vertexAttribPointer(position, 2, context.FLOAT, false, 0, 0);
+      context.drawArrays(context.TRIANGLES, 0, 3);
+      if (frame === 1 || frame % 60 === 0) {
+        const pixels = new Uint8Array(4);
+        context.readPixels(
+          Math.floor(canvas.width / 2),
+          Math.floor(canvas.height / 2),
+          1,
+          1,
+          context.RGBA,
+          context.UNSIGNED_BYTE,
+          pixels,
+        );
+        postScreenSaverDiagnostic(
+          `probeWebGl frame=${frame} pixel=${Array.from(pixels).join(",")}`,
+        );
+      }
+      animationFrame = window.requestAnimationFrame(draw);
+    };
+
+    draw();
+    return () => {
+      if (animationFrame !== undefined) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      context.deleteBuffer(buffer);
+      context.deleteProgram(program);
+      context.deleteShader(vertexShader);
+      context.deleteShader(fragmentShader);
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} className="screensaver-webgl-probe" />;
+}
+
+function compileProbeShader(
+  gl: WebGLRenderingContext,
+  type: number,
+  source: string,
+): WebGLShader | undefined {
+  const shader = gl.createShader(type);
+  if (!shader) {
+    return undefined;
+  }
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    postScreenSaverDiagnostic(
+      `probeWebGl compile failed ${gl.getShaderInfoLog(shader) ?? ""}`,
+    );
+    gl.deleteShader(shader);
+    return undefined;
+  }
+  return shader;
+}
+
+function ScreenSaverR3FDiagnosticApp({
+  screenSaver,
+}: {
+  screenSaver: ScreenSaverSurfaceConfig;
+}) {
+  const screenSaverLifecycle = useScreenSaverLifecycle(screenSaver);
+  const startedAt = useRef(Date.now());
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    postScreenSaverDiagnostic(
+      [
+        "r3fDiagnostic app",
+        `active=${screenSaverLifecycle.active}`,
+        `preview=${screenSaverLifecycle.preview}`,
+        `tick=${tick}`,
+      ].join(" "),
+    );
+  }, [screenSaverLifecycle.active, screenSaverLifecycle.preview, tick]);
+
+  useEffect(() => {
+    if (!screenSaverLifecycle.active && screenSaverLifecycle.preview) {
+      return;
+    }
+    const interval = window.setInterval(
+      () => setTick((value) => value + 1),
+      500,
+    );
+    return () => window.clearInterval(interval);
+  }, [screenSaverLifecycle.active, screenSaverLifecycle.preview]);
+
+  const seconds = Math.floor((Date.now() - startedAt.current) / 1000);
+
+  return (
+    <main className="sim-shell screensaver-r3f-diagnostic-shell">
+      <R3FDiagnosticCanvas
+        className="screensaver-r3f-diagnostic-canvas"
+        label="fullscreen"
+      />
+      <R3FDiagnosticCanvas
+        className="screensaver-r3f-diagnostic-mini-canvas"
+        label="mini"
+      />
+      <section className="screensaver-debug-overlay" aria-live="polite">
+        <strong>R3F diagnostic</strong>
+        <span>
+          active={String(screenSaverLifecycle.active)} preview=
+          {String(screenSaverLifecycle.preview)} tick={tick} t={seconds}s
+        </span>
+      </section>
+    </main>
+  );
+}
+
+function R3FDiagnosticCanvas({
+  className,
+  label,
+}: {
+  className: string;
+  label: string;
+}) {
+  return (
+    <Canvas
+      className={className}
+      dpr={[1, 1]}
+      frameloop="never"
+      gl={{
+        alpha: false,
+        antialias: true,
+        powerPreference: "high-performance",
+        preserveDrawingBuffer: true,
+      }}
+      camera={{
+        position: [0, 0, 4],
+        fov: 42,
+        near: 0.1,
+        far: 100,
+      }}
+      onCreated={({ gl }) => {
+        gl.setClearColor("#101514", 1);
+        const context = gl.getContext();
+        const contextKind =
+          typeof WebGL2RenderingContext !== "undefined" &&
+          context instanceof WebGL2RenderingContext
+            ? "webgl2"
+            : "webgl1";
+        postScreenSaverDiagnostic(
+          [
+            "r3fDiagnostic renderer",
+            `label=${label}`,
+            `context=${contextKind}`,
+            `size=${gl.domElement.width}x${gl.domElement.height}`,
+            `client=${gl.domElement.clientWidth}x${gl.domElement.clientHeight}`,
+          ].join(" "),
+        );
+      }}
+    >
+      <color attach="background" args={["#101514"]} />
+      <R3FDiagnosticCube />
+      <R3FDiagnosticForcedRenderLoop label={label} />
+    </Canvas>
+  );
+}
+
+function R3FDiagnosticCube() {
+  const meshRef = useRef<THREE.Mesh | null>(null);
+
+  return (
+    <group>
+      <mesh ref={meshRef} position={[0, 0, 0]}>
+        <boxGeometry args={[1.5, 1.5, 1.5]} />
+        <meshBasicMaterial color="#ff2bd6" toneMapped={false} />
+      </mesh>
+      <mesh position={[1.25, 0.8, -0.2]} rotation={[0, 0, Math.PI / 4]}>
+        <planeGeometry args={[0.9, 0.9]} />
+        <meshBasicMaterial
+          color="#fff06a"
+          side={THREE.DoubleSide}
+          toneMapped={false}
+          wireframe
+        />
+      </mesh>
+      <mesh position={[-1.25, -0.85, 0.1]}>
+        <sphereGeometry args={[0.42, 24, 16]} />
+        <meshBasicMaterial color="#55f0ff" toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
+function R3FDiagnosticForcedRenderLoop({ label }: { label: string }) {
+  const { camera, gl, scene, size } = useThree();
+  const frameRef = useRef(0);
+  const lastNativeFrameAtRef = useRef(0);
+
+  useEffect(() => {
+    const cube = scene.children
+      .flatMap((child) => ("children" in child ? child.children : []))
+      .find((child) => child instanceof THREE.Mesh) as THREE.Mesh | undefined;
+    const startedAt = performance.now();
+
+    const render = (timestampMs: number, source: "native" | "fallback") => {
+      frameRef.current += 1;
+      const elapsedSeconds = (timestampMs - startedAt) / 1000;
+      if (cube) {
+        cube.rotation.x = elapsedSeconds * 0.8;
+        cube.rotation.y = elapsedSeconds * 1.1;
+      }
+
+      gl.render(scene, camera);
+      if (frameRef.current === 1 || frameRef.current % 30 === 0) {
+        const context = gl.getContext();
+        const pixels = new Uint8Array(4);
+        context.readPixels(
+          Math.floor(gl.domElement.width / 2),
+          Math.floor(gl.domElement.height / 2),
+          1,
+          1,
+          context.RGBA,
+          context.UNSIGNED_BYTE,
+          pixels,
+        );
+        postScreenSaverDiagnostic(
+          [
+            "r3fDiagnostic forcedPixel",
+            `label=${label}`,
+            `frame=${frameRef.current}`,
+            `source=${source}`,
+            `size=${Math.round(size.width)}x${Math.round(size.height)}`,
+            `canvas=${gl.domElement.width}x${gl.domElement.height}`,
+            `pixel=${Array.from(pixels).join(",")}`,
+          ].join(" "),
+        );
+      }
+    };
+
+    const handleNativeFrame = (event: Event) => {
+      const timestampMs = screenSaverFrameTimestampFromEvent(
+        event,
+        performance.now(),
+      );
+      lastNativeFrameAtRef.current = performance.now();
+      render(timestampMs, "native");
+    };
+    const renderFallback = () => {
+      if (performance.now() - lastNativeFrameAtRef.current > 500) {
+        render(performance.now(), "fallback");
+      }
+    };
+
+    render(performance.now(), "fallback");
+    window.addEventListener(screenSaverFrameEventName, handleNativeFrame);
+    const interval = window.setInterval(renderFallback, 1000 / 30);
+    return () => {
+      window.removeEventListener(screenSaverFrameEventName, handleNativeFrame);
+      window.clearInterval(interval);
+    };
+  }, [camera, gl, label, scene, size.height, size.width]);
+
+  return null;
+}
+
+function ScreenSaverDiagnosticApp({
+  screenSaver,
+}: {
+  screenSaver: ScreenSaverSurfaceConfig;
+}) {
+  const screenSaverLifecycle = useScreenSaverLifecycle(screenSaver);
+  const startedAt = useRef(Date.now());
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    postScreenSaverDiagnostic(
+      [
+        "diagnostic",
+        `active=${screenSaverLifecycle.active}`,
+        `preview=${screenSaverLifecycle.preview}`,
+        `tick=${tick}`,
+      ].join(" "),
+    );
+  }, [screenSaverLifecycle.active, screenSaverLifecycle.preview, tick]);
+
+  useEffect(() => {
+    if (!screenSaverLifecycle.active) {
+      return;
+    }
+    const interval = window.setInterval(
+      () => setTick((value) => value + 1),
+      500,
+    );
+    return () => window.clearInterval(interval);
+  }, [screenSaverLifecycle.active]);
+
+  const seconds = Math.floor((Date.now() - startedAt.current) / 1000);
+
+  return (
+    <main className="sim-shell screensaver-diagnostic-shell">
+      <div className="screensaver-diagnostic-orbit" />
+      <div className="screensaver-diagnostic-panel">
+        <strong>Mahjong 3D</strong>
+        <span>
+          active={String(screenSaverLifecycle.active)} preview=
+          {String(screenSaverLifecycle.preview)} tick={tick} t={seconds}s
+        </span>
+      </div>
     </main>
   );
 }
@@ -1000,10 +1539,28 @@ function useScreenSaverLifecycle(
 
     const bridge: ScreenSaverBridge = {
       setActive(active) {
+        window.__mahjongScreenSaverNativeState = {
+          ...window.__mahjongScreenSaverNativeState,
+          active,
+        };
         setLifecycle((current) => ({ ...current, active }));
       },
       setPreview(preview) {
+        window.__mahjongScreenSaverNativeState = {
+          ...window.__mahjongScreenSaverNativeState,
+          preview,
+        };
         setLifecycle((current) => ({ ...current, preview }));
+      },
+      renderFrame(timestampMs) {
+        window.dispatchEvent(
+          new CustomEvent<ScreenSaverFrameEventDetail>(
+            screenSaverFrameEventName,
+            {
+              detail: { timestampMs },
+            },
+          ),
+        );
       },
     };
     window.mahjongScreenSaver = bridge;

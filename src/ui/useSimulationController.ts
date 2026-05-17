@@ -471,6 +471,20 @@ export function useSimulationController({
     [events.length, clearEventScrub],
   );
 
+  const stepEventImmediate = useCallback(
+    (direction: -1 | 1) => {
+      clearPendingStep();
+      clearEventScrub();
+      setEventIndex((index) =>
+        Math.min(
+          Math.max(0, index + direction),
+          Math.max(events.length - 1, 0),
+        ),
+      );
+    },
+    [events.length, clearEventScrub, clearPendingStep],
+  );
+
   const jumpToEventIndex = useCallback(
     (index: number) => {
       clearPendingStep();
@@ -637,6 +651,7 @@ export function useSimulationController({
     preloadNextRound,
     promoteQueuedRound,
     stepEvent,
+    stepEventImmediate,
     jumpToEventIndex,
     scrubToEventIndex,
     clearEventHold,
