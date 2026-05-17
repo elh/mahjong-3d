@@ -31,7 +31,8 @@ entirely from local files.
 
 ## Implementation Notes
 
-Several pieces of this setup are intentional and should not be treated as
+Several pieces of this setup are intentional because the macOS screen saver
+hosts a React Three Fiber scene inside `WKWebView`, and should not be treated as
 incidental cleanup:
 
 - `WKWebView` loads the app through `WKURLSchemeHandler`, not a `file://` URL.
@@ -46,6 +47,10 @@ incidental cleanup:
 - `startAnimation()`/`stopAnimation()` are noisy. `stopAnimation()` schedules a
   debounced inactive state instead of immediately pausing the web app; teardown
   paths still force an immediate inactive update.
+- Fullscreen launches are isolated on purpose. Each new fullscreen run creates a
+  fresh `WKWebView` with a non-persistent data store and a cache-busted app URL;
+  after a sustained stop, the web view is torn down. This avoids stale WebKit or
+  WebGL state leaking across repeated manual previews in System Settings.
 - Every native lifecycle update first writes
   `window.__mahjongScreenSaverNativeState`, then calls the React bridge if it is
   registered. React bootstraps from that global so early native calls are not
@@ -76,6 +81,16 @@ macos/build/Mahjong3D.saver
 
 Set `SIGN_IDENTITY="Developer ID Application: ..."` to sign the `.saver` with a
 Developer ID identity.
+
+## Install Locally
+
+```sh
+make install-screensaver
+```
+
+The install target rebuilds the current checkout, removes stale user-level and
+system-level copies, installs to `/Library/Screen Savers/Mahjong3D.saver`,
+verifies codesigning, and restarts the relevant screen saver agents.
 
 ## Package
 

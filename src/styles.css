@@ -373,6 +373,10 @@ h3 {
   text-transform: uppercase;
 }
 
+.screensaver-shell .three-loading-overlay {
+  color: #131614;
+}
+
 .table-flip-controls {
   position: absolute;
   top: 14px;
@@ -529,6 +533,10 @@ h3 {
   color: var(--stone-300);
   font-size: 0.82rem;
   font-weight: 700;
+}
+
+.screensaver-shell .three-viewer.loading {
+  color: #131614;
 }
 
 .round-loading {
