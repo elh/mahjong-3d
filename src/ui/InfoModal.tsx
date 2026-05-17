@@ -16,7 +16,7 @@ export function InfoModal({
     >
       <header>
         <h2 id="info-modal-title">Mahjong 3D</h2>
-        <p className="info-modal-subtitle">Infinite Taiwanese Mahjong sim</p>
+        <p className="info-modal-subtitle">Taiwanese Mahjong 3D sim</p>
       </header>
       <p className="info-modal-meta">
         Github: <a href="https://github.com/elh/mahjong-3d">elh/mahjong-3d</a>
