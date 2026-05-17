@@ -81,7 +81,7 @@ export function useSimulationController({
   const canStepPrevious = !atStart && events.length > 0;
   const canStepNext = !atEnd && events.length > 0;
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: bootstrap and popstate wiring should be registered once for the app lifetime.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: safe because this is intentionally one-shot app bootstrap. Dynamic changes are handled by queueSimulation request ids and the explicit active/preload effects below.
   useEffect(() => {
     queueSimulation(initialSeed, { replaceUrl: true });
 
@@ -107,7 +107,7 @@ export function useSimulationController({
     };
   }, []);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: pause/resume is coordinated through refs and the current seed.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: safe because this effect only reacts to active edge changes; generation identity is guarded by requestIdRef and the latest seed is stored in state before pausing.
   useEffect(() => {
     if (!active) {
       workerRef.current?.terminate();
@@ -127,7 +127,7 @@ export function useSimulationController({
     }
   }, [active]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: preload cancellation uses refs and stable cleanup helpers.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: safe because disabling preload is a cancellation edge; queued/preloading state is mirrored through refs to avoid stale retry callbacks.
   useEffect(() => {
     if (preloadEnabled) {
       return;
@@ -349,7 +349,7 @@ export function useSimulationController({
     }
   }, []);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: preload state is guarded through refs so retry callbacks never close over stale state.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: safe because queued/preloading state is read from refs that are updated with the React state setters.
   const preloadNextRound = useCallback(() => {
     if (
       !active ||

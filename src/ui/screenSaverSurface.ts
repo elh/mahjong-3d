@@ -1,3 +1,11 @@
+/**
+ * Centralizes the native screen saver surface contract so the React app can keep
+ * normal web playback worker-backed and requestAnimationFrame-driven, while the
+ * macOS ScreenSaver host can opt into local-file-safe generation and native
+ * frame delivery. The fullscreen saver intentionally ignores some WebKit
+ * visibility/lifecycle noise because the legacy saver host can report the
+ * document hidden or briefly inactive while it is still the visible renderer.
+ */
 export type ScreenSaverSurfaceConfig = {
   surface: "screensaver";
   preview: boolean;
