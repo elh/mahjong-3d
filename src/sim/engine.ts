@@ -90,6 +90,9 @@ export function createInitialRound(seed: string): {
       number,
     ],
   });
+  if (state.ended) {
+    events.unshift(events.pop()!);
+  }
 
   return { state, events };
 }
@@ -188,6 +191,13 @@ function testScenarioBots(
     },
   };
   if (seed === "test-setup-flowers") {
+    return [passClaims, passClaims, passClaims, passClaims];
+  }
+  if (
+    seed === "test-eight-flower-win" ||
+    seed === "test-seven-flowers-rob-one" ||
+    seed === "test-anthony"
+  ) {
     return [passClaims, passClaims, passClaims, passClaims];
   }
   if (seed === "test-multi-discard-win") {
@@ -414,6 +424,9 @@ function replaceDealtFlowers(state: RoundState, events: GameEvent[]): void {
   while (replacedAny) {
     replacedAny = false;
     for (const player of state.players) {
+      if (state.ended) {
+        return;
+      }
       const flowers = player.hand.filter(isFlower);
       if (flowers.length === 0) {
         continue;
@@ -430,6 +443,10 @@ function replaceDealtFlowers(state: RoundState, events: GameEvent[]): void {
         tile: flowers[0],
         tiles: flowers,
       });
+      applyFlowerWinIfAny(state, player.id, flowers, events, "setup", 0);
+      if (state.ended) {
+        return;
+      }
       drawSetupSupplementTilesIntoHand(
         state,
         player.id,
@@ -478,6 +495,10 @@ function drawUntilNonFlower(
         tile,
         tiles: [tile],
       });
+      applyFlowerWinIfAny(state, playerId, [tile], events, "turn", turn);
+      if (state.ended) {
+        return undefined;
+      }
       drawFromDeadWall = true;
       continue;
     }
@@ -490,6 +511,76 @@ function drawUntilNonFlower(
   }
 
   return undefined;
+}
+
+function applyFlowerWinIfAny(
+  state: RoundState,
+  exposingPlayer: PlayerId,
+  exposedFlowers: readonly TileInstance[],
+  events: GameEvent[],
+  phase: "setup" | "turn",
+  turn: number,
+): void {
+  const robber = state.players.find(
+    (player) => player.id !== exposingPlayer && player.flowers.length === 7,
+  );
+  if (robber) {
+    applyFlowerWin(
+      state,
+      robber.id,
+      exposingPlayer,
+      exposedFlowers[0],
+      events,
+      phase,
+      turn,
+    );
+    return;
+  }
+
+  const player = state.players[exposingPlayer];
+  if (player.flowers.length < 8) {
+    return;
+  }
+
+  const previousFlowerCount = player.flowers.length - exposedFlowers.length;
+  const winningFlower =
+    exposedFlowers[Math.max(0, 8 - previousFlowerCount - 1)] ??
+    exposedFlowers.at(-1);
+  if (!winningFlower) {
+    return;
+  }
+  applyFlowerWin(
+    state,
+    exposingPlayer,
+    exposingPlayer,
+    winningFlower,
+    events,
+    phase,
+    turn,
+  );
+}
+
+function applyFlowerWin(
+  state: RoundState,
+  winner: PlayerId,
+  from: PlayerId,
+  tile: TileInstance,
+  events: GameEvent[],
+  phase: "setup" | "turn",
+  turn: number,
+): void {
+  removeTile(state.players[from].flowers, tile.id);
+  state.winner = winner;
+  state.winners = [winner];
+  state.players[winner].winningTile = tile;
+  events.push({
+    ...eventMeta(phase, turn),
+    type: "winDeclared",
+    player: winner,
+    from,
+    tile,
+  });
+  state.ended = true;
 }
 
 function drawSetupSupplementTilesIntoHand(

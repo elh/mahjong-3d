@@ -1150,6 +1150,83 @@ describe("simulation", () => {
     }
   });
 
+  test("test-eight-flower-win demonstrates an eight-flower win", () => {
+    const result = simulateTestScenarioRound("test-eight-flower-win");
+    const flowerExposure = result.events.find(
+      (event) => event.type === "flowerExposed",
+    );
+    const win = result.events.at(-1);
+    const replay = replayEvents(result.events);
+
+    expect(result.events.some((event) => event.type === "rulesError")).toBe(
+      false,
+    );
+    expect(flowerExposure?.type).toBe("flowerExposed");
+    expect(win?.type).toBe("winDeclared");
+    if (
+      flowerExposure?.type === "flowerExposed" &&
+      win?.type === "winDeclared"
+    ) {
+      expect(win.player).toBe(0);
+      expect(win.from).toBe(0);
+      expect(win.tile.id).toBe(flowerExposure.tiles[0].id);
+    }
+    expect(result.finalState.players[0].flowers).toHaveLength(7);
+    expect(result.finalState.players[0].winningTile).toBeDefined();
+    expect(replay.players[0].flowers).toHaveLength(7);
+    expect(replay.players[0].winningTile?.id).toBe(
+      result.finalState.players[0].winningTile?.id,
+    );
+  });
+
+  test("test-seven-flowers-rob-one demonstrates robbing an exposed flower", () => {
+    const result = simulateTestScenarioRound("test-seven-flowers-rob-one");
+    const flowerExposure = result.events.find(
+      (event) => event.type === "flowerExposed",
+    );
+    const win = result.events.at(-1);
+    const replay = replayEvents(result.events);
+
+    expect(result.events.some((event) => event.type === "rulesError")).toBe(
+      false,
+    );
+    expect(flowerExposure?.type).toBe("flowerExposed");
+    expect(win?.type).toBe("winDeclared");
+    if (
+      flowerExposure?.type === "flowerExposed" &&
+      win?.type === "winDeclared"
+    ) {
+      expect(win.player).toBe(1);
+      expect(win.from).toBe(0);
+      expect(win.tile.id).toBe(flowerExposure.tiles[0].id);
+    }
+    expect(result.finalState.players[0].flowers).toHaveLength(0);
+    expect(result.finalState.players[1].flowers).toHaveLength(7);
+    expect(result.finalState.players[1].winningTile).toBeDefined();
+    expect(replay.players[0].flowers).toHaveLength(0);
+    expect(replay.players[1].flowers).toHaveLength(7);
+    expect(replay.players[1].winningTile?.id).toBe(
+      result.finalState.players[1].winningTile?.id,
+    );
+  });
+
+  test("test-anthony aliases the seven-flowers-robs-one fixture", () => {
+    const result = simulateTestScenarioRound("test-anthony");
+    const flowerExposure = result.events.find(
+      (event) => event.type === "flowerExposed",
+    );
+    const win = result.events.at(-1);
+
+    expect(flowerExposure?.type).toBe("flowerExposed");
+    expect(win?.type).toBe("winDeclared");
+    if (win?.type === "winDeclared") {
+      expect(win.player).toBe(1);
+      expect(win.from).toBe(0);
+    }
+    expect(result.finalState.players[1].flowers).toHaveLength(7);
+    expect(result.finalState.players[1].winningTile).toBeDefined();
+  });
+
   test("test-self-draw-win demonstrates a self-drawn win", () => {
     const result = simulateTestScenarioRound("test-self-draw-win");
     const drawIndex = result.events.findIndex(
@@ -1308,6 +1385,93 @@ describe("simulation", () => {
     expect(replay.players[0].hand.some((tile) => tile.id === flower.id)).toBe(
       false,
     );
+  });
+
+  test("declares an eight-flower win when a player exposes the last flower", () => {
+    const pick = tilePicker();
+    const state = emptyRoundState();
+    const flowers = [
+      ...pick("flower-1", 1),
+      ...pick("flower-2", 1),
+      ...pick("flower-3", 1),
+      ...pick("flower-4", 1),
+      ...pick("season-1", 1),
+      ...pick("season-2", 1),
+      ...pick("season-3", 1),
+      ...pick("season-4", 1),
+    ];
+    const finalFlower = flowers.at(-1)!;
+    state.currentPlayer = 0;
+    state.players[0].flowers = flowers.slice(0, 7);
+    state.players[0].hand = fillerTiles(pick, 16);
+    state.wall = [finalFlower];
+    state.deadWall = fillerTiles(pick, 16);
+
+    const result = simulateRoundFromState({
+      seed: "eight-flower-win",
+      state,
+      bots: [passBot(), passBot(), passBot(), passBot()],
+      maxTurns: 1,
+    });
+    const flowerExposure = result.events.find(
+      (event) => event.type === "flowerExposed",
+    );
+    const win = result.events.at(-1);
+    const replay = replayEvents(result.events);
+
+    expect(flowerExposure?.type).toBe("flowerExposed");
+    expect(win?.type).toBe("winDeclared");
+    if (win?.type === "winDeclared") {
+      expect(win.player).toBe(0);
+      expect(win.from).toBe(0);
+      expect(win.tile.id).toBe(finalFlower.id);
+    }
+    expect(result.finalState.players[0].flowers).toHaveLength(7);
+    expect(result.finalState.players[0].winningTile?.id).toBe(finalFlower.id);
+    expect(replay.players[0].winningTile?.id).toBe(finalFlower.id);
+  });
+
+  test("declares a seven-flowers-robs-one win from another exposed flower", () => {
+    const pick = tilePicker();
+    const state = emptyRoundState();
+    const flowers = [
+      ...pick("flower-1", 1),
+      ...pick("flower-2", 1),
+      ...pick("flower-3", 1),
+      ...pick("flower-4", 1),
+      ...pick("season-1", 1),
+      ...pick("season-2", 1),
+      ...pick("season-3", 1),
+      ...pick("season-4", 1),
+    ];
+    const robbedFlower = flowers.at(-1)!;
+    state.currentPlayer = 0;
+    state.players[0].hand = fillerTiles(pick, 16);
+    state.players[1].hand = fillerTiles(pick, 16);
+    state.players[1].flowers = flowers.slice(0, 7);
+    state.wall = [robbedFlower];
+    state.deadWall = fillerTiles(pick, 16);
+
+    const result = simulateRoundFromState({
+      seed: "seven-flowers-rob-one",
+      state,
+      bots: [passBot(), passBot(), passBot(), passBot()],
+      maxTurns: 1,
+    });
+    const win = result.events.at(-1);
+    const replay = replayEvents(result.events);
+
+    expect(win?.type).toBe("winDeclared");
+    if (win?.type === "winDeclared") {
+      expect(win.player).toBe(1);
+      expect(win.from).toBe(0);
+      expect(win.tile.id).toBe(robbedFlower.id);
+    }
+    expect(result.finalState.players[0].flowers).toHaveLength(0);
+    expect(result.finalState.players[1].flowers).toHaveLength(7);
+    expect(result.finalState.players[1].winningTile?.id).toBe(robbedFlower.id);
+    expect(replay.players[0].flowers).toHaveLength(0);
+    expect(replay.players[1].winningTile?.id).toBe(robbedFlower.id);
   });
 });
 

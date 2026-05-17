@@ -33,7 +33,7 @@ Core rule: simulation state and event logs are the source of truth. UI state sho
 
 ## Test Fixtures
 
-- Special `test-*` seeds are demo fixtures with prebuilt starting states, not normal RNG seeds. e.g. `test-concealed-kong`, `test-added-kong`, `test-multi-discard-win`.
+- Special `test-*` seeds are demo fixtures with prebuilt starting states, not normal RNG seeds. e.g. `test-concealed-kong`, `test-added-kong`, `test-multi-discard-win`, `test-eight-flower-win`.
 - Normal `simulateRound()` must always respect caller-provided bots, even when the seed string looks like a fixture.
 - Use `simulateTestScenarioRound()` when a test or UI route intentionally wants fixture state plus scripted fixture bots.
 - Replay and 3D wall reconstruction may explicitly opt into fixture starting states and walls for known fixture seeds so those demos remain short and visually coherent.
@@ -53,6 +53,7 @@ Implemented expectations:
 - added kongs from exposed pongs are supported;
 - opponents may rob an added kong before it is finalized;
 - multiple winners on one discard are allowed;
+- all 8 flowers/seasons is a win, and 7 flowers/seasons may rob another player's exposed 8th flower;
 - wins include normal 5-sets-plus-pair and Taiwanese seven-pairs-plus-triplet;
 - turn-boundary invariants catch illegal concealed hand counts.
 

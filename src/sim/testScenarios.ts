@@ -34,6 +34,9 @@ export const testScenarioSeeds = [
   "test-added-kong",
   "test-rob-added-kong",
   "test-multi-discard-win",
+  "test-eight-flower-win",
+  "test-seven-flowers-rob-one",
+  "test-anthony",
   "test-self-draw-win",
   "test-setup-flowers",
 ] as const;
@@ -75,6 +78,12 @@ export function createTestScenarioStartingState(
   }
   if (seed === "test-multi-discard-win") {
     return createMultiDiscardWinStartingState(seed);
+  }
+  if (seed === "test-eight-flower-win") {
+    return createEightFlowerWinStartingState(seed);
+  }
+  if (seed === "test-seven-flowers-rob-one" || seed === "test-anthony") {
+    return createSevenFlowersRobOneStartingState(seed);
   }
   if (seed === "test-self-draw-win") {
     return createSelfDrawWinStartingState(seed);
@@ -218,6 +227,55 @@ function createMultiDiscardWinStartingState(seed: string): RoundState {
   fillPlayerHands(pool, state);
   assignWalls(state, createFixtureWalls(seed, state.dealer, pool));
   return state;
+}
+
+function createEightFlowerWinStartingState(seed: string): RoundState {
+  const pool = createTilePool();
+  const state = emptyRoundState(0, 0);
+  const flowers = allFlowers(pool);
+  const finalFlower = flowers.at(-1);
+  if (!finalFlower) {
+    throw new Error("Test scenario needs a final flower.");
+  }
+
+  state.players[0].flowers = flowers.slice(0, 7);
+  fillPlayerHands(pool, state);
+  assignWalls(
+    state,
+    createFixtureWalls(seed, state.dealer, pool, [finalFlower]),
+  );
+  return state;
+}
+
+function createSevenFlowersRobOneStartingState(seed: string): RoundState {
+  const pool = createTilePool();
+  const state = emptyRoundState(0, 0);
+  const flowers = allFlowers(pool);
+  const robbedFlower = flowers.at(-1);
+  if (!robbedFlower) {
+    throw new Error("Test scenario needs a robbed flower.");
+  }
+
+  state.players[1].flowers = flowers.slice(0, 7);
+  fillPlayerHands(pool, state);
+  assignWalls(
+    state,
+    createFixtureWalls(seed, state.dealer, pool, [robbedFlower]),
+  );
+  return state;
+}
+
+function allFlowers(pool: TilePool): TileInstance[] {
+  return pool.takeOneEach([
+    "flower-1",
+    "flower-2",
+    "flower-3",
+    "flower-4",
+    "season-1",
+    "season-2",
+    "season-3",
+    "season-4",
+  ]);
 }
 
 function discardWinWait(

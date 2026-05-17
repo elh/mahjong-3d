@@ -268,6 +268,11 @@ function removeWonTileFromSource(
     return concealed;
   }
 
+  const flower = removeTile(state.players[player].flowers, tile.id);
+  if (flower) {
+    return flower;
+  }
+
   for (const meld of state.players[player].melds) {
     const meldTile = removeTile(meld.tiles, tile.id);
     if (!meldTile) {
