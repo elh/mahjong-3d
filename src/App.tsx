@@ -31,14 +31,14 @@ import { playerNames } from "./ui/playerNames";
 import { TileGroup } from "./ui/TileGroup";
 import { useSimulationController } from "./ui/useSimulationController";
 
-declare const __DEBUG_ROUTES_ENABLED__: boolean;
+declare const __DEBUG_MODE_ENABLED__: boolean;
 
 const eventAdvanceDelayMs = 1200;
 const setupEventAdvanceDelayMs = 800;
 const turnBoundaryPauseMs = 100;
 const overlayControlsInactiveDelayMs = 5000;
 const overlayControlsMouseLeaveDelayMs = 3000;
-const debugRoutesEnabled = __DEBUG_ROUTES_ENABLED__;
+const debugRoutesEnabled = __DEBUG_MODE_ENABLED__;
 
 const ThreeGameView = lazy(() =>
   import("./ui/three/ThreeGameView").then((module) => ({

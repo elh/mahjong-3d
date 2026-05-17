@@ -39,11 +39,13 @@ import {
   type Vec3,
 } from "./tableLayout";
 
+declare const __DEBUG_MODE_ENABLED__: boolean;
+
 const tileBackThickness = tileSize.height * 0.18;
 const tileCornerRadius = 0.035;
 const loadedDiscardSettlingMs = 180;
 const enableTileCollisionSound = false;
-const showThreeDebugPanel = false;
+const showThreeDebugPanel = __DEBUG_MODE_ENABLED__;
 const tileSoundCooldownMs = 62;
 const tableHalfSize = 3.24;
 const tableSlabDepth = 0.24;
@@ -175,13 +177,13 @@ const defaultFlickDebugSettings: FlickDebugSettings = {
 };
 
 const defaultLightingDebugSettings: LightingDebugSettings = {
-  ambientIntensity: 0.24,
-  fillIntensity: 0.34,
-  keyIntensity: 4.7,
+  ambientIntensity: 0.3,
+  fillIntensity: 0,
+  keyIntensity: 3,
   keyX: -3.8,
   keyY: 5.4,
   keyZ: 2.2,
-  cameraFillIntensity: 1,
+  cameraFillIntensity: 1.14,
   handFaceFillIntensity: 0.38,
   environment: false,
 };
