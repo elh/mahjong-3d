@@ -8,15 +8,23 @@ function debugEnabled(): boolean {
   );
 }
 
-export default defineConfig(({ command }) => ({
-  base: command === "build" ? "/mahjong-3d/" : "/",
-  define: {
-    __DEBUG_MODE_ENABLED__: JSON.stringify(debugEnabled()),
-  },
-  plugins: [react()],
-  server: {
-    watch: {
-      usePolling: true,
+export default defineConfig(({ command, mode }) => {
+  const isScreenSaverBuild = mode === "screensaver";
+
+  return {
+    base:
+      command === "build" ? (isScreenSaverBuild ? "./" : "/mahjong-3d/") : "/",
+    build: {
+      outDir: isScreenSaverBuild ? "dist-screensaver" : "dist",
     },
-  },
-}));
+    define: {
+      __DEBUG_MODE_ENABLED__: JSON.stringify(debugEnabled()),
+    },
+    plugins: [react()],
+    server: {
+      watch: {
+        usePolling: true,
+      },
+    },
+  };
+});

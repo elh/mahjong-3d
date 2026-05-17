@@ -1,0 +1,7 @@
+Install Mahjong 3D.saver
+
+Double-click Mahjong3D.saver, or copy it to:
+
+~/Library/Screen Savers/
+
+Then open System Settings > Wallpaper > Screen Saver and select Mahjong 3D.

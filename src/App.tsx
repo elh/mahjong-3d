@@ -28,10 +28,25 @@ import {
 } from "./ui/infinitePlayback";
 import { PerfPanel } from "./ui/PerfPanel";
 import { playerNames } from "./ui/playerNames";
+import {
+  initialScreenSaverLifecycle,
+  postScreenSaverDiagnostic,
+  screenSaverRuntimeOptions,
+  screenSaverSurfaceFromSearch,
+  type ScreenSaverBridge,
+  type ScreenSaverLifecycle,
+  type ScreenSaverSurfaceConfig,
+} from "./ui/screenSaverSurface";
 import { TileGroup } from "./ui/TileGroup";
 import { useSimulationController } from "./ui/useSimulationController";
 
 declare const __DEBUG_MODE_ENABLED__: boolean;
+
+declare global {
+  interface Window {
+    mahjongScreenSaver?: ScreenSaverBridge;
+  }
+}
 
 const eventAdvanceDelayMs = 1200;
 const setupEventAdvanceDelayMs = 800;
@@ -99,10 +114,19 @@ function scrollActiveEventIntoView(
  * Supported query params:
  * - seed: initial round seed.
  * - perf=1: show the performance panel.
+ * - surface=screensaver: native macOS screen saver surface.
+ * - preview=1: lower-cost System Settings screen saver preview.
  * - view=debug | debug-table-flip: debug-only routes, enabled by passing DEBUG.
  */
 export default function App() {
-  const view = new URLSearchParams(window.location.search).get("view");
+  const params = new URLSearchParams(window.location.search);
+  const view = params.get("view");
+  const screenSaverSurface = screenSaverSurfaceFromSearch(
+    window.location.search,
+  );
+  if (screenSaverSurface) {
+    return <SimApp screenSaver={screenSaverSurface} />;
+  }
   if (debugRoutesEnabled && view === "debug") {
     return <DebugApp />;
   }
@@ -570,15 +594,30 @@ function DebugApp() {
   );
 }
 
-function SimApp() {
+function SimApp({
+  screenSaver,
+}: {
+  screenSaver?: ScreenSaverSurfaceConfig;
+} = {}) {
+  const screenSaverLifecycle = useScreenSaverLifecycle(screenSaver);
+  const isDocumentHidden = useDocumentHidden();
+  const runtimeOptions = screenSaverRuntimeOptions({
+    config: screenSaver,
+    lifecycle: screenSaverLifecycle,
+    documentHidden: isDocumentHidden,
+  });
   const simulation = useSimulationController({
     syncSeedToUrl: false,
+    active: !runtimeOptions.isScreenSaver || screenSaverLifecycle.active,
+    preloadEnabled: runtimeOptions.preloadEnabled,
+    workerEnabled: runtimeOptions.workerEnabled,
+    workerFallbackEnabled: runtimeOptions.isScreenSaver,
   });
-  const isDocumentHidden = useDocumentHidden();
   const prefersReducedMotion = usePrefersReducedMotion();
   const areOverlayControlsVisible = useScreenPointerActivity(
     overlayControlsInactiveDelayMs,
     overlayControlsMouseLeaveDelayMs,
+    !runtimeOptions.isScreenSaver,
   );
   const [isCameraUserControlled, setIsCameraUserControlled] = useState(false);
   const [isRoundTransitioning, setIsRoundTransitioning] = useState(false);
@@ -608,10 +647,43 @@ function SimApp() {
     events[0]?.type === "roundStarted" ? events[0].seed : pendingSeed;
   const isLoadingRound = isGenerating && !generationError;
   const isAtRoundEnd = events.length > 0 && eventIndex >= events.length - 1;
-  const showPerfPanel = perfPanelEnabled();
+  const showPerfPanel = !runtimeOptions.isScreenSaver && perfPanelEnabled();
+  const showGenerationPill =
+    !runtimeOptions.isScreenSaver && (isGenerating || generationError);
 
   useEffect(() => {
-    if (isLoadingRound || generationError || !isAtRoundEnd) {
+    if (!runtimeOptions.isScreenSaver) {
+      return;
+    }
+    postScreenSaverDiagnostic(
+      [
+        "app",
+        `active=${runtimeOptions.isSurfaceActive}`,
+        `preview=${runtimeOptions.isPreview}`,
+        `generating=${isGenerating}`,
+        `error=${generationError ?? "none"}`,
+        `events=${events.length}`,
+        `eventIndex=${eventIndex}`,
+      ].join(" "),
+    );
+  }, [
+    eventIndex,
+    events.length,
+    generationError,
+    isGenerating,
+    runtimeOptions.isPreview,
+    runtimeOptions.isScreenSaver,
+    runtimeOptions.isSurfaceActive,
+  ]);
+
+  useEffect(() => {
+    if (
+      !runtimeOptions.isSurfaceActive ||
+      !runtimeOptions.preloadEnabled ||
+      isLoadingRound ||
+      generationError ||
+      !isAtRoundEnd
+    ) {
       terminalReachedAtRef.current = undefined;
       setIsRoundTransitioning(false);
       setTableFlipTransitionKey(undefined);
@@ -620,11 +692,19 @@ function SimApp() {
 
     terminalReachedAtRef.current ??= Date.now();
     preloadNextRound();
-  }, [generationError, isAtRoundEnd, isLoadingRound, preloadNextRound]);
+  }, [
+    generationError,
+    isAtRoundEnd,
+    isLoadingRound,
+    runtimeOptions.isSurfaceActive,
+    runtimeOptions.preloadEnabled,
+    preloadNextRound,
+  ]);
 
   useEffect(() => {
     if (
-      isDocumentHidden ||
+      !runtimeOptions.isSurfaceActive ||
+      !runtimeOptions.preloadEnabled ||
       !isAtRoundEnd ||
       !hasQueuedNextRound ||
       terminalReachedAtRef.current === undefined
@@ -635,7 +715,7 @@ function SimApp() {
     const remainingHoldMs = nextRoundPromotionDelayMs({
       isAtRoundEnd,
       hasQueuedNextRound,
-      isDocumentHidden,
+      isDocumentHidden: !runtimeOptions.isSurfaceActive,
       terminalReachedAt: terminalReachedAtRef.current,
       now: Date.now(),
     });
@@ -682,7 +762,8 @@ function SimApp() {
     eventIndex,
     hasQueuedNextRound,
     isAtRoundEnd,
-    isDocumentHidden,
+    runtimeOptions.isSurfaceActive,
+    runtimeOptions.preloadEnabled,
     prefersReducedMotion,
     promoteQueuedRound,
     roundKey,
@@ -690,7 +771,7 @@ function SimApp() {
 
   useEffect(() => {
     if (
-      isDocumentHidden ||
+      !runtimeOptions.isSurfaceActive ||
       prefersReducedMotion ||
       isLoadingRound ||
       generationError ||
@@ -722,15 +803,21 @@ function SimApp() {
     eventIndex,
     events,
     generationError,
-    isDocumentHidden,
+    runtimeOptions.isSurfaceActive,
     isLoadingRound,
     prefersReducedMotion,
     stepEvent,
   ]);
 
   return (
-    <main className="sim-shell">
-      {(isGenerating || generationError) && (
+    <main
+      className={
+        runtimeOptions.isScreenSaver
+          ? "sim-shell screensaver-shell"
+          : "sim-shell"
+      }
+    >
+      {showGenerationPill && (
         <section
           className={
             generationError ? "generation-pill error" : "generation-pill"
@@ -761,25 +848,38 @@ function SimApp() {
           roundKey={roundKey}
           loading={isLoadingRound}
           simulatorMode
-          cameraAutoRotate={!prefersReducedMotion}
-          cameraUserControlled={isCameraUserControlled}
-          onCameraUserControlChange={setIsCameraUserControlled}
-          renderPaused={isDocumentHidden}
+          cameraAutoRotate={
+            runtimeOptions.isSurfaceActive && !prefersReducedMotion
+          }
+          cameraUserControlled={
+            runtimeOptions.isScreenSaver ? false : isCameraUserControlled
+          }
+          onCameraUserControlChange={
+            runtimeOptions.isScreenSaver ? undefined : setIsCameraUserControlled
+          }
+          renderPaused={!runtimeOptions.isSurfaceActive}
+          renderDpr={runtimeOptions.renderDpr}
+          pointerControlsEnabled={!runtimeOptions.isScreenSaver}
+          audioEnabled={!runtimeOptions.isScreenSaver}
           suppressLoadingOverlay={isRoundTransitioning}
           preserveSceneOnRoundChange={isRoundTransitioning}
           tableFlipTransitionKey={
-            prefersReducedMotion ? undefined : tableFlipTransitionKey
+            prefersReducedMotion || !runtimeOptions.tableFlipTransitionsEnabled
+              ? undefined
+              : tableFlipTransitionKey
           }
           sceneTransitionOverlayActive={isRoundTransitioning}
         />
       </Suspense>
-      <InfoPopover
-        seed={roundKey}
-        links={debugRouteLinks(roundKey, ["debug", "debug-table-flip"])}
-        showAutoOrbitButton={isCameraUserControlled}
-        onAutoOrbitButtonClick={() => setIsCameraUserControlled(false)}
-        autoHide={!areOverlayControlsVisible}
-      />
+      {!runtimeOptions.isScreenSaver ? (
+        <InfoPopover
+          seed={roundKey}
+          links={debugRouteLinks(roundKey, ["debug", "debug-table-flip"])}
+          showAutoOrbitButton={isCameraUserControlled}
+          onAutoOrbitButtonClick={() => setIsCameraUserControlled(false)}
+          autoHide={!areOverlayControlsVisible}
+        />
+      ) : null}
       {showPerfPanel ? (
         <PerfPanel
           seed={roundKey}
@@ -795,12 +895,20 @@ function SimApp() {
 function useScreenPointerActivity(
   inactiveDelayMs: number,
   mouseLeaveDelayMs: number,
+  enabled = true,
 ): boolean {
   const [isActive, setIsActive] = useState(() => {
+    if (!enabled) {
+      return false;
+    }
     return !window.matchMedia("(hover: hover) and (pointer: fine)").matches;
   });
 
   useEffect(() => {
+    if (!enabled) {
+      setIsActive(false);
+      return;
+    }
     const hoverQuery = window.matchMedia("(hover: hover) and (pointer: fine)");
     let inactivityTimeout: number | undefined;
 
@@ -872,9 +980,42 @@ function useScreenPointerActivity(
       window.removeEventListener("mouseout", handleMouseOut);
       hoverQuery.removeEventListener("change", handleHoverCapabilityChange);
     };
-  }, [inactiveDelayMs, mouseLeaveDelayMs]);
+  }, [enabled, inactiveDelayMs, mouseLeaveDelayMs]);
 
   return isActive;
+}
+
+function useScreenSaverLifecycle(
+  config: ScreenSaverSurfaceConfig | undefined,
+): ScreenSaverLifecycle {
+  const [lifecycle, setLifecycle] = useState(() =>
+    initialScreenSaverLifecycle(config),
+  );
+
+  useEffect(() => {
+    if (!config) {
+      window.mahjongScreenSaver = undefined;
+      return;
+    }
+
+    const bridge: ScreenSaverBridge = {
+      setActive(active) {
+        setLifecycle((current) => ({ ...current, active }));
+      },
+      setPreview(preview) {
+        setLifecycle((current) => ({ ...current, preview }));
+      },
+    };
+    window.mahjongScreenSaver = bridge;
+
+    return () => {
+      if (window.mahjongScreenSaver === bridge) {
+        window.mahjongScreenSaver = undefined;
+      }
+    };
+  }, [config]);
+
+  return lifecycle;
 }
 
 function useDocumentHidden(): boolean {

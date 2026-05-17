@@ -1,5 +1,6 @@
 import { Environment, OrbitControls, RoundedBox } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import type { Dpr } from "@react-three/fiber";
 import {
   type ContactForcePayload,
   CuboidCollider,
@@ -22,6 +23,7 @@ import type { GameEvent } from "../../sim/events";
 import type { ReplayState } from "../../sim/replay";
 import type { PlayerId } from "../../sim/state";
 import type { TileInstance } from "../../sim/tiles";
+import { postScreenSaverDiagnostic } from "../screenSaverSurface";
 import { allTileImageUrls, tileImage } from "../tileImages";
 import {
   createTableFlipSettings,
@@ -47,6 +49,7 @@ const loadedDiscardSettlingMs = 180;
 const enableTileCollisionSound = false;
 const showThreeDebugPanel = __DEBUG_MODE_ENABLED__;
 const tileSoundCooldownMs = 62;
+const tileTextureLoadTimeoutMs = 2500;
 const tableHalfSize = 3.24;
 const tableSlabDepth = 0.24;
 const tableRailWidth = 0.16;
@@ -224,6 +227,9 @@ type ThreeGameViewProps = {
   cameraUserControlled?: boolean;
   onCameraUserControlChange?: (isUserControlled: boolean) => void;
   renderPaused?: boolean;
+  renderDpr?: Dpr;
+  pointerControlsEnabled?: boolean;
+  audioEnabled?: boolean;
   suppressLoadingOverlay?: boolean;
   preserveSceneOnRoundChange?: boolean;
   tableFlipDebug?: boolean;
@@ -245,6 +251,9 @@ export function ThreeGameView({
   cameraUserControlled,
   onCameraUserControlChange,
   renderPaused = false,
+  renderDpr = [1, 1.75],
+  pointerControlsEnabled = true,
+  audioEnabled = true,
   suppressLoadingOverlay = false,
   preserveSceneOnRoundChange = false,
   tableFlipDebug = false,
@@ -317,6 +326,28 @@ export function ThreeGameView({
     tileFacesReady &&
     (!roundChanged || preserveSceneOnRoundChange) &&
     !loading;
+  useEffect(() => {
+    postScreenSaverDiagnostic(
+      [
+        "three",
+        `round=${roundKey}`,
+        `visible=${sceneVisible}`,
+        `sceneReady=${sceneReady}`,
+        `tileFacesReady=${tileFacesReady}`,
+        `roundChanged=${roundChanged}`,
+        `preserve=${preserveSceneOnRoundChange}`,
+        `loading=${loading}`,
+      ].join(" "),
+    );
+  }, [
+    loading,
+    preserveSceneOnRoundChange,
+    roundChanged,
+    roundKey,
+    sceneReady,
+    sceneVisible,
+    tileFacesReady,
+  ]);
   const isTerminalRevealEvent =
     currentEvent?.type === "winDeclared" ||
     currentEvent?.type === "drawDeclared";
@@ -528,7 +559,7 @@ export function ThreeGameView({
   );
 
   useEffect(() => {
-    if (!enableTileCollisionSound) {
+    if (!audioEnabled || !enableTileCollisionSound) {
       return;
     }
 
@@ -542,7 +573,7 @@ export function ThreeGameView({
       window.removeEventListener("pointerdown", unlockAudio);
       window.removeEventListener("keydown", unlockAudio);
     };
-  }, []);
+  }, [audioEnabled]);
 
   useEffect(() => {
     if (!sceneVisible) {
@@ -630,7 +661,7 @@ export function ThreeGameView({
       <Canvas
         frameloop={renderPaused ? "never" : "always"}
         shadows="percentage"
-        dpr={[1, 1.75]}
+        dpr={renderDpr}
         camera={{
           position: cameraPreset.position,
           fov: cameraPreset.fov,
@@ -642,7 +673,11 @@ export function ThreeGameView({
           gl.toneMapping = sceneToneMapping;
           gl.toneMappingExposure = sceneToneMappingExposure;
         }}
-        onPointerDown={() => setIsCameraUserControlled(true)}
+        onPointerDown={() => {
+          if (pointerControlsEnabled) {
+            setIsCameraUserControlled(true);
+          }
+        }}
       >
         <CameraPresetSync preset={cameraPreset} />
         <color attach="background" args={[sceneBackgroundColor]} />
@@ -691,7 +726,7 @@ export function ThreeGameView({
             numSolverIterations={tableFlipEnabled ? 10 : undefined}
             numInternalPgsIterations={tableFlipEnabled ? 2 : undefined}
             maxCcdSubsteps={tableFlipEnabled ? 4 : undefined}
-            paused={isTableFlipPhysicsPaused}
+            paused={renderPaused || isTableFlipPhysicsPaused}
           >
             {tableFlipEnabled ? (
               <FlipTable
@@ -785,6 +820,8 @@ export function ThreeGameView({
             simulatorMode && cameraAutoRotate && !isCameraUserControlled
           }
           autoRotateSpeed={0.14}
+          enableRotate={pointerControlsEnabled}
+          enableZoom={pointerControlsEnabled}
           enablePan={false}
           enableDamping
           target={cameraPreset.target}
@@ -2975,9 +3012,31 @@ function ensureTileTextureLoading(url: string): TileTextureEntry {
   }
 
   entry.isLoading = true;
+  let didSettle = false;
+  const timeout = window.setTimeout(() => {
+    if (didSettle) {
+      return;
+    }
+    didSettle = true;
+    const timedOutEntry = tileTextureCache.get(url);
+    if (!timedOutEntry) {
+      return;
+    }
+    timedOutEntry.isLoading = false;
+    timedOutEntry.didFail = true;
+    for (const listener of timedOutEntry.listeners) {
+      listener(undefined);
+    }
+  }, tileTextureLoadTimeoutMs);
   new THREE.TextureLoader().load(
     url,
     (loadedTexture) => {
+      if (didSettle) {
+        loadedTexture.dispose();
+        return;
+      }
+      didSettle = true;
+      window.clearTimeout(timeout);
       configureTileTexture(loadedTexture);
       const loadedEntry = tileTextureCache.get(url);
       if (!loadedEntry) {
@@ -2991,6 +3050,11 @@ function ensureTileTextureLoading(url: string): TileTextureEntry {
     },
     undefined,
     () => {
+      if (didSettle) {
+        return;
+      }
+      didSettle = true;
+      window.clearTimeout(timeout);
       const failedEntry = tileTextureCache.get(url);
       if (!failedEntry) {
         return;
