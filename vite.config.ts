@@ -11,7 +11,7 @@ function debugEnabled(): boolean {
 export default defineConfig(({ command }) => ({
   base: command === "build" ? "/mahjong-3d/" : "/",
   define: {
-    __DEBUG_ROUTES_ENABLED__: JSON.stringify(debugEnabled()),
+    __DEBUG_MODE_ENABLED__: JSON.stringify(debugEnabled()),
   },
   plugins: [react()],
   server: {

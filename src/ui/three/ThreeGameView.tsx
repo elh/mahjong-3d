@@ -39,17 +39,22 @@ import {
   type Vec3,
 } from "./tableLayout";
 
+declare const __DEBUG_MODE_ENABLED__: boolean;
+
 const tileBackThickness = tileSize.height * 0.18;
 const tileCornerRadius = 0.035;
 const loadedDiscardSettlingMs = 180;
 const enableTileCollisionSound = false;
-const showThreeDebugPanel = false;
+const showThreeDebugPanel = __DEBUG_MODE_ENABLED__;
 const tileSoundCooldownMs = 62;
 const tableHalfSize = 3.24;
 const tableSlabDepth = 0.24;
 const tableRailWidth = 0.16;
 const tableRailHeight = 0.075;
 const tableRailOuterHalfSize = tableHalfSize + tableRailWidth;
+const sceneBackgroundColor = "#101514";
+const sceneToneMapping = THREE.ACESFilmicToneMapping;
+const sceneToneMappingExposure = 1.12;
 const cameraTarget: Vec3 = [0, 0, 0];
 const rapierRigidBodyType = {
   dynamic: 0,
@@ -172,14 +177,14 @@ const defaultFlickDebugSettings: FlickDebugSettings = {
 };
 
 const defaultLightingDebugSettings: LightingDebugSettings = {
-  ambientIntensity: 0.36,
-  fillIntensity: 0.48,
-  keyIntensity: 3.8,
-  keyX: -3.4,
-  keyY: 5.8,
-  keyZ: 2.6,
-  cameraFillIntensity: 0.3,
-  handFaceFillIntensity: 0.52,
+  ambientIntensity: 0.3,
+  fillIntensity: 0,
+  keyIntensity: 3,
+  keyX: -3.8,
+  keyY: 5.4,
+  keyZ: 2.2,
+  cameraFillIntensity: 1.14,
+  handFaceFillIntensity: 0.38,
   environment: false,
 };
 
@@ -632,19 +637,25 @@ export function ThreeGameView({
           near: 0.1,
           far: 100,
         }}
+        onCreated={({ gl }) => {
+          gl.outputColorSpace = THREE.SRGBColorSpace;
+          gl.toneMapping = sceneToneMapping;
+          gl.toneMappingExposure = sceneToneMappingExposure;
+        }}
         onPointerDown={() => setIsCameraUserControlled(true)}
       >
         <CameraPresetSync preset={cameraPreset} />
-        <color attach="background" args={["#0f1112"]} />
+        <color attach="background" args={[sceneBackgroundColor]} />
         <ambientLight intensity={lightingDebug.ambientIntensity} />
         <hemisphereLight
           intensity={lightingDebug.fillIntensity}
-          color="#ececeb"
-          groundColor="#181b1a"
+          color="#d9e6ff"
+          groundColor="#120f0b"
         />
         <directionalLight
           castShadow
           intensity={lightingDebug.keyIntensity}
+          color="#ffe7cc"
           position={[
             lightingDebug.keyX,
             lightingDebug.keyY,
@@ -664,7 +675,7 @@ export function ThreeGameView({
           distance={7.5}
           decay={2}
           position={[2.8, 2.4, -3.2]}
-          color="#c2c7c4"
+          color="#c6c0b8"
         />
         <CameraShoulderFill intensity={lightingDebug.cameraFillIntensity} />
         <HandFaceFill intensity={lightingDebug.handFaceFillIntensity} />
@@ -869,12 +880,42 @@ function TableSurface() {
         position={[0, -tableSlabDepth / 2, 0]}
       >
         <meshStandardMaterial
-          color="#245f50"
+          color="#194d3e"
           map={feltTextures.color}
           bumpMap={feltTextures.bump}
-          bumpScale={0.032}
+          bumpScale={0.038}
           roughness={0.98}
           metalness={0.01}
+          customProgramCacheKey={() => "mahjong-table-felt-nap"}
+          onBeforeCompile={(shader) => {
+            shader.vertexShader = shader.vertexShader.replace(
+              "#include <common>",
+              "#include <common>\nvarying vec3 vFeltLocalPosition;",
+            );
+            shader.vertexShader = shader.vertexShader.replace(
+              "#include <begin_vertex>",
+              "#include <begin_vertex>\nvFeltLocalPosition = position;",
+            );
+            shader.fragmentShader = shader.fragmentShader.replace(
+              "#include <common>",
+              "#include <common>\nvarying vec3 vFeltLocalPosition;",
+            );
+            shader.fragmentShader = shader.fragmentShader.replace(
+              "#include <map_fragment>",
+              `
+              #include <map_fragment>
+              vec2 feltUv = vFeltLocalPosition.xz / ${(tableHalfSize * 2).toFixed(5)};
+              float topMask = smoothstep(${(tableSlabDepth * 0.28).toFixed(5)}, ${(tableSlabDepth * 0.48).toFixed(5)}, vFeltLocalPosition.y);
+              float centerFocus = 1.0 - smoothstep(0.08, 0.72, length(feltUv));
+              float edgeFalloff = smoothstep(0.38, 0.58, max(abs(feltUv.x), abs(feltUv.y)));
+              float napDirection = dot(normalize(vec2(0.78, -0.62)), feltUv);
+              float napWeave = sin(napDirection * 74.0) * 0.5 + sin((feltUv.x - feltUv.y) * 118.0) * 0.25;
+              float napSheen = smoothstep(-0.15, 0.72, napDirection) * 0.055 + napWeave * 0.018;
+              diffuseColor.rgb *= 1.0 + topMask * (centerFocus * 0.08 + napSheen - edgeFalloff * 0.1);
+              diffuseColor.rgb += topMask * centerFocus * vec3(0.008, 0.02, 0.014);
+              `,
+            );
+          }}
         />
       </RoundedBox>
       <CenterTableMark />
@@ -903,7 +944,7 @@ function createFeltTextures(): {
     };
   }
 
-  colorContext.fillStyle = "#266454";
+  colorContext.fillStyle = "#1b4c3a";
   colorContext.fillRect(0, 0, size, size);
   const image = colorContext.getImageData(0, 0, size, size);
   const bumpImage = bumpContext.createImageData(size, size);
@@ -915,9 +956,9 @@ function createFeltTextures(): {
       Math.sin(x * 0.58) * 7 +
       Math.sin(y * 0.72) * 6 +
       (stableFeltNoise(x, y) - 0.5) * 28;
-    image.data[index] = clampColor(37 + weave * 1.05);
-    image.data[index + 1] = clampColor(96 + weave * 0.95);
-    image.data[index + 2] = clampColor(80 + weave * 0.85);
+    image.data[index] = clampColor(24 + weave * 0.82);
+    image.data[index + 1] = clampColor(70 + weave * 0.74);
+    image.data[index + 2] = clampColor(54 + weave * 0.66);
     image.data[index + 3] = 255;
 
     const bumpValue = clampColor(124 + weave * 2.1);
@@ -929,8 +970,8 @@ function createFeltTextures(): {
   colorContext.putImageData(image, 0, 0);
   bumpContext.putImageData(bumpImage, 0, 0);
 
-  colorContext.globalAlpha = 0.14;
-  colorContext.strokeStyle = "#d9f2df";
+  colorContext.globalAlpha = 0.12;
+  colorContext.strokeStyle = "#a9cdae";
   colorContext.lineWidth = 0.5;
   for (let index = 0; index < 160; index += 1) {
     const x = stableFeltNoise(index, 3) * size;
@@ -1076,7 +1117,12 @@ function TableRail() {
   const railY = tableRailHeight / 2;
   const railLength = tableRailOuterHalfSize * 2;
   const railMaterial = (
-    <meshStandardMaterial color="#102d28" roughness={0.9} metalness={0.01} />
+    <meshStandardMaterial
+      color="#0d2c25"
+      roughness={0.68}
+      metalness={0.02}
+      envMapIntensity={0.28}
+    />
   );
 
   return (
@@ -1135,10 +1181,10 @@ function CameraShoulderFill({ intensity }: { intensity: number }) {
     }
     const cameraRight = new THREE.Vector3(1, 0, 0)
       .applyQuaternion(camera.quaternion)
-      .multiplyScalar(-0.85);
+      .multiplyScalar(-0.18);
     const cameraUp = new THREE.Vector3(0, 1, 0)
       .applyQuaternion(camera.quaternion)
-      .multiplyScalar(0.45);
+      .multiplyScalar(0.42);
     lightRef.current.position
       .copy(camera.position)
       .add(cameraRight)
@@ -1148,7 +1194,7 @@ function CameraShoulderFill({ intensity }: { intensity: number }) {
   });
 
   return (
-    <directionalLight ref={lightRef} intensity={intensity} color="#eef6ff" />
+    <directionalLight ref={lightRef} intensity={intensity} color="#fffaf3" />
   );
 }
 
@@ -1167,7 +1213,7 @@ function HandFaceFill({ intensity }: { intensity: number }) {
           key={position.join(",")}
           intensity={intensity}
           position={position}
-          color="#fff6e8"
+          color="#fff3e6"
         />
       ))}
     </>
@@ -1189,7 +1235,7 @@ export function ThreeDebugPanel({
   onLightingChange: (settings: LightingDebugSettings) => void;
   onSoundChange: (settings: SoundDebugSettings) => void;
 }) {
-  const [mode, setMode] = useState<"flick" | "lighting" | "sound">("sound");
+  const [mode, setMode] = useState<"flick" | "lighting" | "sound">("lighting");
 
   return (
     <aside className="three-debug-panel" aria-label="3D debug settings">
@@ -2989,7 +3035,7 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
     >
       <meshStandardMaterial
         color="#efe2c5"
-        roughness={orientation === "faceUp" ? 0.5 : 0.46}
+        roughness={orientation === "faceUp" ? 0.42 : 0.38}
         metalness={0.01}
         customProgramCacheKey={() => `mahjong-tile-body-${orientation}`}
         onBeforeCompile={(shader) => {
@@ -3008,11 +3054,33 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
           shader.fragmentShader = shader.fragmentShader.replace(
             "vec4 diffuseColor = vec4( diffuse, opacity );",
             `
-            vec3 tileIvory = vec3(0.93, 0.875, 0.74);
-            vec3 tileGreen = vec3(0.0, 0.28, 0.075);
+            vec3 tileIvory = vec3(0.94, 0.895, 0.795);
+            vec3 tileGreen = vec3(0.0, 0.33, 0.12);
             float backMask = step(${backThreshold.toFixed(5)}, ${backDirection.toFixed(1)} * vTileLocalPosition.y);
+            vec3 tileUv = vec3(
+              abs(vTileLocalPosition.x) / ${(tileSize.width / 2).toFixed(5)},
+              abs(vTileLocalPosition.y) / ${(tileSize.height / 2).toFixed(5)},
+              abs(vTileLocalPosition.z) / ${(tileSize.depth / 2).toFixed(5)}
+            );
+            float sideEdge = max(tileUv.x, tileUv.z);
+            float bevelShade = smoothstep(0.74, 1.0, max(sideEdge, tileUv.y));
+            float faceLift = 1.0 - smoothstep(0.12, 0.92, length(tileUv.xz));
+            float backRim = smoothstep(0.56, 0.98, sideEdge) * (1.0 - smoothstep(0.94, 1.0, tileUv.y)) * backMask;
+            float backFaceGlow = (1.0 - smoothstep(0.14, 0.86, length(tileUv.xz))) * backMask;
+            float panelX = 1.0 - smoothstep(0.8, 0.86, tileUv.x);
+            float panelZ = 1.0 - smoothstep(0.84, 0.9, tileUv.z);
+            float facePanel = panelX * panelZ * (1.0 - backMask) * ${orientation === "faceUp" ? "1.0" : "0.0"};
+            float panelBorder = (smoothstep(0.68, 0.82, tileUv.x) + smoothstep(0.72, 0.86, tileUv.z)) * facePanel;
+            float materialNoise = fract(sin(dot(vTileLocalPosition.xz, vec2(31.7, 47.3))) * 43758.5453) - 0.5;
             vec3 tileColor = mix(tileIvory, tileGreen, backMask);
-            tileColor = mix(tileColor, vec3(0.965, 0.925, 0.82), 0.16 * (1.0 - backMask));
+            tileColor = mix(tileColor, vec3(0.975, 0.94, 0.855), 0.18 * faceLift * (1.0 - backMask));
+            tileColor = mix(tileColor, vec3(0.0, 0.42, 0.16), 0.12 * faceLift * backMask);
+            tileColor = mix(tileColor, vec3(0.16, 0.66, 0.32), 0.2 * backRim);
+            tileColor = mix(tileColor, vec3(0.03, 0.39, 0.15), 0.08 * backFaceGlow);
+            tileColor = mix(tileColor, vec3(0.9, 0.835, 0.705), 0.13 * facePanel);
+            tileColor *= 1.0 - 0.08 * min(panelBorder, 1.0);
+            tileColor *= 1.0 - 0.16 * bevelShade;
+            tileColor += materialNoise * vec3(0.012, 0.01, 0.007);
             vec4 diffuseColor = vec4(tileColor, opacity);
             `,
           );
