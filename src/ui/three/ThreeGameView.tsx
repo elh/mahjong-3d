@@ -43,7 +43,7 @@ const tileBackThickness = tileSize.height * 0.18;
 const tileCornerRadius = 0.035;
 const loadedDiscardSettlingMs = 180;
 const enableTileCollisionSound = false;
-const showThreeDebugPanel = false;
+const showThreeDebugPanel = true;
 const tileSoundCooldownMs = 62;
 const tableHalfSize = 3.24;
 const tableSlabDepth = 0.24;
@@ -181,7 +181,7 @@ const defaultLightingDebugSettings: LightingDebugSettings = {
   keyX: -3.8,
   keyY: 5.4,
   keyZ: 2.2,
-  cameraFillIntensity: 0.2,
+  cameraFillIntensity: 1,
   handFaceFillIntensity: 0.38,
   environment: false,
 };
@@ -653,7 +653,7 @@ export function ThreeGameView({
         <directionalLight
           castShadow
           intensity={lightingDebug.keyIntensity}
-          color="#ffe1bf"
+          color="#ffe7cc"
           position={[
             lightingDebug.keyX,
             lightingDebug.keyY,
@@ -673,7 +673,7 @@ export function ThreeGameView({
           distance={7.5}
           decay={2}
           position={[2.8, 2.4, -3.2]}
-          color="#cab9a5"
+          color="#c6c0b8"
         />
         <CameraShoulderFill intensity={lightingDebug.cameraFillIntensity} />
         <HandFaceFill intensity={lightingDebug.handFaceFillIntensity} />
@@ -878,7 +878,7 @@ function TableSurface() {
         position={[0, -tableSlabDepth / 2, 0]}
       >
         <meshStandardMaterial
-          color="#23624f"
+          color="#194d3e"
           map={feltTextures.color}
           bumpMap={feltTextures.bump}
           bumpScale={0.038}
@@ -909,8 +909,8 @@ function TableSurface() {
               float napDirection = dot(normalize(vec2(0.78, -0.62)), feltUv);
               float napWeave = sin(napDirection * 74.0) * 0.5 + sin((feltUv.x - feltUv.y) * 118.0) * 0.25;
               float napSheen = smoothstep(-0.15, 0.72, napDirection) * 0.055 + napWeave * 0.018;
-              diffuseColor.rgb *= 1.0 + topMask * (centerFocus * 0.13 + napSheen - edgeFalloff * 0.08);
-              diffuseColor.rgb += topMask * centerFocus * vec3(0.015, 0.035, 0.022);
+              diffuseColor.rgb *= 1.0 + topMask * (centerFocus * 0.08 + napSheen - edgeFalloff * 0.1);
+              diffuseColor.rgb += topMask * centerFocus * vec3(0.008, 0.02, 0.014);
               `,
             );
           }}
@@ -942,7 +942,7 @@ function createFeltTextures(): {
     };
   }
 
-  colorContext.fillStyle = "#245f4d";
+  colorContext.fillStyle = "#1b4c3a";
   colorContext.fillRect(0, 0, size, size);
   const image = colorContext.getImageData(0, 0, size, size);
   const bumpImage = bumpContext.createImageData(size, size);
@@ -954,9 +954,9 @@ function createFeltTextures(): {
       Math.sin(x * 0.58) * 7 +
       Math.sin(y * 0.72) * 6 +
       (stableFeltNoise(x, y) - 0.5) * 28;
-    image.data[index] = clampColor(32 + weave * 0.92);
-    image.data[index + 1] = clampColor(88 + weave * 0.84);
-    image.data[index + 2] = clampColor(70 + weave * 0.76);
+    image.data[index] = clampColor(24 + weave * 0.82);
+    image.data[index + 1] = clampColor(70 + weave * 0.74);
+    image.data[index + 2] = clampColor(54 + weave * 0.66);
     image.data[index + 3] = 255;
 
     const bumpValue = clampColor(124 + weave * 2.1);
@@ -969,7 +969,7 @@ function createFeltTextures(): {
   bumpContext.putImageData(bumpImage, 0, 0);
 
   colorContext.globalAlpha = 0.12;
-  colorContext.strokeStyle = "#c4dfc5";
+  colorContext.strokeStyle = "#a9cdae";
   colorContext.lineWidth = 0.5;
   for (let index = 0; index < 160; index += 1) {
     const x = stableFeltNoise(index, 3) * size;
@@ -1179,10 +1179,10 @@ function CameraShoulderFill({ intensity }: { intensity: number }) {
     }
     const cameraRight = new THREE.Vector3(1, 0, 0)
       .applyQuaternion(camera.quaternion)
-      .multiplyScalar(-0.85);
+      .multiplyScalar(-0.18);
     const cameraUp = new THREE.Vector3(0, 1, 0)
       .applyQuaternion(camera.quaternion)
-      .multiplyScalar(0.45);
+      .multiplyScalar(0.42);
     lightRef.current.position
       .copy(camera.position)
       .add(cameraRight)
@@ -1192,7 +1192,7 @@ function CameraShoulderFill({ intensity }: { intensity: number }) {
   });
 
   return (
-    <directionalLight ref={lightRef} intensity={intensity} color="#dce8ff" />
+    <directionalLight ref={lightRef} intensity={intensity} color="#fffaf3" />
   );
 }
 
@@ -1211,7 +1211,7 @@ function HandFaceFill({ intensity }: { intensity: number }) {
           key={position.join(",")}
           intensity={intensity}
           position={position}
-          color="#fff0dc"
+          color="#fff3e6"
         />
       ))}
     </>
@@ -1233,7 +1233,7 @@ export function ThreeDebugPanel({
   onLightingChange: (settings: LightingDebugSettings) => void;
   onSoundChange: (settings: SoundDebugSettings) => void;
 }) {
-  const [mode, setMode] = useState<"flick" | "lighting" | "sound">("sound");
+  const [mode, setMode] = useState<"flick" | "lighting" | "sound">("lighting");
 
   return (
     <aside className="three-debug-panel" aria-label="3D debug settings">
