@@ -871,23 +871,15 @@ h3 {
   z-index: 30;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
   max-width: calc(100vw - 64px);
   min-height: 26px;
-  padding: 3px 4px 3px 9px;
-  border: 1px solid rgb(245 245 244 / 12%);
-  border-radius: 999px;
-  background: rgb(19 22 20 / 72%);
-  box-shadow: 0 8px 22px rgb(0 0 0 / 28%);
+  padding: 3px 4px 3px 0;
   color: rgb(245 245 244 / 72%);
   font-size: 0.72rem;
   font-weight: 700;
   line-height: 1;
-  backdrop-filter: blur(10px);
   opacity: 1;
   transition:
-    background 160ms ease,
-    border-color 160ms ease,
     color 160ms ease,
     opacity 220ms ease;
 }
@@ -899,15 +891,7 @@ h3 {
 
 .mac-download-callout:hover,
 .mac-download-callout:focus-within {
-  border-color: rgb(245 245 244 / 20%);
-  background: rgb(29 34 31 / 86%);
   color: rgb(245 245 244 / 90%);
-}
-
-.mac-download-callout span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .mac-download-callout a {
@@ -917,13 +901,14 @@ h3 {
   gap: 4px;
   min-height: 20px;
   padding: 0 7px;
-  border: 1px solid rgb(245 245 244 / 14%);
+  border: 0;
   border-radius: 999px;
-  background: rgb(245 245 244 / 12%);
+  background: transparent;
   color: inherit;
   font-size: 0.68rem;
   font-weight: 800;
   text-decoration: none;
+  transition: background 160ms ease;
 }
 
 .mac-download-callout a:hover,
@@ -937,7 +922,7 @@ h3 {
   right: 10px;
   top: 44px;
   z-index: 31;
-  width: min(220px, calc(100vw - 20px));
+  width: min(260px, calc(100vw - 20px));
   padding: 8px 10px;
   border: 1px solid var(--stone-300);
   border-radius: 6px;
@@ -984,14 +969,17 @@ h3 {
 }
 
 .sim-shell .info-button {
-  background: rgb(19 22 20 / 72%);
-  box-shadow: 0 8px 22px rgb(0 0 0 / 28%);
+  background: transparent;
+  box-shadow: none;
   color: rgb(245 245 244 / 72%);
+  transition:
+    background 160ms ease,
+    color 160ms ease;
 }
 
 .sim-shell .info-button:hover,
 .sim-shell .info-button:focus-visible {
-  background: rgb(29 34 31 / 86%);
+  background: rgb(245 245 244 / 18%);
   color: rgb(245 245 244 / 90%);
 }
 

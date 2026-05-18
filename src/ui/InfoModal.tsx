@@ -1,10 +1,14 @@
+import { macScreenSaverDownloadHref } from "./downloadLinks";
+
 export function InfoModal({
   modalRef,
   seed,
+  showSeed = false,
   links = [],
 }: {
   modalRef: React.RefObject<HTMLElement | null>;
   seed: string;
+  showSeed?: boolean;
   links?: readonly InfoModalLink[];
 }) {
   return (
@@ -16,11 +20,15 @@ export function InfoModal({
     >
       <header>
         <h2 id="info-modal-title">Mahjong 3D</h2>
-        <p className="info-modal-subtitle">Taiwanese Mahjong 3D sim</p>
+        <p className="info-modal-subtitle">
+          Taiwanese Mahjong 3D infinite simulator
+        </p>
       </header>
       <p className="info-modal-meta">
-        Github:{" "}
-        <a href="https://github.com/elh/concealed-gang">elh/concealed-gang</a>
+        Download: <a href={macScreenSaverDownloadHref}>Mac screen saver</a>
+      </p>
+      <p className="info-modal-meta">
+        GitHub: <a href="https://github.com/elh/mahjong-3d">elh/mahjong-3d</a>
       </p>
       {links.length > 0 ? (
         <p className="info-modal-meta">
@@ -32,7 +40,7 @@ export function InfoModal({
           ))}
         </p>
       ) : null}
-      <p className="info-modal-meta">Seed: {seed}</p>
+      {showSeed ? <p className="info-modal-meta">Seed: {seed}</p> : null}
     </section>
   );
 }

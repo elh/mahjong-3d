@@ -18,6 +18,7 @@ import {
 } from "react";
 import type { GameEvent } from "./sim/events";
 import { replayEvents } from "./sim/replay";
+import { macScreenSaverDownloadHref } from "./ui/downloadLinks";
 import { EventLog } from "./ui/EventLog";
 import { eventDetail, eventTitle } from "./ui/eventText";
 import { InfoModal } from "./ui/InfoModal";
@@ -60,8 +61,6 @@ const turnBoundaryPauseMs = 100;
 const overlayControlsInactiveDelayMs = 5000;
 const overlayControlsMouseLeaveDelayMs = 3000;
 const debugRoutesEnabled = __DEBUG_MODE_ENABLED__;
-const macScreenSaverDownloadHref =
-  "https://github.com/elh/concealed-gang/releases/latest/download/Mahjong3D.dmg";
 
 const ThreeGameView = lazy(() =>
   import("./ui/three/ThreeGameView").then((module) => ({
@@ -289,6 +288,7 @@ function TableFlipDebugApp() {
       </Suspense>
       <InfoPopover
         seed={roundKey}
+        showSeed={debugRoutesEnabled}
         links={debugRouteLinks(roundKey, ["debug"])}
       />
       {showPerfPanel ? (
@@ -602,6 +602,7 @@ function DebugApp() {
 
       <InfoPopover
         seed={roundKey}
+        showSeed={debugRoutesEnabled}
         links={debugRouteLinks(roundKey, ["debug-table-flip"])}
       />
       {showPerfPanel ? (
@@ -1001,11 +1002,8 @@ function SimApp({
           <MacDownloadCallout autoHide={!areOverlayControlsVisible} />
           <InfoPopover
             seed={roundKey}
+            showSeed={debugRoutesEnabled}
             links={[
-              {
-                href: macScreenSaverDownloadHref,
-                label: "Mac screen saver",
-              },
               ...debugRouteLinks(roundKey, ["debug", "debug-table-flip"]),
             ]}
             showAutoOrbitButton={isCameraUserControlled}
@@ -1048,10 +1046,9 @@ function MacDownloadCallout({ autoHide = false }: { autoHide?: boolean }) {
         }
       }}
     >
-      <span>Mac screen saver</span>
       <a href={macScreenSaverDownloadHref} aria-label="Download macOS DMG">
         <Download size={14} aria-hidden="true" />
-        Download
+        Get the Mac screen saver
       </a>
     </aside>
   );
@@ -1240,12 +1237,14 @@ function usePrefersReducedMotion(): boolean {
 function InfoPopover({
   seed,
   links,
+  showSeed = false,
   showAutoOrbitButton = false,
   onAutoOrbitButtonClick,
   autoHide = false,
 }: {
   seed: string;
   links?: readonly InfoModalLink[];
+  showSeed?: boolean;
   showAutoOrbitButton?: boolean;
   onAutoOrbitButtonClick?: () => void;
   autoHide?: boolean;
@@ -1323,7 +1322,12 @@ function InfoPopover({
       </button>
 
       {isInfoOpen && (
-        <InfoModal modalRef={infoModalRef} seed={seed} links={links} />
+        <InfoModal
+          modalRef={infoModalRef}
+          seed={seed}
+          showSeed={showSeed}
+          links={links}
+        />
       )}
     </div>
   );
