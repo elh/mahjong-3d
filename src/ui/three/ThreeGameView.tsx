@@ -1,5 +1,6 @@
 import { Environment, OrbitControls, RoundedBox } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import type { Dpr } from "@react-three/fiber";
 import {
   type ContactForcePayload,
   CuboidCollider,
@@ -22,6 +23,10 @@ import type { GameEvent } from "../../sim/events";
 import type { ReplayState } from "../../sim/replay";
 import type { PlayerId } from "../../sim/state";
 import type { TileInstance } from "../../sim/tiles";
+import {
+  screenSaverFrameEventName,
+  screenSaverFrameTimestampFromEvent,
+} from "../screenSaverSurface";
 import { allTileImageUrls, tileImage } from "../tileImages";
 import {
   createTableFlipSettings,
@@ -47,6 +52,7 @@ const loadedDiscardSettlingMs = 180;
 const enableTileCollisionSound = false;
 const showThreeDebugPanel = __DEBUG_MODE_ENABLED__;
 const tileSoundCooldownMs = 62;
+const tileTextureLoadTimeoutMs = 2500;
 const tableHalfSize = 3.24;
 const tableSlabDepth = 0.24;
 const tableRailWidth = 0.16;
@@ -119,6 +125,7 @@ const centerTableMarkTextureEntry: TileTextureEntry = {
   listeners: new Set(),
 };
 let centerTableFallbackMarkTexture: THREE.CanvasTexture | undefined;
+const centerTableMarkUrl = `${import.meta.env.BASE_URL ?? "/"}marks/huang.svg`;
 let tileAudioContext: AudioContext | undefined;
 let lastTileSoundAt = 0;
 type FlickDebugSettings = {
@@ -224,6 +231,12 @@ type ThreeGameViewProps = {
   cameraUserControlled?: boolean;
   onCameraUserControlChange?: (isUserControlled: boolean) => void;
   renderPaused?: boolean;
+  renderDpr?: Dpr;
+  pointerControlsEnabled?: boolean;
+  audioEnabled?: boolean;
+  sceneReadyMode?: "raf" | "timer";
+  screenSaverFrameDriver?: boolean;
+  allowInitialRenderWhilePaused?: boolean;
   suppressLoadingOverlay?: boolean;
   preserveSceneOnRoundChange?: boolean;
   tableFlipDebug?: boolean;
@@ -245,6 +258,12 @@ export function ThreeGameView({
   cameraUserControlled,
   onCameraUserControlChange,
   renderPaused = false,
+  renderDpr = [1, 1.75],
+  pointerControlsEnabled = true,
+  audioEnabled = true,
+  sceneReadyMode = "raf",
+  screenSaverFrameDriver = false,
+  allowInitialRenderWhilePaused = false,
   suppressLoadingOverlay = false,
   preserveSceneOnRoundChange = false,
   tableFlipDebug = false,
@@ -261,6 +280,7 @@ export function ThreeGameView({
     defaultTableFlipDebugSettings,
   );
   const [sceneReady, setSceneReady] = useState(false);
+  const [hasSceneBeenVisible, setHasSceneBeenVisible] = useState(false);
   const [tableFlipRun, setTableFlipRun] = useState(0);
   const [tableFlipPhysicsKey, setTableFlipPhysicsKey] = useState(0);
   const [tableFlipSnapshot, setTableFlipSnapshot] = useState<
@@ -312,11 +332,17 @@ export function ThreeGameView({
   );
   const requiredTileTextureUrls = useMemo(() => allTileImageUrls(), []);
   const tileFacesReady = useTileTexturesReady(requiredTileTextureUrls);
+  const centerTableMarkReady = useCenterTableMarkReady();
   const sceneVisible =
     sceneReady &&
     tileFacesReady &&
-    (!roundChanged || preserveSceneOnRoundChange) &&
+    centerTableMarkReady &&
+    !roundChanged &&
     !loading;
+  const effectiveRenderPaused =
+    renderPaused && (!allowInitialRenderWhilePaused || hasSceneBeenVisible);
+  const canvasFrameloop =
+    screenSaverFrameDriver || effectiveRenderPaused ? "never" : "always";
   const isTerminalRevealEvent =
     currentEvent?.type === "winDeclared" ||
     currentEvent?.type === "drawDeclared";
@@ -445,6 +471,11 @@ export function ThreeGameView({
       }),
     );
     setTableFlipRun((run) => run + 1);
+    if (screenSaverFrameDriver) {
+      setIsTableFlipMotionActive(true);
+      return;
+    }
+
     tableFlipDelayTimeoutRef.current = window.setTimeout(() => {
       tableFlipDelayTimeoutRef.current = undefined;
       setIsTableFlipMotionActive(true);
@@ -453,6 +484,7 @@ export function ThreeGameView({
     layout.tiles,
     replay.ended,
     roundKey,
+    screenSaverFrameDriver,
     tableFlipDebugSettings.prepDelayMs,
     tableFlipDebugSettings.variability,
   ]);
@@ -528,7 +560,7 @@ export function ThreeGameView({
   );
 
   useEffect(() => {
-    if (!enableTileCollisionSound) {
+    if (!audioEnabled || !enableTileCollisionSound) {
       return;
     }
 
@@ -542,34 +574,43 @@ export function ThreeGameView({
       window.removeEventListener("pointerdown", unlockAudio);
       window.removeEventListener("keydown", unlockAudio);
     };
-  }, []);
+  }, [audioEnabled]);
 
   useEffect(() => {
     if (!sceneVisible) {
       return;
     }
+    setHasSceneBeenVisible(true);
     didMountRef.current = true;
     lastEventIndexRef.current = eventIndex;
   });
 
   useEffect(() => {
     void roundKey;
-    if (preserveSceneOnRoundChangeRef.current) {
-      return;
-    }
     setSceneReady(false);
-    setInternalCameraUserControlled(false);
+    setHasSceneBeenVisible(false);
+    if (!preserveSceneOnRoundChangeRef.current) {
+      setInternalCameraUserControlled(false);
+    }
     let timeout: number | undefined;
-    const frame = window.requestAnimationFrame(() => {
+    let frame: number | undefined;
+    const markReady = () => {
       timeout = window.setTimeout(() => setSceneReady(true), 120);
-    });
+    };
+    if (sceneReadyMode === "timer") {
+      markReady();
+    } else {
+      frame = window.requestAnimationFrame(markReady);
+    }
     return () => {
-      window.cancelAnimationFrame(frame);
+      if (frame !== undefined) {
+        window.cancelAnimationFrame(frame);
+      }
       if (timeout !== undefined) {
         window.clearTimeout(timeout);
       }
     };
-  }, [roundKey]);
+  }, [roundKey, sceneReadyMode]);
 
   return (
     <section className="three-viewer" aria-label="3D autonomous game viewer">
@@ -628,9 +669,20 @@ export function ThreeGameView({
         </div>
       ) : null}
       <Canvas
-        frameloop={renderPaused ? "never" : "always"}
+        className="three-r3f-canvas"
+        frameloop={canvasFrameloop}
         shadows="percentage"
-        dpr={[1, 1.75]}
+        dpr={renderDpr}
+        gl={{
+          alpha: false,
+          antialias: true,
+          powerPreference: "high-performance",
+        }}
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: 2,
+        }}
         camera={{
           position: cameraPreset.position,
           fov: cameraPreset.fov,
@@ -642,9 +694,16 @@ export function ThreeGameView({
           gl.toneMapping = sceneToneMapping;
           gl.toneMappingExposure = sceneToneMappingExposure;
         }}
-        onPointerDown={() => setIsCameraUserControlled(true)}
+        onPointerDown={() => {
+          if (pointerControlsEnabled) {
+            setIsCameraUserControlled(true);
+          }
+        }}
       >
         <CameraPresetSync preset={cameraPreset} />
+        {screenSaverFrameDriver ? (
+          <ScreenSaverFrameDriver active={!effectiveRenderPaused} />
+        ) : null}
         <color attach="background" args={[sceneBackgroundColor]} />
         <ambientLight intensity={lightingDebug.ambientIntensity} />
         <hemisphereLight
@@ -691,7 +750,7 @@ export function ThreeGameView({
             numSolverIterations={tableFlipEnabled ? 10 : undefined}
             numInternalPgsIterations={tableFlipEnabled ? 2 : undefined}
             maxCcdSubsteps={tableFlipEnabled ? 4 : undefined}
-            paused={isTableFlipPhysicsPaused}
+            paused={renderPaused || isTableFlipPhysicsPaused}
           >
             {tableFlipEnabled ? (
               <FlipTable
@@ -785,6 +844,8 @@ export function ThreeGameView({
             simulatorMode && cameraAutoRotate && !isCameraUserControlled
           }
           autoRotateSpeed={0.14}
+          enableRotate={pointerControlsEnabled}
+          enableZoom={pointerControlsEnabled}
           enablePan={false}
           enableDamping
           target={cameraPreset.target}
@@ -856,6 +917,34 @@ function CameraPresetSync({ preset }: { preset: CameraPreset }) {
       camera.updateProjectionMatrix();
     }
   }, [camera, preset]);
+
+  return null;
+}
+
+function ScreenSaverFrameDriver({ active }: { active: boolean }) {
+  const advance = useThree((state) => state.advance);
+
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+
+    const renderFrame = (timestampMs: number) => {
+      // R3F's manual frameloop stores clock elapsed time in seconds, while the
+      // native bridge and browser Performance API use milliseconds.
+      advance(timestampMs / 1000, true);
+    };
+
+    const handleNativeFrame = (event: Event) => {
+      renderFrame(screenSaverFrameTimestampFromEvent(event, performance.now()));
+    };
+
+    renderFrame(performance.now());
+    window.addEventListener(screenSaverFrameEventName, handleNativeFrame);
+    return () => {
+      window.removeEventListener(screenSaverFrameEventName, handleNativeFrame);
+    };
+  }, [active, advance]);
 
   return null;
 }
@@ -1018,8 +1107,9 @@ function clampColor(value: number): number {
 
 function CenterTableMark() {
   const loadedTexture = useCenterTableMarkTexture();
-  const fallbackTexture = useMemo(() => centerTableFallbackTexture(), []);
-  const texture = loadedTexture ?? fallbackTexture;
+  const texture =
+    loadedTexture ??
+    (centerTableMarkTextureEntry.didFail ? centerTableFallbackTexture() : null);
 
   if (!texture) {
     return null;
@@ -1046,38 +1136,9 @@ function useCenterTableMarkTexture(): THREE.Texture | undefined {
   const [texture, setTexture] = useState(centerTableMarkTextureEntry.texture);
 
   useEffect(() => {
-    const entry = centerTableMarkTextureEntry;
+    const entry = ensureCenterTableMarkLoading();
     entry.listeners.add(setTexture);
-    if (entry.texture || entry.isLoading || entry.didFail) {
-      setTexture(entry.texture);
-      return () => {
-        entry.listeners.delete(setTexture);
-      };
-    }
-
-    entry.isLoading = true;
-    const loader = new THREE.TextureLoader();
-    loader.load(
-      `${import.meta.env.BASE_URL ?? "/"}marks/huang.svg`,
-      (mark) => {
-        mark.colorSpace = THREE.SRGBColorSpace;
-        mark.anisotropy = 4;
-        mark.needsUpdate = true;
-        entry.texture = mark;
-        entry.isLoading = false;
-        for (const listener of entry.listeners) {
-          listener(mark);
-        }
-      },
-      undefined,
-      () => {
-        entry.didFail = true;
-        entry.isLoading = false;
-        for (const listener of entry.listeners) {
-          listener(undefined);
-        }
-      },
-    );
+    setTexture(entry.texture);
 
     return () => {
       entry.listeners.delete(setTexture);
@@ -1085,6 +1146,64 @@ function useCenterTableMarkTexture(): THREE.Texture | undefined {
   }, []);
 
   return texture;
+}
+
+function useCenterTableMarkReady(): boolean {
+  const [isReady, setIsReady] = useState(() => isCenterTableMarkReady());
+
+  useEffect(() => {
+    const entry = ensureCenterTableMarkLoading();
+    if (isCenterTableMarkReady()) {
+      setIsReady(true);
+      return;
+    }
+
+    const listener = () => setIsReady(isCenterTableMarkReady());
+    entry.listeners.add(listener);
+    return () => {
+      entry.listeners.delete(listener);
+    };
+  }, []);
+
+  return isReady;
+}
+
+function isCenterTableMarkReady(): boolean {
+  return (
+    centerTableMarkTextureEntry.texture !== undefined ||
+    centerTableMarkTextureEntry.didFail === true
+  );
+}
+
+function ensureCenterTableMarkLoading(): TileTextureEntry {
+  const entry = centerTableMarkTextureEntry;
+  if (entry.texture || entry.isLoading || entry.didFail) {
+    return entry;
+  }
+
+  entry.isLoading = true;
+  new THREE.TextureLoader().load(
+    centerTableMarkUrl,
+    (mark) => {
+      mark.colorSpace = THREE.SRGBColorSpace;
+      mark.anisotropy = 4;
+      mark.needsUpdate = true;
+      entry.texture = mark;
+      entry.isLoading = false;
+      for (const listener of entry.listeners) {
+        listener(mark);
+      }
+    },
+    undefined,
+    () => {
+      entry.didFail = true;
+      entry.isLoading = false;
+      for (const listener of entry.listeners) {
+        listener(undefined);
+      }
+    },
+  );
+  return entry;
 }
 
 function centerTableFallbackTexture(): THREE.CanvasTexture {
@@ -2975,9 +3094,31 @@ function ensureTileTextureLoading(url: string): TileTextureEntry {
   }
 
   entry.isLoading = true;
+  let didSettle = false;
+  const timeout = window.setTimeout(() => {
+    if (didSettle) {
+      return;
+    }
+    didSettle = true;
+    const timedOutEntry = tileTextureCache.get(url);
+    if (!timedOutEntry) {
+      return;
+    }
+    timedOutEntry.isLoading = false;
+    timedOutEntry.didFail = true;
+    for (const listener of timedOutEntry.listeners) {
+      listener(undefined);
+    }
+  }, tileTextureLoadTimeoutMs);
   new THREE.TextureLoader().load(
     url,
     (loadedTexture) => {
+      if (didSettle) {
+        loadedTexture.dispose();
+        return;
+      }
+      didSettle = true;
+      window.clearTimeout(timeout);
       configureTileTexture(loadedTexture);
       const loadedEntry = tileTextureCache.get(url);
       if (!loadedEntry) {
@@ -2991,6 +3132,11 @@ function ensureTileTextureLoading(url: string): TileTextureEntry {
     },
     undefined,
     () => {
+      if (didSettle) {
+        return;
+      }
+      didSettle = true;
+      window.clearTimeout(timeout);
       const failedEntry = tileTextureCache.get(url);
       if (!failedEntry) {
         return;

@@ -1,10 +1,5 @@
-import { createBaselineBots } from "../bots/baselineBot";
-import {
-  type SimulateRoundResult,
-  simulateRound,
-  simulateTestScenarioRound,
-} from "./engine";
-import { isTestScenarioSeed } from "./testScenarios";
+import type { SimulateRoundResult } from "./engine";
+import { simulateRoundForSeed } from "./runSimulation";
 
 export type SimulationRequest = {
   requestId: number;
@@ -26,12 +21,7 @@ export type SimulationResponse =
 self.onmessage = (event: MessageEvent<SimulationRequest>) => {
   const { requestId, seed } = event.data;
   try {
-    const result = isTestScenarioSeed(seed)
-      ? simulateTestScenarioRound(seed)
-      : simulateRound({
-          seed,
-          bots: createBaselineBots(),
-        });
+    const result = simulateRoundForSeed(seed);
     self.postMessage({
       requestId,
       status: "complete",

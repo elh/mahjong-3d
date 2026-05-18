@@ -7,8 +7,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:screensaver": "tsc -b && vite build --mode screensaver",
     "bench:sim": "bun run scripts/benchSim.ts",
-    "clean": "rm -rf dist",
+    "clean": "rm -rf dist dist-screensaver macos/build",
     "format": "biome format --write .",
     "format:check": "biome check . --linter-enabled=false --assist-enabled=false",
     "good": "bun run format:check && bun run lint && bun run knip && bun run typecheck && bun run test && bun run build",

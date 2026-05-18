@@ -22,9 +22,17 @@ type QueuedRound = {
 export function useSimulationController({
   syncSeedToUrl = true,
   defaultSeed,
+  active = true,
+  preloadEnabled = true,
+  workerEnabled = true,
+  workerFallbackEnabled = false,
 }: {
   syncSeedToUrl?: boolean;
   defaultSeed?: string;
+  active?: boolean;
+  preloadEnabled?: boolean;
+  workerEnabled?: boolean;
+  workerFallbackEnabled?: boolean;
 } = {}) {
   const initialSeed = useMemo(
     () => seedFromUrlOrRandom(defaultSeed),
@@ -54,6 +62,8 @@ export function useSimulationController({
   const preloadRequestIdRef = useRef(0);
   const preloadWorkerRef = useRef<Worker | null>(null);
   const preloadRetryTimeoutRef = useRef<number | undefined>(undefined);
+  const fallbackGenerationTimeoutRef = useRef<number | undefined>(undefined);
+  const fallbackPreloadTimeoutRef = useRef<number | undefined>(undefined);
   const events = game?.events ?? [];
   const replay = useMemo(
     () => replayEvents(events, eventIndex),
@@ -70,7 +80,7 @@ export function useSimulationController({
   const canStepPrevious = !atStart && events.length > 0;
   const canStepNext = !atEnd && events.length > 0;
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: bootstrap and popstate wiring should be registered once for the app lifetime.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: safe because this is intentionally one-shot app bootstrap. Dynamic changes are handled by queueSimulation request ids and the explicit active/preload effects below.
   useEffect(() => {
     queueSimulation(initialSeed, { replaceUrl: true });
 
@@ -88,14 +98,50 @@ export function useSimulationController({
       preloadWorkerRef.current?.terminate();
       preloadWorkerRef.current = null;
       clearPreloadRetry();
+      clearFallbackGeneration();
+      clearFallbackPreload();
       clearEventHold();
       clearPendingStep();
       clearEventScrub({ updateState: false });
     };
   }, []);
 
-  function createSimulationWorker() {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: safe because this effect only reacts to active edge changes; generation identity is guarded by requestIdRef and the latest seed is stored in state before pausing.
+  useEffect(() => {
+    if (!active) {
+      workerRef.current?.terminate();
+      workerRef.current = null;
+      preloadWorkerRef.current?.terminate();
+      preloadWorkerRef.current = null;
+      clearPreloadRetry();
+      clearFallbackGeneration();
+      clearFallbackPreload();
+      setNextRoundPreloading(false);
+      setIsGenerating(false);
+      return;
+    }
+
+    if (!game && !isGenerating) {
+      queueSimulation(pendingSeed, { replaceUrl: true });
+    }
+  }, [active]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: safe because disabling preload is a cancellation edge; queued/preloading state is mirrored through refs to avoid stale retry callbacks.
+  useEffect(() => {
+    if (preloadEnabled) {
+      return;
+    }
+    preloadWorkerRef.current?.terminate();
+    preloadWorkerRef.current = null;
+    clearPreloadRetry();
+    clearFallbackPreload();
+    setQueuedPreloadRound(undefined);
+    setNextRoundPreloading(false);
+  }, [preloadEnabled]);
+
+  function createSimulationWorker(seed: string) {
     workerRef.current?.terminate();
+    clearFallbackGeneration();
     const worker = new Worker(
       new URL("../sim/simulationWorker.ts", import.meta.url),
       {
@@ -106,6 +152,7 @@ export function useSimulationController({
       if (event.data.requestId !== requestIdRef.current) {
         return;
       }
+      clearFallbackGeneration();
 
       if (event.data.status === "error") {
         setIsGenerating(false);
@@ -123,9 +170,14 @@ export function useSimulationController({
       }
     };
     worker.onerror = () => {
+      clearFallbackGeneration();
       if (workerRef.current === worker) {
-        setIsGenerating(false);
-        setGenerationError("Simulation worker failed.");
+        if (workerFallbackEnabled) {
+          startFallbackGeneration(requestIdRef.current, seed);
+        } else {
+          setIsGenerating(false);
+          setGenerationError("Simulation worker failed.");
+        }
       }
       worker.terminate();
       if (workerRef.current === worker) {
@@ -133,11 +185,21 @@ export function useSimulationController({
       }
     };
     workerRef.current = worker;
+    if (workerFallbackEnabled) {
+      fallbackGenerationTimeoutRef.current = window.setTimeout(() => {
+        fallbackGenerationTimeoutRef.current = undefined;
+        if (workerRef.current !== worker) {
+          return;
+        }
+        startFallbackGeneration(requestIdRef.current, seed);
+      }, 1500);
+    }
     return worker;
   }
 
-  function createPreloadWorker() {
+  function createPreloadWorker(seed: string) {
     preloadWorkerRef.current?.terminate();
+    clearFallbackPreload();
     const worker = new Worker(
       new URL("../sim/simulationWorker.ts", import.meta.url),
       {
@@ -148,6 +210,7 @@ export function useSimulationController({
       if (event.data.requestId !== preloadRequestIdRef.current) {
         return;
       }
+      clearFallbackPreload();
 
       worker.terminate();
       if (preloadWorkerRef.current === worker) {
@@ -166,13 +229,27 @@ export function useSimulationController({
       setNextRoundPreloading(false);
     };
     worker.onerror = () => {
+      clearFallbackPreload();
       worker.terminate();
       if (preloadWorkerRef.current === worker) {
         preloadWorkerRef.current = null;
       }
-      retryPreloadNextRound();
+      if (workerFallbackEnabled) {
+        startFallbackPreload(preloadRequestIdRef.current, seed);
+      } else {
+        retryPreloadNextRound();
+      }
     };
     preloadWorkerRef.current = worker;
+    if (workerFallbackEnabled) {
+      fallbackPreloadTimeoutRef.current = window.setTimeout(() => {
+        fallbackPreloadTimeoutRef.current = undefined;
+        if (preloadWorkerRef.current !== worker) {
+          return;
+        }
+        startFallbackPreload(preloadRequestIdRef.current, seed);
+      }, 1500);
+    }
     return worker;
   }
 
@@ -190,16 +267,32 @@ export function useSimulationController({
   }, []);
 
   function startNextRoundPreload() {
+    if (!active || !preloadEnabled) {
+      return;
+    }
     clearPreloadRetry();
     const seed = randomSeed();
     const requestId = preloadRequestIdRef.current + 1;
     preloadRequestIdRef.current = requestId;
     setNextRoundPreloading(true);
-    const worker = createPreloadWorker();
-    worker.postMessage({
-      requestId,
-      seed,
-    } satisfies SimulationRequest);
+    if (!workerEnabled) {
+      startFallbackPreload(requestId, seed);
+      return;
+    }
+
+    try {
+      const worker = createPreloadWorker(seed);
+      worker.postMessage({
+        requestId,
+        seed,
+      } satisfies SimulationRequest);
+    } catch {
+      if (workerFallbackEnabled) {
+        startFallbackPreload(requestId, seed);
+      } else {
+        retryPreloadNextRound();
+      }
+    }
   }
 
   function queueSimulation(
@@ -223,11 +316,29 @@ export function useSimulationController({
     setGenerationError(undefined);
     clearPendingStep();
     clearEventScrub();
-    const worker = createSimulationWorker();
-    worker.postMessage({
-      requestId,
-      seed: nextSeed,
-    } satisfies SimulationRequest);
+    if (!active) {
+      setIsGenerating(false);
+      return;
+    }
+    if (!workerEnabled) {
+      startFallbackGeneration(requestId, nextSeed);
+      return;
+    }
+
+    try {
+      const worker = createSimulationWorker(nextSeed);
+      worker.postMessage({
+        requestId,
+        seed: nextSeed,
+      } satisfies SimulationRequest);
+    } catch {
+      if (workerFallbackEnabled) {
+        startFallbackGeneration(requestId, nextSeed);
+      } else {
+        setIsGenerating(false);
+        setGenerationError("Simulation worker failed.");
+      }
+    }
   }
 
   const clearPreloadRetry = useCallback(() => {
@@ -237,15 +348,25 @@ export function useSimulationController({
     }
   }, []);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: preload state is guarded through refs so retry callbacks never close over stale state.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: safe because queued/preloading state is read from refs that are updated with the React state setters.
   const preloadNextRound = useCallback(() => {
-    if (queuedRoundRef.current || isPreloadingNextRoundRef.current) {
+    if (
+      !active ||
+      !preloadEnabled ||
+      queuedRoundRef.current ||
+      isPreloadingNextRoundRef.current
+    ) {
       return;
     }
     startNextRoundPreload();
-  }, []);
+  }, [active, preloadEnabled]);
 
   function retryPreloadNextRound() {
+    if (!active || !preloadEnabled) {
+      setQueuedPreloadRound(undefined);
+      setNextRoundPreloading(false);
+      return;
+    }
     setQueuedPreloadRound(undefined);
     setNextRoundPreloading(false);
     clearPreloadRetry();
@@ -349,6 +470,20 @@ export function useSimulationController({
     [events.length, clearEventScrub],
   );
 
+  const stepEventImmediate = useCallback(
+    (direction: -1 | 1) => {
+      clearPendingStep();
+      clearEventScrub();
+      setEventIndex((index) =>
+        Math.min(
+          Math.max(0, index + direction),
+          Math.max(events.length - 1, 0),
+        ),
+      );
+    },
+    [events.length, clearEventScrub, clearPendingStep],
+  );
+
   const jumpToEventIndex = useCallback(
     (index: number) => {
       clearPendingStep();
@@ -392,6 +527,98 @@ export function useSimulationController({
       window.clearInterval(holdIntervalRef.current);
       holdIntervalRef.current = undefined;
     }
+  }
+
+  function clearFallbackGeneration() {
+    if (fallbackGenerationTimeoutRef.current !== undefined) {
+      window.clearTimeout(fallbackGenerationTimeoutRef.current);
+      fallbackGenerationTimeoutRef.current = undefined;
+    }
+  }
+
+  function clearFallbackPreload() {
+    if (fallbackPreloadTimeoutRef.current !== undefined) {
+      window.clearTimeout(fallbackPreloadTimeoutRef.current);
+      fallbackPreloadTimeoutRef.current = undefined;
+    }
+  }
+
+  function startFallbackGeneration(requestId: number, seed: string) {
+    clearFallbackGeneration();
+    workerRef.current?.terminate();
+    workerRef.current = null;
+    const generate = async () => {
+      if (!active || requestId !== requestIdRef.current) {
+        return;
+      }
+      try {
+        const result = await simulateRoundForSeedWithoutWorker(seed);
+        if (requestId !== requestIdRef.current) {
+          return;
+        }
+        setGenerationError(undefined);
+        setGame(result);
+        setEventIndex(0);
+        setIsGenerating(false);
+      } catch (error) {
+        setIsGenerating(false);
+        setGenerationError(
+          error instanceof Error ? error.message : "Simulation failed.",
+        );
+      }
+    };
+    if (!workerEnabled) {
+      void generate();
+      return;
+    }
+    fallbackGenerationTimeoutRef.current = window.setTimeout(() => {
+      fallbackGenerationTimeoutRef.current = undefined;
+      void generate();
+    }, 0);
+  }
+
+  function startFallbackPreload(requestId: number, seed = randomSeed()): void {
+    if (!active || !preloadEnabled) {
+      return;
+    }
+    clearFallbackPreload();
+    preloadWorkerRef.current?.terminate();
+    preloadWorkerRef.current = null;
+    setNextRoundPreloading(true);
+    const preload = async () => {
+      if (
+        !active ||
+        !preloadEnabled ||
+        requestId !== preloadRequestIdRef.current
+      ) {
+        return;
+      }
+      try {
+        const result = await simulateRoundForSeedWithoutWorker(seed);
+        if (
+          !active ||
+          !preloadEnabled ||
+          requestId !== preloadRequestIdRef.current
+        ) {
+          return;
+        }
+        setQueuedPreloadRound({
+          seed: result.seed,
+          result,
+        });
+        setNextRoundPreloading(false);
+      } catch {
+        retryPreloadNextRound();
+      }
+    };
+    if (!workerEnabled) {
+      void preload();
+      return;
+    }
+    fallbackPreloadTimeoutRef.current = window.setTimeout(() => {
+      fallbackPreloadTimeoutRef.current = undefined;
+      void preload();
+    }, 0);
   }
 
   function cancelEventHold() {
@@ -444,6 +671,7 @@ export function useSimulationController({
     preloadNextRound,
     promoteQueuedRound,
     stepEvent,
+    stepEventImmediate,
     jumpToEventIndex,
     scrubToEventIndex,
     clearEventHold,
@@ -521,4 +749,11 @@ function groupEvents(events: readonly GameEvent[]): EventGroup[] {
     groups.set(event.groupId, group);
   });
   return [...groups.values()];
+}
+
+async function simulateRoundForSeedWithoutWorker(
+  seed: string,
+): Promise<SimulateRoundResult> {
+  const { simulateRoundForSeed } = await import("../sim/runSimulation");
+  return simulateRoundForSeed(seed);
 }
