@@ -31,6 +31,6 @@ First and foremost, this project is about making a pleasing, passive simulation 
 * Keep changes focused
 * Use Bun for package management and scripts
 * Keep simulation rules out of React UI code
-* Test changes to Mac builds e2e carefully
+* Test changes to macOS builds e2e carefully
 * Preserve tile art attribution and license notes
 * Run `make good`

@@ -142,16 +142,6 @@ func makeBackground() -> NSImage {
         withAttributes: footerAttributes
     )
 
-    let creditAttributes: [NSAttributedString.Key: Any] = [
-        .font: NSFont.systemFont(ofSize: 12, weight: .medium),
-        .foregroundColor: NSColor(calibratedWhite: 0.82, alpha: 0.48),
-        .paragraphStyle: titleStyle,
-    ]
-    "by Eugene Huang - github.com/elh".draw(
-        in: NSRect(x: 68, y: 95, width: 360, height: 20),
-        withAttributes: creditAttributes
-    )
-
     image.unlockFocus()
     return image
 }

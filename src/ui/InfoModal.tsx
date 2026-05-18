@@ -25,7 +25,7 @@ export function InfoModal({
         </p>
       </header>
       <p className="info-modal-meta">
-        Download: <a href={macScreenSaverDownloadHref}>Mac screen saver</a>
+        Download: <a href={macScreenSaverDownloadHref}>macOS screen saver</a>
       </p>
       <p className="info-modal-meta">
         GitHub: <a href="https://github.com/elh/mahjong-3d">elh/mahjong-3d</a>

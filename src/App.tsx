@@ -1048,7 +1048,7 @@ function MacDownloadCallout({ autoHide = false }: { autoHide?: boolean }) {
     >
       <a href={macScreenSaverDownloadHref} aria-label="Download macOS DMG">
         <Download size={14} aria-hidden="true" />
-        Get the Mac screen saver
+        Get the macOS screen saver
       </a>
     </aside>
   );
