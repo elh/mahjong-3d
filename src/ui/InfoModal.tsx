@@ -19,7 +19,8 @@ export function InfoModal({
         <p className="info-modal-subtitle">Taiwanese Mahjong 3D sim</p>
       </header>
       <p className="info-modal-meta">
-        Github: <a href="https://github.com/elh/mahjong-3d">elh/mahjong-3d</a>
+        Github:{" "}
+        <a href="https://github.com/elh/concealed-gang">elh/concealed-gang</a>
       </p>
       {links.length > 0 ? (
         <p className="info-modal-meta">

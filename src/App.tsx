@@ -1,6 +1,7 @@
 import {
   ChevronLeft,
   ChevronRight,
+  Download,
   Info,
   Orbit,
   RefreshCw,
@@ -59,6 +60,8 @@ const turnBoundaryPauseMs = 100;
 const overlayControlsInactiveDelayMs = 5000;
 const overlayControlsMouseLeaveDelayMs = 3000;
 const debugRoutesEnabled = __DEBUG_MODE_ENABLED__;
+const macScreenSaverDownloadHref =
+  "https://github.com/elh/concealed-gang/releases/latest/download/Mahjong3D.dmg";
 
 const ThreeGameView = lazy(() =>
   import("./ui/three/ThreeGameView").then((module) => ({
@@ -994,13 +997,22 @@ function SimApp({
         />
       </Suspense>
       {!runtimeOptions.isScreenSaver ? (
-        <InfoPopover
-          seed={roundKey}
-          links={debugRouteLinks(roundKey, ["debug", "debug-table-flip"])}
-          showAutoOrbitButton={isCameraUserControlled}
-          onAutoOrbitButtonClick={() => setIsCameraUserControlled(false)}
-          autoHide={!areOverlayControlsVisible}
-        />
+        <>
+          <MacDownloadCallout autoHide={!areOverlayControlsVisible} />
+          <InfoPopover
+            seed={roundKey}
+            links={[
+              {
+                href: macScreenSaverDownloadHref,
+                label: "Mac screen saver",
+              },
+              ...debugRouteLinks(roundKey, ["debug", "debug-table-flip"]),
+            ]}
+            showAutoOrbitButton={isCameraUserControlled}
+            onAutoOrbitButtonClick={() => setIsCameraUserControlled(false)}
+            autoHide={!areOverlayControlsVisible}
+          />
+        </>
       ) : null}
       {showPerfPanel ? (
         <PerfPanel
@@ -1011,6 +1023,37 @@ function SimApp({
         />
       ) : null}
     </main>
+  );
+}
+
+function MacDownloadCallout({ autoHide = false }: { autoHide?: boolean }) {
+  const [hasOverlayFocus, setHasOverlayFocus] = useState(false);
+  const shouldHideOverlay = autoHide && !hasOverlayFocus;
+
+  return (
+    <aside
+      className={
+        shouldHideOverlay
+          ? "mac-download-callout is-hidden"
+          : "mac-download-callout"
+      }
+      aria-label="Download macOS screen saver"
+      onFocusCapture={() => setHasOverlayFocus(true)}
+      onBlurCapture={(event) => {
+        if (
+          !(event.relatedTarget instanceof Node) ||
+          !event.currentTarget.contains(event.relatedTarget)
+        ) {
+          setHasOverlayFocus(false);
+        }
+      }}
+    >
+      <span>Mac screen saver</span>
+      <a href={macScreenSaverDownloadHref} aria-label="Download macOS DMG">
+        <Download size={14} aria-hidden="true" />
+        Download
+      </a>
+    </aside>
   );
 }
 
