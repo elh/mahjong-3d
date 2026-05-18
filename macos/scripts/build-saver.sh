@@ -25,6 +25,8 @@ rm -rf "$BUNDLE"
 mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources/Web"
 cp "$NATIVE_DIR/Info.plist" "$BUNDLE/Contents/Info.plist"
 cp "$NATIVE_RESOURCE_DIR/Mahjong3D.icns" "$BUNDLE/Contents/Resources/Mahjong3D.icns"
+cp "$ASSET_BUILD_DIR/thumbnail.png" "$BUNDLE/Contents/Resources/thumbnail.png"
+cp "$ASSET_BUILD_DIR/thumbnail@2x.png" "$BUNDLE/Contents/Resources/thumbnail@2x.png"
 rsync -a --delete "$WEB_DIST/" "$BUNDLE/Contents/Resources/Web/"
 
 arch_outputs=()

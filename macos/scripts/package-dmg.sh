@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MACOS_DIR="$ROOT_DIR/macos"
 BUILD_DIR="$MACOS_DIR/build"
 BUNDLE="$BUILD_DIR/Mahjong3D.saver"
-DMG_BUNDLE_NAME=" .saver"
+DMG_BUNDLE_NAME="Mahjong3D.saver"
 DMG_STAGING="$BUILD_DIR/dmg-staging"
 DMG="$BUILD_DIR/Mahjong3D.dmg"
 

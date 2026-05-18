@@ -17,10 +17,27 @@ guard let preview = NSImage(contentsOf: previewURL) else {
 
 func savePNG(_ image: NSImage, to url: URL) throws {
     guard
-        let tiff = image.tiffRepresentation,
-        let bitmap = NSBitmapImageRep(data: tiff),
-        let png = bitmap.representation(using: .png, properties: [:])
+        let bitmap = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(image.size.width),
+            pixelsHigh: Int(image.size.height),
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ),
+        let context = NSGraphicsContext(bitmapImageRep: bitmap)
     else {
+        throw NSError(domain: "Mahjong3DAssets", code: 1)
+    }
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = context
+    image.draw(in: NSRect(origin: .zero, size: image.size))
+    NSGraphicsContext.restoreGraphicsState()
+    guard let png = bitmap.representation(using: .png, properties: [:]) else {
         throw NSError(domain: "Mahjong3DAssets", code: 1)
     }
     try png.write(to: url)
@@ -177,6 +194,29 @@ func makeIconSource() -> NSImage {
     return image
 }
 
+func makeThumbnail(size: NSSize) -> NSImage {
+    let image = NSImage(size: size)
+    image.lockFocus()
+
+    NSColor(calibratedRed: 13 / 255, green: 34 / 255, blue: 28 / 255, alpha: 1).setFill()
+    NSRect(origin: .zero, size: size).fill()
+
+    drawPreview(
+        preview,
+        in: NSRect(origin: .zero, size: size),
+        cornerRadius: 0,
+        opacity: 1
+    )
+
+    image.unlockFocus()
+    return image
+}
+
 try savePNG(makeBackground(), to: outputURL.appendingPathComponent("dmg-background.png"))
 let iconSource = makeIconSource()
 try savePNG(iconSource, to: outputURL.appendingPathComponent("icon-source.png"))
+try savePNG(makeThumbnail(size: NSSize(width: 90, height: 58)), to: outputURL.appendingPathComponent("thumbnail.png"))
+try savePNG(
+    makeThumbnail(size: NSSize(width: 180, height: 116)),
+    to: outputURL.appendingPathComponent("thumbnail@2x.png")
+)
