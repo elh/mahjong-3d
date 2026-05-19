@@ -14,8 +14,8 @@ if [ -n "${NOTARY_PROFILE:-}" ] && [ -z "${SIGN_IDENTITY:-}" ]; then
   exit 1
 fi
 
-if ! command -v create-dmg >/dev/null 2>&1; then
-  echo "create-dmg is required to package the styled DMG. Install it with: brew install create-dmg" >&2
+if ! command -v hdiutil >/dev/null 2>&1; then
+  echo "hdiutil is required to package the DMG." >&2
   exit 1
 fi
 
@@ -24,18 +24,18 @@ bash "$MACOS_DIR/scripts/build-saver.sh"
 rm -rf "$DMG_STAGING" "$DMG"
 mkdir -p "$DMG_STAGING"
 cp -R "$BUNDLE" "$DMG_STAGING/$DMG_BUNDLE_NAME"
+cat >"$DMG_STAGING/README.txt" <<'EOF'
+Mahjong 3D Screen Saver
 
-create-dmg \
-  --volname "Mahjong 3D" \
-  --background "$BUILD_DIR/assets/dmg-background.png" \
-  --window-size 720 420 \
-  --text-size 10 \
-  --icon-size 88 \
-  --icon "$DMG_BUNDLE_NAME" 552 257 \
-  --hide-extension "$DMG_BUNDLE_NAME" \
-  --no-internet-enable \
-  "$DMG" \
-  "$DMG_STAGING"
+Double-click Mahjong3D.saver to install it, then select Mahjong 3D in System Settings > Screen Saver.
+EOF
+
+hdiutil create \
+  -volname "Mahjong 3D" \
+  -srcfolder "$DMG_STAGING" \
+  -ov \
+  -format UDZO \
+  "$DMG"
 
 if [ -n "${SIGN_IDENTITY:-}" ]; then
   codesign \
