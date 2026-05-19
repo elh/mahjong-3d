@@ -95,27 +95,23 @@ verifies codesigning, and restarts the relevant screen saver agents.
 
 ## Package
 
-Requires `create-dmg`:
-
 ```sh
-brew install create-dmg
+make package-saver
 ```
 
-```sh
-bash macos/scripts/package-dmg.sh
-```
-
-The package script creates a Finder-styled DMG with the screen saver bundle,
-custom icon, and install instructions in the DMG background:
+The package target creates a plain DMG containing `Mahjong3D.saver` and
+`README.txt`:
 
 ```text
 macos/build/Mahjong3D.dmg
 ```
 
-Optional notarization:
+Without signing environment variables, the DMG is a local/test artifact only and
+must not be uploaded to a public release. For a distributable GitHub release,
+sign and notarize it:
 
 ```sh
 SIGN_IDENTITY="Developer ID Application: ..." \
 NOTARY_PROFILE="notarytool-keychain-profile" \
-bash macos/scripts/package-dmg.sh
+make package-saver
 ```

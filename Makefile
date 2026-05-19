@@ -1,4 +1,4 @@
-.PHONY: help install dev test typecheck format format-check lint lint-biome lint-eslint knip build build-screensaver install-screensaver clean good bench-sim
+.PHONY: help install dev test typecheck format format-check lint lint-biome lint-eslint knip build install-screensaver package-saver clean good bench-sim
 
 help:
 	@printf "%s\n" \
@@ -12,8 +12,8 @@ help:
 		"lint                   Run Biome and ESLint" \
 		"knip                   Run Knip workspace hygiene checks" \
 		"build                  Run production build" \
-		"build-screensaver      Run local-bundle-safe screen saver web build" \
 		"install-screensaver    Build and install the macOS screen saver locally" \
+		"package-saver          Build the macOS screen saver DMG" \
 		"clean                  Remove build output" \
 		"good                   Run format check, lint, knip, typecheck, tests, and build"
 
@@ -53,11 +53,11 @@ knip:
 build:
 	bun run build
 
-build-screensaver:
-	bun run build:screensaver
-
 install-screensaver:
 	bash macos/scripts/install-saver.sh
+
+package-saver:
+	bash macos/scripts/package-dmg.sh
 
 clean:
 	bun run clean

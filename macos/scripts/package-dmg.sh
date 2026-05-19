@@ -14,6 +14,16 @@ if [ -n "${NOTARY_PROFILE:-}" ] && [ -z "${SIGN_IDENTITY:-}" ]; then
   exit 1
 fi
 
+if [ -n "${SIGN_IDENTITY:-}" ] && [ -n "${NOTARY_PROFILE:-}" ]; then
+  echo "Packaging public release DMG with Developer ID signing and notarization."
+elif [ -n "${SIGN_IDENTITY:-}" ]; then
+  echo "WARNING: SIGN_IDENTITY is set but NOTARY_PROFILE is missing." >&2
+  echo "This DMG will be signed but not notarized; do not upload it to a public release." >&2
+else
+  echo "WARNING: Packaging local/test DMG with ad-hoc signing only." >&2
+  echo "Set SIGN_IDENTITY and NOTARY_PROFILE before uploading to a public release." >&2
+fi
+
 if ! command -v hdiutil >/dev/null 2>&1; then
   echo "hdiutil is required to package the DMG." >&2
   exit 1

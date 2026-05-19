@@ -32,8 +32,8 @@ The native wrapper lives in `macos/` and bundles the Vite screen saver build
 into `Mahjong3D.saver`. See [macos/README.md](macos/README.md).
 
 ```bash
-make build-screensaver
 make install-screensaver
+make package-saver
 ```
 
 ### Project Layout

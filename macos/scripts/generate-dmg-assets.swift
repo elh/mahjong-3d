@@ -83,107 +83,6 @@ func drawPreview(
     NSGraphicsContext.current?.restoreGraphicsState()
 }
 
-func makeBackground() -> NSImage {
-    let size = NSSize(width: 720, height: 420)
-    let image = NSImage(size: size)
-    image.lockFocus()
-
-    NSColor(calibratedRed: 13 / 255, green: 34 / 255, blue: 28 / 255, alpha: 1).setFill()
-    NSRect(origin: .zero, size: size).fill()
-
-    let vignette = NSGradient(colors: [
-        NSColor(calibratedWhite: 0, alpha: 0),
-        NSColor(calibratedWhite: 0, alpha: 0.34),
-    ])
-    vignette?.draw(
-        in: NSRect(origin: .zero, size: size),
-        relativeCenterPosition: NSPoint(x: 0.46, y: 0.1)
-    )
-
-    let titleStyle = NSMutableParagraphStyle()
-    titleStyle.alignment = .left
-    let titleAttributes: [NSAttributedString.Key: Any] = [
-        .font: NSFont.systemFont(ofSize: 32, weight: .semibold),
-        .foregroundColor: NSColor(calibratedWhite: 0.96, alpha: 1),
-        .paragraphStyle: titleStyle,
-    ]
-    "Mahjong 3D".draw(
-        in: NSRect(x: 66, y: 315, width: 270, height: 42),
-        withAttributes: titleAttributes
-    )
-
-    let bodyAttributes: [NSAttributedString.Key: Any] = [
-        .font: NSFont.systemFont(ofSize: 17, weight: .regular),
-        .foregroundColor: NSColor(calibratedWhite: 0.88, alpha: 0.86),
-        .paragraphStyle: titleStyle,
-    ]
-    "Taiwanese Mahjong screen saver".draw(
-        in: NSRect(x: 68, y: 283, width: 320, height: 26),
-        withAttributes: bodyAttributes
-    )
-
-    let installAttributes: [NSAttributedString.Key: Any] = [
-        .font: NSFont.systemFont(ofSize: 17, weight: .semibold),
-        .foregroundColor: NSColor(calibratedWhite: 0.98, alpha: 0.92),
-        .paragraphStyle: titleStyle,
-    ]
-    "Double-click icon to install.".draw(
-        in: NSRect(x: 68, y: 169, width: 330, height: 28),
-        withAttributes: installAttributes
-    )
-
-    let footerAttributes: [NSAttributedString.Key: Any] = [
-        .font: NSFont.systemFont(ofSize: 13, weight: .medium),
-        .foregroundColor: NSColor(calibratedWhite: 0.82, alpha: 0.56),
-        .paragraphStyle: titleStyle,
-    ]
-    "Select it in System Settings > Screen Saver".draw(
-        in: NSRect(x: 68, y: 136, width: 420, height: 22),
-        withAttributes: footerAttributes
-    )
-
-    image.unlockFocus()
-    return image
-}
-
-func makeIconSource() -> NSImage {
-    let size = NSSize(width: 1024, height: 1024)
-    let image = NSImage(size: size)
-    image.lockFocus()
-
-    NSColor.clear.setFill()
-    NSRect(origin: .zero, size: size).fill()
-
-    let outer = NSRect(x: 72, y: 72, width: 880, height: 880)
-    NSColor(calibratedRed: 0.035, green: 0.055, blue: 0.05, alpha: 1).setFill()
-    NSBezierPath(roundedRect: outer, xRadius: 190, yRadius: 190).fill()
-
-    drawPreview(
-        preview,
-        in: NSRect(x: 136, y: 260, width: 752, height: 470),
-        cornerRadius: 70,
-        opacity: 1
-    )
-
-    let markAttributes: [NSAttributedString.Key: Any] = [
-        .font: NSFont.systemFont(ofSize: 128, weight: .semibold),
-        .foregroundColor: NSColor(calibratedWhite: 0.96, alpha: 0.9),
-    ]
-    "Mahjong 3D".draw(
-        in: NSRect(x: 0, y: 140, width: size.width, height: 150),
-        withAttributes: markAttributes.merging([
-            .paragraphStyle: {
-                let style = NSMutableParagraphStyle()
-                style.alignment = .center
-                return style
-            }(),
-        ]) { current, _ in current }
-    )
-
-    image.unlockFocus()
-    return image
-}
-
 func makeThumbnail(size: NSSize) -> NSImage {
     let image = NSImage(size: size)
     image.lockFocus()
@@ -202,9 +101,6 @@ func makeThumbnail(size: NSSize) -> NSImage {
     return image
 }
 
-try savePNG(makeBackground(), to: outputURL.appendingPathComponent("dmg-background.png"))
-let iconSource = makeIconSource()
-try savePNG(iconSource, to: outputURL.appendingPathComponent("icon-source.png"))
 try savePNG(makeThumbnail(size: NSSize(width: 90, height: 58)), to: outputURL.appendingPathComponent("thumbnail.png"))
 try savePNG(
     makeThumbnail(size: NSSize(width: 180, height: 116)),
