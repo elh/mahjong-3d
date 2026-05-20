@@ -1,7 +1,7 @@
 # Mahjong 3D
 
 Taiwanese Mahjong 3D infinite simulator made with React Three Fiber. Enjoy it
-as a cozy [website](https://elh.github.io/mahjong-3d/) or [macOS screen saver](https://github.com/elh/mahjong-3d/releases/latest/download/Mahjong3D.dmg).
+as a cozy [website](https://elh.github.io/mahjong-3d/) or [macOS 15 Sequoia screen saver](https://github.com/elh/mahjong-3d/releases/latest/download/Mahjong3D.dmg).
 
 ![screenshot](public/social-preview.png)
 
@@ -27,6 +27,9 @@ make good         # format check, lint, knip, types, tests, and build
 ```
 
 ### macOS Screen Saver
+
+> [!WARNING]
+> Only works in macOS 15 Sequoia. There are known regressions with screen savers in macOS 26 Tahoe that I have not worked around yet. Contributors welcome!
 
 The native wrapper lives in `macos/` and bundles the Vite screen saver build
 into `Mahjong3D.saver`. See [macos/README.md](macos/README.md).

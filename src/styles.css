@@ -917,6 +917,59 @@ h3 {
   outline: 0;
 }
 
+.screensaver-download-tooltip-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.screensaver-download-tooltip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 45;
+  width: max-content;
+  max-width: min(292px, calc(100vw - 20px));
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 92%);
+  box-shadow: 0 8px 22px rgb(0 0 0 / 28%);
+  color: white;
+  font-size: 0.66rem;
+  font-weight: 800;
+  line-height: 1.25;
+  opacity: 0;
+  pointer-events: none;
+  text-align: left;
+  transform: translateY(-2px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+  white-space: normal;
+}
+
+.screensaver-download-tooltip-wrap:hover .screensaver-download-tooltip,
+.screensaver-download-tooltip-wrap:focus-within .screensaver-download-tooltip {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.info-modal .screensaver-download-tooltip {
+  top: auto;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translate(-50%, 2px);
+}
+
+.info-modal
+  .screensaver-download-tooltip-wrap:hover
+  .screensaver-download-tooltip,
+.info-modal
+  .screensaver-download-tooltip-wrap:focus-within
+  .screensaver-download-tooltip {
+  transform: translate(-50%, 0);
+}
+
 .info-modal {
   position: fixed;
   right: 10px;

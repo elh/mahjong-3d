@@ -24,6 +24,10 @@ import { eventDetail, eventTitle } from "./ui/eventText";
 import { InfoModal } from "./ui/InfoModal";
 import type { InfoModalLink } from "./ui/InfoModal";
 import {
+  macScreenSaverDownloadWarning,
+  MacScreenSaverDownloadWarningTooltip,
+} from "./ui/MacScreenSaverDownloadWarning";
+import {
   infiniteRoundFadeMs,
   infiniteRoundFlipTransitionDelayMs,
   infiniteRoundHoldMs,
@@ -1046,10 +1050,16 @@ function MacDownloadCallout({ autoHide = false }: { autoHide?: boolean }) {
         }
       }}
     >
-      <a href={macScreenSaverDownloadHref} aria-label="Download macOS DMG">
-        <Download size={14} aria-hidden="true" />
-        Get the macOS screen saver
-      </a>
+      <span className="screensaver-download-tooltip-wrap">
+        <a
+          href={macScreenSaverDownloadHref}
+          aria-label={`Download macOS DMG. ${macScreenSaverDownloadWarning}`}
+        >
+          <Download size={14} aria-hidden="true" />
+          Get the macOS screen saver
+        </a>
+        <MacScreenSaverDownloadWarningTooltip />
+      </span>
     </aside>
   );
 }
