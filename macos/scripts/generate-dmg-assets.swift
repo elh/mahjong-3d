@@ -101,8 +101,8 @@ func makeThumbnail(size: NSSize) -> NSImage {
     return image
 }
 
-try savePNG(makeThumbnail(size: NSSize(width: 90, height: 58)), to: outputURL.appendingPathComponent("thumbnail.png"))
+try savePNG(makeThumbnail(size: NSSize(width: 107, height: 65)), to: outputURL.appendingPathComponent("thumbnail.png"))
 try savePNG(
-    makeThumbnail(size: NSSize(width: 180, height: 116)),
+    makeThumbnail(size: NSSize(width: 214, height: 130)),
     to: outputURL.appendingPathComponent("thumbnail@2x.png")
 )

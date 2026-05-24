@@ -4,13 +4,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MACOS_DIR="$ROOT_DIR/macos"
 BUILD_DIR="$MACOS_DIR/build"
-BUNDLE="$BUILD_DIR/Mahjong3D.saver"
-DMG_BUNDLE_NAME="Mahjong3D.saver"
+APP_BUNDLE="$BUILD_DIR/Mahjong3D.app"
+DMG_BUNDLE_NAME="Mahjong3D.app"
 DMG_STAGING="$BUILD_DIR/dmg-staging"
 DMG="$BUILD_DIR/Mahjong3D.dmg"
 
 if [ -n "${NOTARY_PROFILE:-}" ] && [ -z "${SIGN_IDENTITY:-}" ]; then
-  echo "NOTARY_PROFILE requires SIGN_IDENTITY so the nested saver is rebuilt and signed for distribution." >&2
+  echo "NOTARY_PROFILE requires SIGN_IDENTITY so the app is rebuilt and signed for distribution." >&2
   exit 1
 fi
 
@@ -29,15 +29,16 @@ if ! command -v hdiutil >/dev/null 2>&1; then
   exit 1
 fi
 
-bash "$MACOS_DIR/scripts/build-saver.sh"
+bash "$MACOS_DIR/scripts/build-screensaver-app.sh"
 
 rm -rf "$DMG_STAGING" "$DMG"
 mkdir -p "$DMG_STAGING"
-cp -R "$BUNDLE" "$DMG_STAGING/$DMG_BUNDLE_NAME"
+cp -R "$APP_BUNDLE" "$DMG_STAGING/$DMG_BUNDLE_NAME"
 cat >"$DMG_STAGING/README.txt" <<'EOF'
 Mahjong 3D Screen Saver
 
-Double-click Mahjong3D.saver to install it, then select Mahjong 3D in System Settings > Screen Saver.
+Move Mahjong3D.app to /Applications, open it once, and use Register if the screen saver does not appear automatically.
+Then select Mahjong 3D in System Settings > Screen Saver.
 EOF
 
 hdiutil create \

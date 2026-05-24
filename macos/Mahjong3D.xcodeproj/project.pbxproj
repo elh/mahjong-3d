@@ -1,0 +1,489 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		2A000001000000000000000A /* Mahjong3DApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A000001000000000000000B /* Mahjong3DApp.swift */; };
+		2A000002000000000000000A /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A000002000000000000000B /* ContentView.swift */; };
+		2A000003000000000000000A /* PluginManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A000003000000000000000B /* PluginManager.swift */; };
+		2A000004000000000000000A /* Mahjong3DLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A000004000000000000000B /* Mahjong3DLog.swift */; };
+		2A000005000000000000000A /* Mahjong3DLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A000004000000000000000B /* Mahjong3DLog.swift */; };
+		2A000006000000000000000A /* Mahjong3DScreenSaverExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A000006000000000000000B /* Mahjong3DScreenSaverExtension.swift */; };
+		2A000007000000000000000A /* Mahjong3DScreenSaverViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A000007000000000000000B /* Mahjong3DScreenSaverViewController.swift */; };
+		2A000008000000000000000A /* Mahjong3DExtensionRendererView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A000008000000000000000B /* Mahjong3DExtensionRendererView.swift */; };
+		2A000009000000000000000A /* ScreenSaver.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A000009000000000000000B /* ScreenSaver.framework */; };
+		2A00000A000000000000000A /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A00000A000000000000000B /* WebKit.framework */; };
+		2A00000B000000000000000A /* UniformTypeIdentifiers.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A00000B000000000000000B /* UniformTypeIdentifiers.framework */; };
+		2A00000C000000000000000A /* Mahjong3DScreenSaverExtension.appex in Embed PlugIns */ = {isa = PBXBuildFile; fileRef = 2A00000C000000000000000B /* Mahjong3DScreenSaverExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		2A00000D000000000000000A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2A000000000000000000000A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2A000010000000000000000A;
+			remoteInfo = Mahjong3DScreenSaverExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		2A00000E000000000000000A /* Embed PlugIns */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				2A00000C000000000000000A /* Mahjong3DScreenSaverExtension.appex in Embed PlugIns */,
+			);
+			name = "Embed PlugIns";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		2A000001000000000000000B /* Mahjong3DApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mahjong3DApp.swift; sourceTree = "<group>"; };
+		2A000002000000000000000B /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		2A000003000000000000000B /* PluginManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginManager.swift; sourceTree = "<group>"; };
+		2A000004000000000000000B /* Mahjong3DLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mahjong3DLog.swift; sourceTree = "<group>"; };
+		2A000006000000000000000B /* Mahjong3DScreenSaverExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mahjong3DScreenSaverExtension.swift; sourceTree = "<group>"; };
+		2A000007000000000000000B /* Mahjong3DScreenSaverViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mahjong3DScreenSaverViewController.swift; sourceTree = "<group>"; };
+		2A000008000000000000000B /* Mahjong3DExtensionRendererView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mahjong3DExtensionRendererView.swift; sourceTree = "<group>"; };
+		2A000009000000000000000B /* ScreenSaver.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ScreenSaver.framework; path = System/Library/Frameworks/ScreenSaver.framework; sourceTree = SDKROOT; };
+		2A00000A000000000000000B /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
+		2A00000B000000000000000B /* UniformTypeIdentifiers.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UniformTypeIdentifiers.framework; path = System/Library/Frameworks/UniformTypeIdentifiers.framework; sourceTree = SDKROOT; };
+		2A00000C000000000000000B /* Mahjong3DScreenSaverExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = Mahjong3DScreenSaverExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		2A00000F000000000000000B /* Mahjong3D.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mahjong3D.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2A000011000000000000000B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		2A000012000000000000000B /* Mahjong3DApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Mahjong3DApp.entitlements; sourceTree = "<group>"; };
+		2A000013000000000000000B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		2A000014000000000000000B /* Mahjong3DScreenSaverExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Mahjong3DScreenSaverExtension.entitlements; sourceTree = "<group>"; };
+		2A000015000000000000000B /* Mahjong3DScreenSaverExtension-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Mahjong3DScreenSaverExtension-Bridging-Header.h"; sourceTree = "<group>"; };
+		2A000016000000000000000B /* ScreenSaverPrivate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ScreenSaverPrivate.h; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		2A000017000000000000000A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2A000018000000000000000A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2A000009000000000000000A /* ScreenSaver.framework in Frameworks */,
+				2A00000A000000000000000A /* WebKit.framework in Frameworks */,
+				2A00000B000000000000000A /* UniformTypeIdentifiers.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		2A000019000000000000000C = {
+			isa = PBXGroup;
+			children = (
+				2A00001A000000000000000C /* Mahjong3DApp */,
+				2A00001B000000000000000C /* Mahjong3DScreenSaverExtension */,
+				2A00001C000000000000000C /* Mahjong3DShared */,
+				2A00001D000000000000000C /* Frameworks */,
+				2A00001E000000000000000C /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		2A00001A000000000000000C /* Mahjong3DApp */ = {
+			isa = PBXGroup;
+			children = (
+				2A00001F000000000000000C /* Sources */,
+				2A000011000000000000000B /* Info.plist */,
+				2A000012000000000000000B /* Mahjong3DApp.entitlements */,
+			);
+			path = Mahjong3DApp;
+			sourceTree = "<group>";
+		};
+		2A00001F000000000000000C /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				2A000001000000000000000B /* Mahjong3DApp.swift */,
+				2A000002000000000000000B /* ContentView.swift */,
+				2A000003000000000000000B /* PluginManager.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		2A00001B000000000000000C /* Mahjong3DScreenSaverExtension */ = {
+			isa = PBXGroup;
+			children = (
+				2A000020000000000000000C /* Sources */,
+				2A000021000000000000000C /* PrivateHeaders */,
+				2A000015000000000000000B /* Mahjong3DScreenSaverExtension-Bridging-Header.h */,
+				2A000013000000000000000B /* Info.plist */,
+				2A000014000000000000000B /* Mahjong3DScreenSaverExtension.entitlements */,
+			);
+			path = Mahjong3DScreenSaverExtension;
+			sourceTree = "<group>";
+		};
+		2A000020000000000000000C /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				2A000006000000000000000B /* Mahjong3DScreenSaverExtension.swift */,
+				2A000007000000000000000B /* Mahjong3DScreenSaverViewController.swift */,
+				2A000008000000000000000B /* Mahjong3DExtensionRendererView.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		2A000021000000000000000C /* PrivateHeaders */ = {
+			isa = PBXGroup;
+			children = (
+				2A000016000000000000000B /* ScreenSaverPrivate.h */,
+			);
+			path = PrivateHeaders;
+			sourceTree = "<group>";
+		};
+		2A00001C000000000000000C /* Mahjong3DShared */ = {
+			isa = PBXGroup;
+			children = (
+				2A000004000000000000000B /* Mahjong3DLog.swift */,
+			);
+			path = Mahjong3DShared;
+			sourceTree = "<group>";
+		};
+		2A00001D000000000000000C /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				2A000009000000000000000B /* ScreenSaver.framework */,
+				2A00000A000000000000000B /* WebKit.framework */,
+				2A00000B000000000000000B /* UniformTypeIdentifiers.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		2A00001E000000000000000C /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				2A00000F000000000000000B /* Mahjong3D.app */,
+				2A00000C000000000000000B /* Mahjong3DScreenSaverExtension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2A000010000000000000000A /* Mahjong3DScreenSaverExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2A000022000000000000000A /* Build configuration list for PBXNativeTarget "Mahjong3DScreenSaverExtension" */;
+			buildPhases = (
+				2A000023000000000000000A /* Sources */,
+				2A000018000000000000000A /* Frameworks */,
+				2A000024000000000000000A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Mahjong3DScreenSaverExtension;
+			productName = Mahjong3DScreenSaverExtension;
+			productReference = 2A00000C000000000000000B /* Mahjong3DScreenSaverExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		2A000025000000000000000A /* Mahjong3D */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2A000026000000000000000A /* Build configuration list for PBXNativeTarget "Mahjong3D" */;
+			buildPhases = (
+				2A000027000000000000000A /* Sources */,
+				2A000017000000000000000A /* Frameworks */,
+				2A000028000000000000000A /* Resources */,
+				2A00000E000000000000000A /* Embed PlugIns */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				2A000029000000000000000A /* PBXTargetDependency */,
+			);
+			name = Mahjong3D;
+			productName = Mahjong3D;
+			productReference = 2A00000F000000000000000B /* Mahjong3D.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		2A000000000000000000000A /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					2A000010000000000000000A = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					2A000025000000000000000A = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = 2A00002A000000000000000A /* Build configuration list for PBXProject "Mahjong3D" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 2A000019000000000000000C;
+			productRefGroup = 2A00001E000000000000000C /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				2A000025000000000000000A /* Mahjong3D */,
+				2A000010000000000000000A /* Mahjong3DScreenSaverExtension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		2A000024000000000000000A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2A000028000000000000000A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		2A000023000000000000000A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2A000006000000000000000A /* Mahjong3DScreenSaverExtension.swift in Sources */,
+				2A000007000000000000000A /* Mahjong3DScreenSaverViewController.swift in Sources */,
+				2A000008000000000000000A /* Mahjong3DExtensionRendererView.swift in Sources */,
+				2A000005000000000000000A /* Mahjong3DLog.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2A000027000000000000000A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2A000001000000000000000A /* Mahjong3DApp.swift in Sources */,
+				2A000002000000000000000A /* ContentView.swift in Sources */,
+				2A000003000000000000000A /* PluginManager.swift in Sources */,
+				2A000004000000000000000A /* Mahjong3DLog.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		2A000029000000000000000A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 2A000010000000000000000A /* Mahjong3DScreenSaverExtension */;
+			targetProxy = 2A00000D000000000000000A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		2A00002B000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		2A00002C000000000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		2A00002D000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Mahjong3DApp/Mahjong3DApp.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 0.0.2;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Mahjong3DApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.0.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.elh.mahjong-3d.app";
+				PRODUCT_NAME = Mahjong3D;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		2A00002E000000000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Mahjong3DApp/Mahjong3DApp.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 0.0.2;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Mahjong3DApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.0.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.elh.mahjong-3d.app";
+				PRODUCT_NAME = Mahjong3D;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		2A00002F000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Mahjong3DScreenSaverExtension/Mahjong3DScreenSaverExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 0.0.2;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Mahjong3DScreenSaverExtension/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 0.0.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.elh.mahjong-3d.app.screensaver";
+				PRODUCT_NAME = Mahjong3DScreenSaverExtension;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Mahjong3DScreenSaverExtension/Mahjong3DScreenSaverExtension-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		2A000030000000000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Mahjong3DScreenSaverExtension/Mahjong3DScreenSaverExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 0.0.2;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Mahjong3DScreenSaverExtension/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 0.0.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.elh.mahjong-3d.app.screensaver";
+				PRODUCT_NAME = Mahjong3DScreenSaverExtension;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Mahjong3DScreenSaverExtension/Mahjong3DScreenSaverExtension-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		2A000022000000000000000A /* Build configuration list for PBXNativeTarget "Mahjong3DScreenSaverExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2A00002F000000000000000A /* Debug */,
+				2A000030000000000000000A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2A000026000000000000000A /* Build configuration list for PBXNativeTarget "Mahjong3D" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2A00002D000000000000000A /* Debug */,
+				2A00002E000000000000000A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2A00002A000000000000000A /* Build configuration list for PBXProject "Mahjong3D" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2A00002B000000000000000A /* Debug */,
+				2A00002C000000000000000A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 2A000000000000000000000A /* Project object */;
+}

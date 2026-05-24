@@ -1,87 +1,72 @@
 # Mahjong 3D macOS Screen Saver
 
-This folder contains the native macOS wrapper for the Mahjong 3D web screen
+This folder contains the native macOS wrappers for the Mahjong 3D web screen
 saver build.
 
 ## Architecture
 
-`Mahjong3D.saver` is a Swift `ScreenSaverView` bundle that hosts the local Vite
-screen saver build in a `WKWebView` over the custom `mahjong3d-saver://` scheme.
-The saver has no network dependency; bundled files are served by
-`WKURLSchemeHandler` from `Contents/Resources/Web`.
+The default Tahoe/Sonoma-era artifact is `Mahjong3D.app`, a minimal SwiftUI
+container app with an embedded `Mahjong3DScreenSaverExtension.appex`. The
+extension uses the `com.apple.screensaver` app-extension point and hosts the
+local Vite screen saver build in a `WKWebView` over the custom
+`mahjong3d-saver://` scheme.
 
-The web app remains the renderer and simulation presenter. The native wrapper
-only handles:
+This structure follows the approach documented by
+[AerialScreensaver/AppexSaverMinimal](https://github.com/AerialScreensaver/AppexSaverMinimal):
+an application bundle owns and registers a sandboxed `XPC!` screen saver
+extension. The private `ScreenSaverExtension` and `ScreenSaverViewController`
+declarations in this repo are adapted from that MIT-licensed sample.
+
+The legacy `Mahjong3D.saver` bundle is still available as an explicit fallback
+for older macOS versions. It is no longer the default install or package path.
+
+The web app remains the renderer and simulation presenter. Native code only
+handles:
 
 - local resource loading;
-- `ScreenSaverView` lifecycle;
-- native frame delivery via `animateOneFrame()`;
-- packaging, signing, and distribution.
-
-Fullscreen screen saver mode uses `surface=screensaver`. In that mode the R3F
-canvas uses `frameloop="never"` and advances from native frame callbacks through
-`window.mahjongScreenSaver.renderFrame(timestampMs)`. This avoids relying on
-browser `requestAnimationFrame`, which is not reliable in the Sequoia legacy
-screen saver host.
-
-Screen saver playback also uses the native frame event for replay advancement
-and terminal round promotion. Worker-backed generation is disabled in the saver;
-round generation and preloading use the no-worker fallback so the bundle works
-entirely from local files.
+- screen saver extension lifecycle;
+- native frame delivery;
+- install, registration, signing, and packaging.
 
 ## Implementation Notes
 
-Several pieces of this setup are intentional because the macOS screen saver
-hosts a React Three Fiber scene inside `WKWebView`, and should not be treated as
-incidental cleanup:
-
-- `WKWebView` loads the app through `WKURLSchemeHandler`, not a `file://` URL.
-  The custom origin keeps ESM chunks, SVG tile assets, and WASM-style resources
-  under one bundled same-origin URL without adding a local HTTP server.
-- `ScreenSaverView.animateOneFrame()` is the render clock for fullscreen saver
-  mode. Swift calls `window.mahjongScreenSaver.renderFrame(performance.now())`;
-  the web app dispatches a frame event; R3F advances its manual frame loop from
-  that event.
-- The frame bridge is guarded by `renderFrameInFlight` so the native host does
-  not queue unbounded `evaluateJavaScript` calls if WebKit falls behind.
-- `startAnimation()`/`stopAnimation()` are noisy. `stopAnimation()` schedules a
-  debounced inactive state instead of immediately pausing the web app; teardown
-  paths still force an immediate inactive update.
-- Fullscreen launches are isolated on purpose. Each new fullscreen run creates a
-  fresh `WKWebView` with a non-persistent data store and a cache-busted app URL;
-  after a sustained stop, the web view is torn down. This avoids stale WebKit or
-  WebGL state leaking across repeated manual previews in System Settings.
-- Every native lifecycle update first writes
-  `window.__mahjongScreenSaverNativeState`, then calls the React bridge if it is
-  registered. React bootstraps from that global so early native calls are not
-  lost while the bundle is still loading.
-- Fullscreen saver playback intentionally ignores some host visibility noise:
-  fullscreen `surface=screensaver` stays active even if WebKit reports the
-  document hidden. The tiny System Settings preview can still pause when
-  inactive.
-
-Native lifecycle diagnostics and JavaScript errors are disabled by default. Set
-`MAHJONG3D_SCREENSAVER_LOG=1` in the screen saver host environment to write:
-
-```text
-~/Library/Containers/com.apple.ScreenSaver.Engine.legacyScreenSaver/Data/Library/Logs/Mahjong3D/screensaver.log
-```
+- The extension loads the web app from `Contents/Resources/Web` through
+  `WKURLSchemeHandler`, not `file://`, so ESM chunks and tile assets share one
+  bundled same-origin URL.
+- `SSENeedsAnimationTimer` is `false`. The extension owns a main-run-loop timer,
+  calls `window.mahjongScreenSaver.renderFrame(performance.now())`, and the web
+  app advances its manual React Three Fiber frame loop from that event.
+- Startup and teardown are anchored to `viewDidMoveToWindow()` following the
+  Aerial minimal sample. There are no independent overlay windows, process-exit
+  watchdogs, duplicate renderer ownership systems, or WebGL mirror fallbacks in
+  this implementation.
+- The native bridge still writes `window.__mahjongScreenSaverNativeState` before
+  calling `setActive`, `setPreview`, or `renderFrame`, so React can bootstrap
+  from early native state.
+- Worker-backed round generation is disabled in `surface=screensaver`; the web
+  app uses the local-file-safe no-worker fallback.
+- The container app is intentionally small. It shows extension registration
+  status and offers Register, Unregister, Refresh, and Screen Saver Settings
+  actions. It does not embed a preview renderer.
 
 ## Build
 
 ```sh
-bash macos/scripts/build-saver.sh
+bash macos/scripts/build-screensaver-app.sh
 ```
 
-The script runs `bun run build:screensaver`, compiles a universal Swift
-`ScreenSaverView` bundle, signs it ad hoc by default, and writes:
+The script runs `bun run build:screensaver`, builds `macos/Mahjong3D.xcodeproj`
+with `xcodebuild`, copies the generated web app into the embedded extension,
+adds thumbnails, signs the nested appex and app, verifies codesigning, and
+writes:
 
 ```text
-macos/build/Mahjong3D.saver
+macos/build/Mahjong3D.app
 ```
 
-Set `SIGN_IDENTITY="Developer ID Application: ..."` to sign the `.saver` with a
-Developer ID identity.
+Set `SIGN_IDENTITY="Developer ID Application: ..."` to sign the app and
+extension with a Developer ID identity. Without it, the build uses ad-hoc
+signing for local testing.
 
 ## Install Locally
 
@@ -89,9 +74,22 @@ Developer ID identity.
 make install-screensaver
 ```
 
-The install target rebuilds the current checkout, removes stale user-level and
-system-level copies, installs to `/Library/Screen Savers/Mahjong3D.saver`,
-verifies codesigning, and restarts the relevant screen saver agents.
+The default install target builds `Mahjong3D.app`, copies it to
+`/Applications/Mahjong3D.app`, removes stale user-level and system-level
+`Mahjong3D.saver` installs, verifies codesigning, registers the embedded
+extension with:
+
+```sh
+pluginkit -a /Applications/Mahjong3D.app/Contents/PlugIns/Mahjong3DScreenSaverExtension.appex
+```
+
+and restarts the relevant screen saver agents. Set `OPEN_SETTINGS=0` to skip
+opening System Settings during scripted checks.
+
+`pluginkit` caches extension locations aggressively and appears to prefer
+`/Applications`. While testing, use one location consistently: either install to
+`/Applications` with this script, or develop from Xcode build products without
+also keeping a copy in `/Applications`.
 
 ## Package
 
@@ -99,19 +97,54 @@ verifies codesigning, and restarts the relevant screen saver agents.
 make package-saver
 ```
 
-The package target creates a plain DMG containing `Mahjong3D.saver` and
-`README.txt`:
+The package target creates a DMG containing `Mahjong3D.app` and `README.txt`:
 
 ```text
 macos/build/Mahjong3D.dmg
 ```
 
-Without signing environment variables, the DMG is a local/test artifact only and
-must not be uploaded to a public release. For a distributable GitHub release,
-sign and notarize it:
+For a distributable release, sign and notarize it:
 
 ```sh
 SIGN_IDENTITY="Developer ID Application: ..." \
 NOTARY_PROFILE="notarytool-keychain-profile" \
 make package-saver
+```
+
+## Legacy Fallback
+
+The older `.saver` bundle is still buildable for pre-Sonoma systems or for
+regression testing:
+
+```sh
+bash macos/scripts/build-saver.sh
+make install-legacy-screensaver
+make package-legacy-saver
+```
+
+The legacy artifact writes `macos/build/Mahjong3D.saver`, and the legacy DMG is:
+
+```text
+macos/build/Mahjong3D-legacy-saver.dmg
+```
+
+## Diagnostics
+
+Host app and extension logs use the unified subsystem:
+
+```text
+io.github.elh.mahjong-3d.app
+```
+
+Stream them with:
+
+```sh
+log stream --predicate 'subsystem == "io.github.elh.mahjong-3d.app"' --level debug
+```
+
+Useful registration checks:
+
+```sh
+pluginkit -m -v -p com.apple.screensaver | grep io.github.elh.mahjong-3d.app.screensaver
+codesign --verify --deep --strict macos/build/Mahjong3D.app
 ```
