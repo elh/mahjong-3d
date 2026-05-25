@@ -12,12 +12,21 @@ describe("screen saver surface", () => {
     expect(screenSaverSurfaceFromSearch("?surface=screensaver")).toEqual({
       surface: "screensaver",
       preview: false,
+      diagnosticMode: "app",
     });
     expect(
       screenSaverSurfaceFromSearch("?surface=screensaver&preview=1"),
     ).toEqual({
       surface: "screensaver",
       preview: true,
+      diagnosticMode: "app",
+    });
+    expect(
+      screenSaverSurfaceFromSearch("?surface=screensaver&diagnostic=canvas2d"),
+    ).toEqual({
+      surface: "screensaver",
+      preview: false,
+      diagnosticMode: "canvas2d",
     });
     expect(screenSaverSurfaceFromSearch("?view=debug")).toBeUndefined();
     expect(screenSaverSurfaceFromSearch("?surface=unknown")).toBeUndefined();

@@ -148,3 +148,20 @@ Useful registration checks:
 pluginkit -m -v -p com.apple.screensaver | grep io.github.elh.mahjong-3d.app.screensaver
 codesign --verify --deep --strict macos/build/Mahjong3D.app
 ```
+
+Diagnostic screen saver modes can be compiled into the extension with
+`MAHJONG3D_SCREENSAVER_DIAGNOSTIC_MODE`:
+
+```sh
+env OPEN_SETTINGS=0 MAHJONG3D_SCREENSAVER_DIAGNOSTIC_MODE=native-layer make install-screensaver
+env OPEN_SETTINGS=0 MAHJONG3D_SCREENSAVER_DIAGNOSTIC_MODE=dom make install-screensaver
+env OPEN_SETTINGS=0 MAHJONG3D_SCREENSAVER_DIAGNOSTIC_MODE=canvas2d make install-screensaver
+env OPEN_SETTINGS=0 MAHJONG3D_SCREENSAVER_DIAGNOSTIC_MODE=webgl-static make install-screensaver
+env OPEN_SETTINGS=0 MAHJONG3D_SCREENSAVER_DIAGNOSTIC_MODE=app make install-screensaver
+```
+
+`native-layer` never creates a `WKWebView`; it renders a moving AppKit/CALayer
+heartbeat directly in the extension view. The web modes keep the normal
+`WKWebView` and native frame bridge but replace the Mahjong scene with DOM, 2D
+canvas, or WebGL readback diagnostics. Each mode logs visible frame counters
+through the unified subsystem.
