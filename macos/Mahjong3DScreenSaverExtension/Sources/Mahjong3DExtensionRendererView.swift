@@ -14,6 +14,7 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
         alpha: 1
     )
     private static let frameInterval = 1.0 / 60.0
+    private static let nativeFrameDriverEnabled = false
 
     private let instanceID = UUID().uuidString.prefix(8)
     private let nativePreview: Bool
@@ -113,7 +114,11 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
         syncWebViewFrame()
         setWebPreview(webPreview, reason: reason)
         setWebActive(true, reason: reason)
-        startFrameTimer()
+        if Self.nativeFrameDriverEnabled {
+            startFrameTimer()
+        } else {
+            stopFrameTimer()
+        }
     }
 
     private func stopRenderer(reason: String) {

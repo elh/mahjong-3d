@@ -987,7 +987,7 @@ function SimApp({
           pointerControlsEnabled={!runtimeOptions.isScreenSaver}
           audioEnabled={!runtimeOptions.isScreenSaver}
           sceneReadyMode={runtimeOptions.isScreenSaver ? "timer" : "raf"}
-          screenSaverFrameDriver={runtimeOptions.isScreenSaver}
+          screenSaverFrameDriver={runtimeOptions.nativeFrameDriverEnabled}
           allowInitialRenderWhilePaused={
             runtimeOptions.allowInitialRenderWhilePaused
           }
