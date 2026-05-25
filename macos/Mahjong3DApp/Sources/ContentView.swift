@@ -28,7 +28,9 @@ struct ContentView: View {
     }
 
     private func openScreenSaverSettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.ScreenSaver-Settings.extension") {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension?ScreenSaver") {
+            NSWorkspace.shared.open(url)
+        } else if let url = URL(string: "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension") {
             NSWorkspace.shared.open(url)
         }
     }
