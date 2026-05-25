@@ -15,7 +15,7 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
     )
     private static let frameInterval = 1.0 / 15.0
     private static let renderFrameTimeout = 0.5
-    private static let nativeFrameDriverEnabled = false
+    private static let nativeFrameDriverEnabled = true
     private static let diagnosticMode = loadDiagnosticMode()
 
     private let instanceID = UUID().uuidString.prefix(8)
