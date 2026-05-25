@@ -9,7 +9,6 @@
 export type ScreenSaverSurfaceConfig = {
   surface: "screensaver";
   preview: boolean;
-  diagnosticMode: ScreenSaverDiagnosticMode;
 };
 
 export type ScreenSaverLifecycle = {
@@ -18,11 +17,6 @@ export type ScreenSaverLifecycle = {
 };
 
 export const screenSaverFrameEventName = "mahjong-screen-saver-frame";
-export type ScreenSaverDiagnosticMode =
-  | "app"
-  | "dom"
-  | "canvas2d"
-  | "webgl-static";
 const defaultRenderDpr: [number, number] = [1, 1.75];
 const previewRenderDpr: [number, number] = [1, 1];
 
@@ -62,23 +56,7 @@ export function screenSaverSurfaceFromSearch(
   return {
     surface,
     preview: params.get("preview") === "1",
-    diagnosticMode: screenSaverDiagnosticModeFromString(
-      params.get("diagnostic"),
-    ),
   };
-}
-
-export function screenSaverDiagnosticModeFromString(
-  value: string | null | undefined,
-): ScreenSaverDiagnosticMode {
-  switch (value) {
-    case "dom":
-    case "canvas2d":
-    case "webgl-static":
-      return value;
-    default:
-      return "app";
-  }
 }
 
 export function initialScreenSaverLifecycle(
@@ -160,22 +138,4 @@ export function screenSaverFrameTimestampFromEvent(
   }
 
   return detail.timestampMs;
-}
-
-export function postScreenSaverDiagnostic(message: string): void {
-  const webkit = (
-    globalThis as {
-      webkit?: {
-        messageHandlers?: {
-          mahjong3DLog?: { postMessage(message: string): void };
-        };
-      };
-    }
-  ).webkit;
-
-  try {
-    webkit?.messageHandlers?.mahjong3DLog?.postMessage(message);
-  } catch {
-    // Native diagnostics should never affect rendering.
-  }
 }

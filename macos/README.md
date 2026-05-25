@@ -135,9 +135,10 @@ macos/build/Mahjong3D-legacy-saver.dmg
 
 ## Diagnostics
 
-Release builds are quiet by default. Host app and extension logs can be enabled
-at build time or runtime with `MAHJONG3D_SCREENSAVER_LOGGING=1`; debug builds
-log by default. Enabled host app and extension logs use the unified subsystem:
+Release builds are quiet by default. Debug builds log by default. For a local
+Release build with logs, set `MAHJONG3D_SCREENSAVER_LOGGING=1` when building;
+the build script stores that flag inside the app bundle. Enabled host app and
+extension logs use the unified subsystem:
 
 ```text
 io.github.elh.mahjong-3d.app
@@ -149,7 +150,7 @@ Stream them with:
 log stream --predicate 'subsystem == "io.github.elh.mahjong-3d.app"' --level debug
 ```
 
-For local diagnostic installs with logging enabled:
+For local installs with logging enabled:
 
 ```sh
 env OPEN_SETTINGS=0 MAHJONG3D_SCREENSAVER_LOGGING=1 make install-screensaver
@@ -161,20 +162,3 @@ Useful registration checks:
 pluginkit -m -v -p com.apple.screensaver | grep io.github.elh.mahjong-3d.app.screensaver
 codesign --verify --deep --strict macos/build/Mahjong3D.app
 ```
-
-Diagnostic screen saver modes can be compiled into the extension with
-`MAHJONG3D_SCREENSAVER_DIAGNOSTIC_MODE`:
-
-```sh
-env OPEN_SETTINGS=0 MAHJONG3D_SCREENSAVER_DIAGNOSTIC_MODE=native-layer make install-screensaver
-env OPEN_SETTINGS=0 MAHJONG3D_SCREENSAVER_DIAGNOSTIC_MODE=dom make install-screensaver
-env OPEN_SETTINGS=0 MAHJONG3D_SCREENSAVER_DIAGNOSTIC_MODE=canvas2d make install-screensaver
-env OPEN_SETTINGS=0 MAHJONG3D_SCREENSAVER_DIAGNOSTIC_MODE=webgl-static make install-screensaver
-env OPEN_SETTINGS=0 MAHJONG3D_SCREENSAVER_DIAGNOSTIC_MODE=app make install-screensaver
-```
-
-`native-layer` never creates a `WKWebView`; it renders a moving AppKit/CALayer
-heartbeat directly in the extension view. The web modes keep the normal
-`WKWebView` and native frame bridge but replace the Mahjong scene with DOM, 2D
-canvas, or WebGL readback diagnostics. Enable logging to have those modes emit
-visible frame counters through the unified subsystem.

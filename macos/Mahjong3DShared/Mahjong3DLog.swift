@@ -41,11 +41,7 @@ enum Mahjong3DLog {
     }
 
     private static func loggingFlagValue() -> String? {
-        if let environmentValue = ProcessInfo.processInfo.environment["MAHJONG3D_SCREENSAVER_LOGGING"] {
-            return environmentValue
-        }
-
-        return Bundle.main
+        Bundle.main
             .url(forResource: "LoggingEnabled", withExtension: "txt")
             .flatMap { try? String(contentsOf: $0, encoding: .utf8) }
     }

@@ -16,13 +16,11 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
     private static let frameInterval = 1.0 / 30.0
     private static let renderFrameTimeout = 0.5
     private static let nativeFrameDriverEnabled = true
-    private static let diagnosticMode = loadDiagnosticMode()
 
     private let instanceID = UUID().uuidString.prefix(8)
     private let nativePreview: Bool
     private var webView: WKWebView?
     private var webSchemeHandler: BundledWebSchemeHandler?
-    private var nativeDiagnosticView: NativeDiagnosticView?
     private var frameTimer: Timer?
     private var renderFrameTimeoutTimer: Timer?
     private var renderFrameInFlight = false
@@ -87,13 +85,11 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
     override func layout() {
         super.layout()
         syncWebViewFrame()
-        syncNativeDiagnosticFrame()
     }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         syncWebViewFrame()
-        syncNativeDiagnosticFrame()
     }
 
     private func commonInit() {
@@ -101,7 +97,7 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
         layer?.backgroundColor = Self.startupBackgroundColor.cgColor
         animationTimeInterval = Self.frameInterval
         webPreview = nativePreview || bounds.width < 400 || bounds.height < 300
-        Mahjong3DLog.info(rendererLogger, "instance[\(self.instanceID)] init size=\(self.bounds.size.debugDescription) preview=\(self.webPreview) diagnosticMode=\(Self.diagnosticMode)")
+        Mahjong3DLog.info(rendererLogger, "instance[\(self.instanceID)] init size=\(self.bounds.size.debugDescription) preview=\(self.webPreview)")
     }
 
     private func startRenderer(reason: String) {
@@ -113,16 +109,6 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
         layer?.backgroundColor = Self.startupBackgroundColor.cgColor
         webPreview = nativePreview || bounds.width < 400 || bounds.height < 300
 
-        if Self.diagnosticMode == "native-layer" {
-            tearDownWebView()
-            configureNativeDiagnosticView()
-            syncNativeDiagnosticFrame()
-            nativeDiagnosticView?.start()
-            Mahjong3DLog.info(rendererLogger, "instance[\(self.instanceID)] native diagnostic active reason=\(reason)")
-            return
-        }
-
-        tearDownNativeDiagnosticView()
         if webView == nil {
             configureWebView()
         }
@@ -138,26 +124,8 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
     }
 
     private func stopRenderer(reason: String) {
-        nativeDiagnosticView?.stop()
         stopFrameTimer()
         setWebActive(false, reason: reason)
-    }
-
-    private static func loadDiagnosticMode() -> String {
-        let environmentValue = ProcessInfo.processInfo.environment["MAHJONG3D_SCREENSAVER_DIAGNOSTIC_MODE"]
-        let resourceValue = Bundle(for: Mahjong3DExtensionRendererView.self)
-            .url(forResource: "DiagnosticMode", withExtension: "txt")
-            .flatMap { try? String(contentsOf: $0, encoding: .utf8) }
-        let rawValue = (environmentValue ?? resourceValue ?? "app")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        switch rawValue {
-        case "app", "native-layer", "dom", "canvas2d", "webgl-static":
-            return rawValue
-        default:
-            Mahjong3DLog.error(rendererLogger, "unsupported diagnostic mode \(rawValue); falling back to app")
-            return "app"
-        }
     }
 
     private func configureWebView() {
@@ -241,9 +209,6 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
         if webPreview {
             components.queryItems?.append(URLQueryItem(name: "preview", value: "1"))
         }
-        if Self.diagnosticMode != "app" {
-            components.queryItems?.append(URLQueryItem(name: "diagnostic", value: Self.diagnosticMode))
-        }
 
         guard let appURL = components.url else {
             Mahjong3DLog.error(rendererLogger, "instance[\(self.instanceID)] failed to build app URL")
@@ -257,23 +222,6 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
             timeoutInterval: 30
         )
         webView?.load(request)
-    }
-
-    private func configureNativeDiagnosticView() {
-        guard nativeDiagnosticView == nil else {
-            return
-        }
-
-        let view = NativeDiagnosticView(frame: bounds)
-        view.autoresizingMask = [.width, .height]
-        addSubview(view)
-        nativeDiagnosticView = view
-    }
-
-    private func tearDownNativeDiagnosticView() {
-        nativeDiagnosticView?.stop()
-        nativeDiagnosticView?.removeFromSuperview()
-        nativeDiagnosticView = nil
     }
 
     private func tearDownWebView() {
@@ -292,10 +240,6 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
     private func syncWebViewFrame() {
         webView?.frame = bounds
         webView?.layer?.backgroundColor = Self.startupBackgroundColor.cgColor
-    }
-
-    private func syncNativeDiagnosticFrame() {
-        nativeDiagnosticView?.frame = bounds
     }
 
     private func startFrameTimer() {
@@ -386,102 +330,6 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         Mahjong3DLog.info(rendererLogger, "\(String(describing: message.body))")
-    }
-}
-
-private final class NativeDiagnosticView: NSView {
-    private let markerLayer = CALayer()
-    private let textLayer = CATextLayer()
-    private var timer: Timer?
-    private var frameCount = 0
-    private let startedAt = ProcessInfo.processInfo.systemUptime
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        commonInit()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        commonInit()
-    }
-
-    deinit {
-        stop()
-    }
-
-    override func layout() {
-        super.layout()
-        layoutLayers()
-    }
-
-    func start() {
-        guard timer == nil else {
-            return
-        }
-
-        tick()
-        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
-            self?.tick()
-        }
-        self.timer = timer
-        RunLoop.main.add(timer, forMode: .common)
-    }
-
-    func stop() {
-        timer?.invalidate()
-        timer = nil
-    }
-
-    private func commonInit() {
-        wantsLayer = true
-        layer?.backgroundColor = NSColor(calibratedRed: 0.07, green: 0.09, blue: 0.08, alpha: 1).cgColor
-
-        markerLayer.backgroundColor = NSColor(calibratedRed: 0.91, green: 0.79, blue: 0.36, alpha: 1).cgColor
-        markerLayer.cornerRadius = 12
-        markerLayer.shadowColor = NSColor.black.cgColor
-        markerLayer.shadowOpacity = 0.35
-        markerLayer.shadowRadius = 18
-        markerLayer.shadowOffset = CGSize(width: 0, height: -4)
-        layer?.addSublayer(markerLayer)
-
-        textLayer.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
-        textLayer.foregroundColor = NSColor.white.cgColor
-        textLayer.backgroundColor = NSColor(calibratedWhite: 0, alpha: 0.45).cgColor
-        textLayer.cornerRadius = 6
-        textLayer.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .medium)
-        textLayer.fontSize = 14
-        textLayer.alignmentMode = .left
-        layer?.addSublayer(textLayer)
-
-        layoutLayers()
-    }
-
-    private func tick() {
-        frameCount += 1
-        let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
-        let width = max(bounds.width, 1)
-        let height = max(bounds.height, 1)
-        let x = 24 + (sin(elapsed * 1.7) + 1) * 0.5 * max(width - 220, 1)
-        let y = 80 + (cos(elapsed * 1.1) + 1) * 0.5 * max(height - 260, 1)
-
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        markerLayer.frame = CGRect(x: x, y: y, width: 180, height: 180)
-        markerLayer.transform = CATransform3DMakeRotation(elapsed, 0, 0, 1)
-        textLayer.string = "mode: native-layer\nframes: \(frameCount)\nt: \(Int(elapsed * 1000))ms"
-        CATransaction.commit()
-
-        if frameCount % 30 == 0 {
-            Mahjong3DLog.info(rendererLogger, "nativeDiagnostic frameCount=\(self.frameCount) elapsedMs=\(Int(elapsed * 1000)) bounds=\(self.bounds.debugDescription)")
-        }
-    }
-
-    private func layoutLayers() {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        textLayer.frame = CGRect(x: 20, y: max(bounds.height - 92, 20), width: 220, height: 72)
-        CATransaction.commit()
     }
 }
 

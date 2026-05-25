@@ -15,18 +15,8 @@ APPEX_BUNDLE="$APP_BUNDLE/Contents/PlugIns/Mahjong3DScreenSaverExtension.appex"
 ASSET_BUILD_DIR="$BUILD_DIR/assets"
 NATIVE_RESOURCE_DIR="$MACOS_DIR/Mahjong3D/Resources"
 EXTENSION_DIR="$MACOS_DIR/Mahjong3DScreenSaverExtension"
-DIAGNOSTIC_MODE="${MAHJONG3D_SCREENSAVER_DIAGNOSTIC_MODE:-app}"
 LOGGING_ENABLED="${MAHJONG3D_SCREENSAVER_LOGGING:-0}"
 export CLANG_MODULE_CACHE_PATH="$BUILD_DIR/module-cache"
-
-case "$DIAGNOSTIC_MODE" in
-  app|native-layer|dom|canvas2d|webgl-static) ;;
-  *)
-    echo "Unsupported MAHJONG3D_SCREENSAVER_DIAGNOSTIC_MODE: $DIAGNOSTIC_MODE" >&2
-    echo "Expected one of: app, native-layer, dom, canvas2d, webgl-static" >&2
-    exit 1
-    ;;
-esac
 
 cd "$ROOT_DIR"
 bun run build:screensaver
@@ -61,7 +51,6 @@ cp "$ASSET_BUILD_DIR/thumbnail@2x.png" "$APPEX_BUNDLE/Contents/Resources/thumbna
 cp "$ASSET_BUILD_DIR/thumbnail.png" "$APP_BUNDLE/Contents/Resources/thumbnail.png"
 cp "$ASSET_BUILD_DIR/thumbnail@2x.png" "$APP_BUNDLE/Contents/Resources/thumbnail@2x.png"
 rsync -a --delete "$WEB_DIST/" "$APPEX_BUNDLE/Contents/Resources/Web/"
-printf "%s\n" "$DIAGNOSTIC_MODE" > "$APPEX_BUNDLE/Contents/Resources/DiagnosticMode.txt"
 printf "%s\n" "$LOGGING_ENABLED" > "$APPEX_BUNDLE/Contents/Resources/LoggingEnabled.txt"
 printf "%s\n" "$LOGGING_ENABLED" > "$APP_BUNDLE/Contents/Resources/LoggingEnabled.txt"
 
