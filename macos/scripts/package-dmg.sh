@@ -37,8 +37,8 @@ cp -R "$APP_BUNDLE" "$DMG_STAGING/$DMG_BUNDLE_NAME"
 cat >"$DMG_STAGING/README.txt" <<'EOF'
 Mahjong 3D Screen Saver
 
-Move Mahjong3D.app to /Applications, open it once, and use Register if the screen saver does not appear automatically.
-Then select Mahjong 3D in System Settings > Screen Saver.
+Move Mahjong3D.app to /Applications, then select Mahjong 3D in System Settings > Screen Saver.
+If it does not appear immediately, run the pluginkit registration command documented in macos/README.md.
 EOF
 
 hdiutil create \

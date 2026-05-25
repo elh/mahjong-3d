@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		2A000001000000000000000A /* Mahjong3DApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A000001000000000000000B /* Mahjong3DApp.swift */; };
 		2A000002000000000000000A /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A000002000000000000000B /* ContentView.swift */; };
-		2A000003000000000000000A /* PluginManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A000003000000000000000B /* PluginManager.swift */; };
 		2A000004000000000000000A /* Mahjong3DLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A000004000000000000000B /* Mahjong3DLog.swift */; };
 		2A000005000000000000000A /* Mahjong3DLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A000004000000000000000B /* Mahjong3DLog.swift */; };
 		2A000006000000000000000A /* Mahjong3DScreenSaverExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A000006000000000000000B /* Mahjong3DScreenSaverExtension.swift */; };
@@ -48,7 +47,6 @@
 /* Begin PBXFileReference section */
 		2A000001000000000000000B /* Mahjong3DApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mahjong3DApp.swift; sourceTree = "<group>"; };
 		2A000002000000000000000B /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		2A000003000000000000000B /* PluginManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginManager.swift; sourceTree = "<group>"; };
 		2A000004000000000000000B /* Mahjong3DLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mahjong3DLog.swift; sourceTree = "<group>"; };
 		2A000006000000000000000B /* Mahjong3DScreenSaverExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mahjong3DScreenSaverExtension.swift; sourceTree = "<group>"; };
 		2A000007000000000000000B /* Mahjong3DScreenSaverViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mahjong3DScreenSaverViewController.swift; sourceTree = "<group>"; };
@@ -113,7 +111,6 @@
 			children = (
 				2A000001000000000000000B /* Mahjong3DApp.swift */,
 				2A000002000000000000000B /* ContentView.swift */,
-				2A000003000000000000000B /* PluginManager.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -286,7 +283,6 @@
 			files = (
 				2A000001000000000000000A /* Mahjong3DApp.swift in Sources */,
 				2A000002000000000000000A /* ContentView.swift in Sources */,
-				2A000003000000000000000A /* PluginManager.swift in Sources */,
 				2A000004000000000000000A /* Mahjong3DLog.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

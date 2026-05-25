@@ -16,6 +16,8 @@ This structure follows the approach documented by
 an application bundle owns and registers a sandboxed `XPC!` screen saver
 extension. The private `ScreenSaverExtension` and `ScreenSaverViewController`
 declarations in this repo are adapted from that MIT-licensed sample.
+Aerial's AppExtension screen saver notes were also consulted while choosing
+this structure.
 
 The legacy `Mahjong3D.saver` bundle is still available as an explicit fallback
 for older macOS versions. It is no longer the default install or package path.
@@ -50,9 +52,9 @@ handles:
   from early native state.
 - Worker-backed round generation is disabled in `surface=screensaver`; the web
   app uses the local-file-safe no-worker fallback.
-- The container app is intentionally small. It shows extension registration
-  status and offers Register, Unregister, Refresh, and Screen Saver Settings
-  actions. It does not embed a preview renderer.
+- The container app is intentionally small. It only points users to Screen Saver
+  Settings; install and extension registration are handled by scripts and System
+  Settings. It does not embed a preview renderer.
 
 ## Build
 
