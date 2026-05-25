@@ -1,4 +1,4 @@
-.PHONY: help install dev test typecheck format format-check lint lint-biome lint-eslint knip build install-screensaver package-saver clean good bench-sim install-legacy-screensaver package-legacy-saver
+.PHONY: help install dev test typecheck format format-check lint lint-biome lint-eslint knip build install-screensaver uninstall-screensaver package-saver clean good bench-sim install-legacy-screensaver package-legacy-saver
 
 help:
 	@printf "%s\n" \
@@ -13,6 +13,7 @@ help:
 		"knip                   Run Knip workspace hygiene checks" \
 		"build                  Run production build" \
 		"install-screensaver    Build and install the macOS app-extension screen saver locally" \
+		"uninstall-screensaver  Uninstall the local macOS app-extension screen saver" \
 		"package-saver          Build the macOS app-extension screen saver DMG" \
 		"clean                  Remove build output" \
 		"good                   Run format check, lint, knip, typecheck, tests, and build" \
@@ -59,6 +60,9 @@ build:
 
 install-screensaver:
 	bash macos/scripts/install-saver.sh
+
+uninstall-screensaver:
+	bash macos/scripts/uninstall-screensaver-app.sh
 
 package-saver:
 	bash macos/scripts/package-dmg.sh

@@ -98,6 +98,26 @@ opening System Settings during scripted checks.
 `/Applications` with this script, or develop from Xcode build products without
 also keeping a copy in `/Applications`.
 
+## Uninstall
+
+For a normal installed copy, quit System Settings if it is open, move
+`/Applications/Mahjong3D.app` to Trash, and reopen System Settings. The embedded
+screen saver extension lives inside the app bundle, so deleting the app removes
+the installed screen saver resources.
+
+For local development installs, prefer:
+
+```sh
+make uninstall-screensaver
+```
+
+The uninstall target unregisters the embedded extension when the app is still
+present, removes `/Applications/Mahjong3D.app`, removes any legacy
+`Mahjong3D.saver` copies, and restarts the relevant screen saver agents. If the
+app bundle is deleted manually first, System Settings may briefly keep a stale
+screen saver entry in its extension cache; reinstalling and then running the
+uninstall target gives `pluginkit` a live extension path to unregister.
+
 ## Package
 
 ```sh

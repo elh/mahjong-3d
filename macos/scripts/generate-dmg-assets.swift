@@ -262,5 +262,10 @@ try savePNG(
     to: outputURL.appendingPathComponent("thumbnail@2x.png")
 )
 try saveTIFF(makeThumbnail(size: NSSize(width: 180, height: 116)), to: outputURL.appendingPathComponent("thumbnail.tiff"))
+try savePNG(makeThumbnail(size: NSSize(width: 107, height: 65)), to: outputURL.appendingPathComponent("thumbnail-assets.png"))
+try savePNG(
+    makeThumbnail(size: NSSize(width: 214, height: 130)),
+    to: outputURL.appendingPathComponent("thumbnail-assets@2x.png")
+)
 try saveICNS(imageFactory: makeAppIcon, to: outputURL.appendingPathComponent("Mahjong3D.icns"))
 try saveICNS(imageFactory: makeScreenSaverIcon, to: outputURL.appendingPathComponent("screen-saver-icon.icns"))

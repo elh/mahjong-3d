@@ -13,6 +13,7 @@ APP_BUNDLE="$BUILD_DIR/Mahjong3D.app"
 BUILT_APP="$PRODUCTS_DIR/$CONFIGURATION/Mahjong3D.app"
 APPEX_BUNDLE="$APP_BUNDLE/Contents/PlugIns/Mahjong3DScreenSaverExtension.appex"
 ASSET_BUILD_DIR="$BUILD_DIR/assets"
+ASSET_CATALOG_DIR="$BUILD_DIR/ScreenSaverAssets.xcassets"
 EXTENSION_DIR="$MACOS_DIR/Mahjong3DScreenSaverExtension"
 LOGGING_ENABLED="${MAHJONG3D_SCREENSAVER_LOGGING:-0}"
 export CLANG_MODULE_CACHE_PATH="$BUILD_DIR/module-cache"
@@ -20,9 +21,31 @@ export CLANG_MODULE_CACHE_PATH="$BUILD_DIR/module-cache"
 cd "$ROOT_DIR"
 bun run build:screensaver
 
-rm -rf "$ASSET_BUILD_DIR" "$DERIVED_DATA" "$PRODUCTS_DIR" "$APP_BUNDLE" "$CLANG_MODULE_CACHE_PATH"
-mkdir -p "$ASSET_BUILD_DIR" "$PRODUCTS_DIR" "$CLANG_MODULE_CACHE_PATH"
+rm -rf "$ASSET_BUILD_DIR" "$ASSET_CATALOG_DIR" "$DERIVED_DATA" "$PRODUCTS_DIR" "$APP_BUNDLE" "$CLANG_MODULE_CACHE_PATH"
+mkdir -p "$ASSET_BUILD_DIR" "$ASSET_CATALOG_DIR/thumbnail.imageset" "$PRODUCTS_DIR" "$CLANG_MODULE_CACHE_PATH"
 xcrun swift "$MACOS_DIR/scripts/generate-dmg-assets.swift" "$ROOT_DIR" "$ASSET_BUILD_DIR"
+cp "$ASSET_BUILD_DIR/thumbnail-assets.png" "$ASSET_CATALOG_DIR/thumbnail.imageset/thumbnail.png"
+cp "$ASSET_BUILD_DIR/thumbnail-assets@2x.png" "$ASSET_CATALOG_DIR/thumbnail.imageset/thumbnail@2x.png"
+cat > "$ASSET_CATALOG_DIR/thumbnail.imageset/Contents.json" <<'JSON'
+{
+  "images": [
+    {
+      "filename": "thumbnail.png",
+      "idiom": "mac",
+      "scale": "1x"
+    },
+    {
+      "filename": "thumbnail@2x.png",
+      "idiom": "mac",
+      "scale": "2x"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}
+JSON
 
 xcodebuild \
   -project "$PROJECT" \
@@ -49,6 +72,12 @@ cp "$ASSET_BUILD_DIR/screen-saver-icon.icns" "$APPEX_BUNDLE/Contents/Resources/i
 cp "$ASSET_BUILD_DIR/thumbnail.png" "$APPEX_BUNDLE/Contents/Resources/thumbnail.png"
 cp "$ASSET_BUILD_DIR/thumbnail@2x.png" "$APPEX_BUNDLE/Contents/Resources/thumbnail@2x.png"
 cp "$ASSET_BUILD_DIR/thumbnail.tiff" "$APPEX_BUNDLE/Contents/Resources/thumbnail.tiff"
+xcrun actool "$ASSET_CATALOG_DIR" \
+  --compile "$APPEX_BUNDLE/Contents/Resources" \
+  --platform macosx \
+  --minimum-deployment-target 14.0 \
+  --output-format human-readable-text \
+  >/dev/null
 cp "$ASSET_BUILD_DIR/thumbnail.png" "$APP_BUNDLE/Contents/Resources/thumbnail.png"
 cp "$ASSET_BUILD_DIR/thumbnail@2x.png" "$APP_BUNDLE/Contents/Resources/thumbnail@2x.png"
 cp "$ASSET_BUILD_DIR/thumbnail.tiff" "$APP_BUNDLE/Contents/Resources/thumbnail.tiff"

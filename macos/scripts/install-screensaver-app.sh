@@ -48,7 +48,7 @@ if [ "$registered" -ne 1 ]; then
 fi
 
 if [ "${OPEN_SETTINGS:-1}" != "0" ]; then
-  /usr/bin/open "x-apple.systempreferences:com.apple.ScreenSaver-Settings.extension"
+  /usr/bin/open "x-apple.systempreferences:com.apple.Wallpaper-Settings.extension?ScreenSaver"
 fi
 
 echo "Installed $APP_DEST"
