@@ -12,3 +12,36 @@ macos/build
 !.env.example
 *.log
 *.tsbuildinfo
+
+# Xcode user state
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+*.moved-aside
+
+# Xcode build/archive output
+DerivedData/
+build/
+*.xcarchive
+*.dSYM
+
+# macOS packaged artifacts
+*.app
+*.appex
+*.saver
+*.dmg
+*.pkg
+
+# Apple signing/provisioning/private keys
+*.mobileprovision
+*.provisionprofile
+*.cer
+*.p12
+*.p8
+*.key
+*.pem
+*.der
+*.csr
+*.developerprofile
+ExportOptions*.plist

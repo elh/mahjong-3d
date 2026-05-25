@@ -5,11 +5,10 @@ saver build.
 
 ## Architecture
 
-The default Tahoe/Sonoma-era artifact is `Mahjong3D.app`, a minimal SwiftUI
-container app with an embedded `Mahjong3DScreenSaverExtension.appex`. The
-extension uses the `com.apple.screensaver` app-extension point and hosts the
-local Vite screen saver build in a `WKWebView` over the custom
-`mahjong3d-saver://` scheme.
+The default macOS 14+ artifact is `Mahjong3D.app`, a minimal SwiftUI container
+app with an embedded `Mahjong3DScreenSaverExtension.appex`. The extension uses
+the `com.apple.screensaver` app-extension point and hosts the local Vite screen
+saver build in a `WKWebView` over the custom `mahjong3d-saver://` scheme.
 
 This structure follows the approach documented by
 [AerialScreensaver/AppexSaverMinimal](https://github.com/AerialScreensaver/AppexSaverMinimal):
@@ -47,9 +46,10 @@ handles:
 - On macOS 14 and newer, the extension sets `WKPreferences.inactiveSchedulingPolicy`
   to `.none` as a best-effort guard against WebKit suspending an attached screen
   saver web view.
-- The extension stays sandboxed. It loads only bundled resources, but keeps the
-  network-client entitlement because WKWebView still brings up WebKit networking
-  process plumbing for the custom local scheme in the screen saver extension.
+- The extension stays sandboxed and loads only bundled resources. Local
+  app-extension testing showed WKWebView still needs the network-client
+  entitlement for its WebKit networking process plumbing even when serving the
+  custom local scheme.
 - Startup and teardown are anchored to `viewDidMoveToWindow()` following the
   Aerial minimal sample. There are no independent overlay windows, process-exit
   watchdogs, duplicate renderer ownership systems, or WebGL mirror fallbacks in

@@ -1,7 +1,7 @@
 # Mahjong 3D
 
 Taiwanese Mahjong 3D infinite simulator made with React Three Fiber. Enjoy it
-as a cozy [website](https://elh.github.io/mahjong-3d/) or [macOS screen saver](https://github.com/elh/mahjong-3d/releases/latest/download/Mahjong3D.dmg).
+as a cozy [website](https://elh.github.io/mahjong-3d/) or [macOS 14+ screen saver](https://github.com/elh/mahjong-3d/releases/latest/download/Mahjong3D.dmg).
 
 ![screenshot](public/social-preview.png)
 
@@ -22,7 +22,7 @@ as a cozy [website](https://elh.github.io/mahjong-3d/) or [macOS screen saver](h
 ```bash
 make install      # install dependencies
 make dev          # start the Vite app
-DEBUG=1 make dev  # enabled controls like `?view=debug` and `?seed=...` control
+DEBUG=1 make dev  # enable controls like `?view=debug` and `?seed=...` control
 make good         # format check, lint, knip, types, tests, and build
 ```
 
@@ -30,7 +30,8 @@ make good         # format check, lint, knip, types, tests, and build
 
 The native wrapper lives in `macos/` and bundles the Vite screen saver build
 into a small app with an embedded Screen Saver extension. See
-[macos/README.md](macos/README.md).
+[macos/README.md](macos/README.md) for build, install, package, and legacy
+fallback details.
 
 ```bash
 make install-screensaver
