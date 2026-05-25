@@ -34,9 +34,10 @@ handles:
   `WKURLSchemeHandler`, not `file://`, so ESM chunks and tile assets share one
   bundled same-origin URL.
 - `SSENeedsAnimationTimer` is `false`. The extension owns a main-run-loop timer,
-  calls `window.mahjongScreenSaver.renderFrame(performance.now())` at 60 fps,
+  calls `window.mahjongScreenSaver.renderFrame(performance.now())` at 30 fps,
   and the web app advances its manual React Three Fiber frame loop from that
-  event.
+  event. This keeps the native-to-WebKit bridge below the point where faster
+  frame requests add visible jitter.
 - On macOS 14 and newer, the extension sets `WKPreferences.inactiveSchedulingPolicy`
   to `.none` as a best-effort guard against WebKit suspending an attached screen
   saver web view.
