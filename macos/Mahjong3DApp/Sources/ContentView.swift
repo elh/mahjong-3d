@@ -4,22 +4,16 @@ import SwiftUI
 struct ContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 14) {
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable()
-                    .frame(width: 56, height: 56)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Mahjong 3D")
-                        .font(.largeTitle.weight(.semibold))
-                    Text("Screen Saver Extension")
-                        .foregroundStyle(.secondary)
-                }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Mahjong 3D")
+                    .font(.largeTitle.weight(.semibold))
+                Text("Screen Saver Extension")
+                    .foregroundStyle(.secondary)
             }
 
             Divider()
 
-            Text("Mahjong 3D installs as a macOS screen saver. Open Screen Saver Settings to select it.")
+            Text("Mahjong 3D installs as a macOS screen saver. Set it in System Settings > Wallpaper > Screen Saver...")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
