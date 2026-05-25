@@ -15,7 +15,7 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
     )
     private static let frameInterval = 1.0 / 15.0
     private static let renderFrameTimeout = 0.5
-    private static let nativeFrameDriverEnabled = true
+    private static let nativeFrameDriverEnabled = false
     private static let diagnosticMode = loadDiagnosticMode()
 
     private let instanceID = UUID().uuidString.prefix(8)
@@ -163,6 +163,7 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
     private func configureWebView() {
         let configuration = WKWebViewConfiguration()
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+        configureInactiveSchedulingPolicy(configuration.preferences)
         configuration.suppressesIncrementalRendering = false
         configuration.websiteDataStore = .nonPersistent()
 
@@ -215,6 +216,15 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
         webView = view
 
         loadBundledWebApp()
+    }
+
+    private func configureInactiveSchedulingPolicy(_ preferences: WKPreferences) {
+        if #available(macOS 14.0, *) {
+            preferences.inactiveSchedulingPolicy = .none
+            rendererLogger.info("instance[\(self.instanceID, privacy: .public)] WK inactiveSchedulingPolicy=none")
+        } else {
+            rendererLogger.info("instance[\(self.instanceID, privacy: .public)] WK inactiveSchedulingPolicy unavailable")
+        }
     }
 
     private func loadBundledWebApp() {

@@ -1591,6 +1591,30 @@ function useScreenSaverLifecycle(
     };
   }, [config]);
 
+  useEffect(() => {
+    if (!config || !lifecycle.active) {
+      return;
+    }
+
+    let animationFrame = 0;
+    const renderFrame = (timestampMs: number) => {
+      window.dispatchEvent(
+        new CustomEvent<ScreenSaverFrameEventDetail>(
+          screenSaverFrameEventName,
+          {
+            detail: { timestampMs },
+          },
+        ),
+      );
+      animationFrame = window.requestAnimationFrame(renderFrame);
+    };
+
+    animationFrame = window.requestAnimationFrame(renderFrame);
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+    };
+  }, [config, lifecycle.active]);
+
   return lifecycle;
 }
 

@@ -33,16 +33,19 @@ handles:
 - The extension loads the web app from `Contents/Resources/Web` through
   `WKURLSchemeHandler`, not `file://`, so ESM chunks and tile assets share one
   bundled same-origin URL.
-- `SSENeedsAnimationTimer` is `false`. The extension owns a main-run-loop timer,
-  calls `window.mahjongScreenSaver.renderFrame(performance.now())`, and the web
-  app advances its manual React Three Fiber frame loop from that event.
+- `SSENeedsAnimationTimer` is `false`. The extension currently avoids native
+  per-frame JavaScript calls; the web app drives screen saver frames with
+  `requestAnimationFrame` after the native lifecycle bridge marks it active.
+- On macOS 14 and newer, the extension sets `WKPreferences.inactiveSchedulingPolicy`
+  to `.none` as a best-effort guard against WebKit suspending an attached screen
+  saver web view.
 - Startup and teardown are anchored to `viewDidMoveToWindow()` following the
   Aerial minimal sample. There are no independent overlay windows, process-exit
   watchdogs, duplicate renderer ownership systems, or WebGL mirror fallbacks in
   this implementation.
 - The native bridge still writes `window.__mahjongScreenSaverNativeState` before
-  calling `setActive`, `setPreview`, or `renderFrame`, so React can bootstrap
-  from early native state.
+  calling `setActive` or `setPreview`, so React can bootstrap from early native
+  state.
 - Worker-backed round generation is disabled in `surface=screensaver`; the web
   app uses the local-file-safe no-worker fallback.
 - The container app is intentionally small. It shows extension registration
