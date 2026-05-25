@@ -16,6 +16,7 @@ ASSET_BUILD_DIR="$BUILD_DIR/assets"
 NATIVE_RESOURCE_DIR="$MACOS_DIR/Mahjong3D/Resources"
 EXTENSION_DIR="$MACOS_DIR/Mahjong3DScreenSaverExtension"
 DIAGNOSTIC_MODE="${MAHJONG3D_SCREENSAVER_DIAGNOSTIC_MODE:-app}"
+LOGGING_ENABLED="${MAHJONG3D_SCREENSAVER_LOGGING:-0}"
 export CLANG_MODULE_CACHE_PATH="$BUILD_DIR/module-cache"
 
 case "$DIAGNOSTIC_MODE" in
@@ -61,6 +62,8 @@ cp "$ASSET_BUILD_DIR/thumbnail.png" "$APP_BUNDLE/Contents/Resources/thumbnail.pn
 cp "$ASSET_BUILD_DIR/thumbnail@2x.png" "$APP_BUNDLE/Contents/Resources/thumbnail@2x.png"
 rsync -a --delete "$WEB_DIST/" "$APPEX_BUNDLE/Contents/Resources/Web/"
 printf "%s\n" "$DIAGNOSTIC_MODE" > "$APPEX_BUNDLE/Contents/Resources/DiagnosticMode.txt"
+printf "%s\n" "$LOGGING_ENABLED" > "$APPEX_BUNDLE/Contents/Resources/LoggingEnabled.txt"
+printf "%s\n" "$LOGGING_ENABLED" > "$APP_BUNDLE/Contents/Resources/LoggingEnabled.txt"
 
 if [ -n "${SIGN_IDENTITY:-}" ]; then
   codesign \

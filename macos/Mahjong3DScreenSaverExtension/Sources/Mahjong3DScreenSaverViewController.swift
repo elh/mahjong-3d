@@ -17,7 +17,7 @@ final class Mahjong3DScreenSaverViewController: ScreenSaverViewController {
     }
 
     private func installRenderer(frame: NSRect, isPreview: Bool) {
-        logger.info("load renderer frame=\(frame.debugDescription, privacy: .public) preview=\(isPreview, privacy: .public)")
+        Mahjong3DLog.info(logger, "load renderer frame=\(frame.debugDescription) preview=\(isPreview)")
         guard let renderer = Mahjong3DExtensionRendererView(frame: frame, isPreview: isPreview) else {
             self.view = NSView(frame: frame)
             return

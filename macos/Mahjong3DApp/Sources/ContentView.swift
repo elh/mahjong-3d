@@ -121,7 +121,7 @@ struct ContentView: View {
             statusMessage = "Extension registered"
         } catch {
             statusMessage = "Registration failed: \(error.localizedDescription)"
-            logger.error("Registration failed: \(error.localizedDescription, privacy: .public)")
+            Mahjong3DLog.error(logger, "Registration failed: \(error.localizedDescription)")
         }
     }
 
@@ -132,7 +132,7 @@ struct ContentView: View {
             statusMessage = "Extension unregistered"
         } catch {
             statusMessage = "Unregister failed: \(error.localizedDescription)"
-            logger.error("Unregister failed: \(error.localizedDescription, privacy: .public)")
+            Mahjong3DLog.error(logger, "Unregister failed: \(error.localizedDescription)")
         }
     }
 

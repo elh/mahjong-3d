@@ -47,7 +47,7 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
     deinit {
         stopRenderer(reason: "deinit")
         tearDownWebView()
-        rendererLogger.info("instance[\(self.instanceID, privacy: .public)] deinit")
+        Mahjong3DLog.info(rendererLogger, "instance[\(self.instanceID)] deinit")
     }
 
     override func makeBackingLayer() -> CALayer {
@@ -59,7 +59,7 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        rendererLogger.info("instance[\(self.instanceID, privacy: .public)] viewDidMoveToWindow hasWindow=\(self.window != nil, privacy: .public)")
+        Mahjong3DLog.info(rendererLogger, "instance[\(self.instanceID)] viewDidMoveToWindow hasWindow=\(self.window != nil)")
         if window != nil {
             startRenderer(reason: "viewDidMoveToWindow")
         } else {
@@ -70,16 +70,16 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
 
     override func startAnimation() {
         super.startAnimation()
-        rendererLogger.info("instance[\(self.instanceID, privacy: .public)] startAnimation")
+        Mahjong3DLog.info(rendererLogger, "instance[\(self.instanceID)] startAnimation")
         startRenderer(reason: "startAnimation")
     }
 
     override func stopAnimation() {
-        rendererLogger.info("instance[\(self.instanceID, privacy: .public)] stopAnimation")
+        Mahjong3DLog.info(rendererLogger, "instance[\(self.instanceID)] stopAnimation")
         if window == nil {
             stopRenderer(reason: "stopAnimation nil window")
         } else {
-            rendererLogger.info("instance[\(self.instanceID, privacy: .public)] ignoring stopAnimation while window is attached")
+            Mahjong3DLog.info(rendererLogger, "instance[\(self.instanceID)] ignoring stopAnimation while window is attached")
         }
         super.stopAnimation()
     }
@@ -101,7 +101,7 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
         layer?.backgroundColor = Self.startupBackgroundColor.cgColor
         animationTimeInterval = Self.frameInterval
         webPreview = nativePreview || bounds.width < 400 || bounds.height < 300
-        rendererLogger.info("instance[\(self.instanceID, privacy: .public)] init size=\(self.bounds.size.debugDescription, privacy: .public) preview=\(self.webPreview, privacy: .public) diagnosticMode=\(Self.diagnosticMode, privacy: .public)")
+        Mahjong3DLog.info(rendererLogger, "instance[\(self.instanceID)] init size=\(self.bounds.size.debugDescription) preview=\(self.webPreview) diagnosticMode=\(Self.diagnosticMode)")
     }
 
     private func startRenderer(reason: String) {
@@ -118,7 +118,7 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
             configureNativeDiagnosticView()
             syncNativeDiagnosticFrame()
             nativeDiagnosticView?.start()
-            rendererLogger.info("instance[\(self.instanceID, privacy: .public)] native diagnostic active reason=\(reason, privacy: .public)")
+            Mahjong3DLog.info(rendererLogger, "instance[\(self.instanceID)] native diagnostic active reason=\(reason)")
             return
         }
 
@@ -155,7 +155,7 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
         case "app", "native-layer", "dom", "canvas2d", "webgl-static":
             return rawValue
         default:
-            rendererLogger.error("unsupported diagnostic mode \(rawValue, privacy: .public); falling back to app")
+            Mahjong3DLog.error(rendererLogger, "unsupported diagnostic mode \(rawValue); falling back to app")
             return "app"
         }
     }
@@ -205,7 +205,7 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
             configuration.setURLSchemeHandler(schemeHandler, forURLScheme: Self.webScheme)
             webSchemeHandler = schemeHandler
         } else {
-            rendererLogger.error("instance[\(self.instanceID, privacy: .public)] missing Web resources")
+            Mahjong3DLog.error(rendererLogger, "instance[\(self.instanceID)] missing Web resources")
         }
 
         let view = WKWebView(frame: bounds, configuration: configuration)
@@ -221,9 +221,9 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
     private func configureInactiveSchedulingPolicy(_ preferences: WKPreferences) {
         if #available(macOS 14.0, *) {
             preferences.inactiveSchedulingPolicy = .none
-            rendererLogger.info("instance[\(self.instanceID, privacy: .public)] WK inactiveSchedulingPolicy=none")
+            Mahjong3DLog.info(rendererLogger, "instance[\(self.instanceID)] WK inactiveSchedulingPolicy=none")
         } else {
-            rendererLogger.info("instance[\(self.instanceID, privacy: .public)] WK inactiveSchedulingPolicy unavailable")
+            Mahjong3DLog.info(rendererLogger, "instance[\(self.instanceID)] WK inactiveSchedulingPolicy unavailable")
         }
     }
 
@@ -246,11 +246,11 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
         }
 
         guard let appURL = components.url else {
-            rendererLogger.error("instance[\(self.instanceID, privacy: .public)] failed to build app URL")
+            Mahjong3DLog.error(rendererLogger, "instance[\(self.instanceID)] failed to build app URL")
             return
         }
 
-        rendererLogger.info("instance[\(self.instanceID, privacy: .public)] load \(appURL.absoluteString, privacy: .public)")
+        Mahjong3DLog.info(rendererLogger, "instance[\(self.instanceID)] load \(appURL.absoluteString)")
         let request = URLRequest(
             url: appURL,
             cachePolicy: .reloadIgnoringLocalAndRemoteCacheData,
@@ -338,7 +338,7 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
             """,
             completionHandler: { errorResult, error in
                 if let error {
-                    rendererLogger.debug("bridge \(call, privacy: .public) reason=\(reason, privacy: .public) failed result=\(String(describing: errorResult), privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+                    Mahjong3DLog.debug(rendererLogger, "bridge \(call) reason=\(reason) failed result=\(String(describing: errorResult)) error=\(error.localizedDescription)")
                 }
             }
         )
@@ -364,28 +364,28 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
                 self?.renderFrameTimeoutTimer = nil
                 self?.renderFrameInFlight = false
                 if let error {
-                    rendererLogger.debug("renderFrame failed: \(error.localizedDescription, privacy: .public)")
+                    Mahjong3DLog.debug(rendererLogger, "renderFrame failed: \(error.localizedDescription)")
                 }
             }
         )
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        rendererLogger.info("instance[\(self.instanceID, privacy: .public)] didFinish \(webView.url?.absoluteString ?? "unknown", privacy: .public)")
+        Mahjong3DLog.info(rendererLogger, "instance[\(self.instanceID)] didFinish \(webView.url?.absoluteString ?? "unknown")")
         setWebPreview(webPreview, reason: "didFinish")
         setWebActive(true, reason: "didFinish")
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        rendererLogger.error("didFail \(error.localizedDescription, privacy: .public)")
+        Mahjong3DLog.error(rendererLogger, "didFail \(error.localizedDescription)")
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        rendererLogger.error("didFailProvisionalNavigation \(error.localizedDescription, privacy: .public)")
+        Mahjong3DLog.error(rendererLogger, "didFailProvisionalNavigation \(error.localizedDescription)")
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        rendererLogger.info("\(String(describing: message.body), privacy: .public)")
+        Mahjong3DLog.info(rendererLogger, "\(String(describing: message.body))")
     }
 }
 
@@ -473,7 +473,7 @@ private final class NativeDiagnosticView: NSView {
         CATransaction.commit()
 
         if frameCount % 30 == 0 {
-            rendererLogger.info("nativeDiagnostic frameCount=\(self.frameCount, privacy: .public) elapsedMs=\(Int(elapsed * 1000), privacy: .public) bounds=\(self.bounds.debugDescription, privacy: .public)")
+            Mahjong3DLog.info(rendererLogger, "nativeDiagnostic frameCount=\(self.frameCount) elapsedMs=\(Int(elapsed * 1000)) bounds=\(self.bounds.debugDescription)")
         }
     }
 

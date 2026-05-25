@@ -67,7 +67,7 @@ final class PluginManager: ObservableObject {
             throw PluginError.embeddedExtensionNotFound
         }
 
-        logger.info("Registering extension at \(extensionPath, privacy: .public)")
+        Mahjong3DLog.info(logger, "Registering extension at \(extensionPath)")
         isLoading = true
         lastError = nil
         do {
@@ -85,7 +85,7 @@ final class PluginManager: ObservableObject {
             throw PluginError.extensionPathNotFound
         }
 
-        logger.info("Unregistering extension at \(extensionPath, privacy: .public)")
+        Mahjong3DLog.info(logger, "Unregistering extension at \(extensionPath)")
         isLoading = true
         lastError = nil
         do {
@@ -102,7 +102,7 @@ final class PluginManager: ObservableObject {
         let output = try runProcess("/usr/bin/pluginkit", arguments: ["-m", "-v", "-p", "com.apple.screensaver"])
 
         for line in output.components(separatedBy: "\n") where line.contains(bundleIdentifier) {
-            logger.info("Found extension in pluginkit output: \(line, privacy: .public)")
+            Mahjong3DLog.info(logger, "Found extension in pluginkit output: \(line)")
             let version = versionFromPluginKitLine(line)
             let path = pathFromPluginKitLine(line)
             return (true, path, version)
@@ -125,7 +125,7 @@ final class PluginManager: ObservableObject {
 
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         let output = String(data: data, encoding: .utf8) ?? ""
-        logger.debug("Process output: \(output, privacy: .public)")
+        Mahjong3DLog.debug(logger, "Process output: \(output)")
 
         return output
     }
