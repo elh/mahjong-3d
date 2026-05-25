@@ -71,7 +71,11 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
 
     override func stopAnimation() {
         rendererLogger.info("instance[\(self.instanceID, privacy: .public)] stopAnimation")
-        stopRenderer(reason: "stopAnimation")
+        if window == nil {
+            stopRenderer(reason: "stopAnimation nil window")
+        } else {
+            rendererLogger.info("instance[\(self.instanceID, privacy: .public)] ignoring stopAnimation while window is attached")
+        }
         super.stopAnimation()
     }
 
