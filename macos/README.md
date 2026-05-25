@@ -14,8 +14,10 @@ local Vite screen saver build in a `WKWebView` over the custom
 This structure follows the approach documented by
 [AerialScreensaver/AppexSaverMinimal](https://github.com/AerialScreensaver/AppexSaverMinimal):
 an application bundle owns and registers a sandboxed `XPC!` screen saver
-extension. The private `ScreenSaverExtension` and `ScreenSaverViewController`
-declarations in this repo are adapted from that MIT-licensed sample.
+extension. Apple does not ship public headers for this screen saver extension
+host, so this repo includes the small private `ScreenSaverExtension` and
+`ScreenSaverViewController` declarations needed to compile against it. Those
+declarations are adapted from that MIT-licensed sample.
 Aerial's AppExtension screen saver notes were also consulted while choosing
 this structure.
 
@@ -35,11 +37,13 @@ handles:
 - The extension loads the web app from `Contents/Resources/Web` through
   `WKURLSchemeHandler`, not `file://`, so ESM chunks and tile assets share one
   bundled same-origin URL.
-- `SSENeedsAnimationTimer` is `false`. The extension owns a main-run-loop timer,
+- The important Tahoe WKWebView workaround is that native code owns frame
+  delivery. We found public reports of WKWebView screen savers disappearing or
+  halting after a few seconds without a published fix; this implementation sets
+  `SSENeedsAnimationTimer` to `false`, owns a main-run-loop timer,
   calls `window.mahjongScreenSaver.renderFrame(performance.now())` at 30 fps,
   and the web app advances its manual React Three Fiber frame loop from that
-  event. This keeps the native-to-WebKit bridge below the point where faster
-  frame requests add visible jitter.
+  event instead of relying on WebKit's own animation scheduling.
 - On macOS 14 and newer, the extension sets `WKPreferences.inactiveSchedulingPolicy`
   to `.none` as a best-effort guard against WebKit suspending an attached screen
   saver web view.

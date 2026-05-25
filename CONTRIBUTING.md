@@ -15,6 +15,7 @@ First and foremost, this project is about making a pleasing, passive simulation 
 ## Larger changes
 
 * Improve macOS screen saver packaging and compatibility
+* Improve macOS screen saver performance
 * Support other Mahjong variants
 * Support actually playing the game (3D interactions, scoring)
 * Use existing strong bots, perhaps when turns are live/async instead of up-front
