@@ -212,7 +212,7 @@ func makeAppIcon(size: NSSize) -> NSImage {
     background.lineWidth = max(1, size.width * 0.012)
     background.stroke()
 
-    let fontSize = size.width * 0.86
+    let fontSize = size.width * 0.77
     let attributes: [NSAttributedString.Key: Any] = [
         .font: NSFont(name: "Apple Color Emoji", size: fontSize) ?? NSFont.systemFont(ofSize: fontSize),
     ]
@@ -221,7 +221,7 @@ func makeAppIcon(size: NSSize) -> NSImage {
     text.draw(
         at: NSPoint(
             x: (size.width - textSize.width) / 2,
-            y: (size.height - textSize.height) / 2 - size.height * 0.026
+            y: (size.height - textSize.height) / 2 - size.height * 0.031
         )
     )
 
