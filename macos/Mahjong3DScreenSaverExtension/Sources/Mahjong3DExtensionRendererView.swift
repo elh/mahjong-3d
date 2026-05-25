@@ -13,14 +13,16 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
         blue: 0.078,
         alpha: 1
     )
-    private static let frameInterval = 1.0 / 60.0
-    private static let nativeFrameDriverEnabled = false
+    private static let frameInterval = 1.0 / 15.0
+    private static let renderFrameTimeout = 0.5
+    private static let nativeFrameDriverEnabled = true
 
     private let instanceID = UUID().uuidString.prefix(8)
     private let nativePreview: Bool
     private var webView: WKWebView?
     private var webSchemeHandler: BundledWebSchemeHandler?
     private var frameTimer: Timer?
+    private var renderFrameTimeoutTimer: Timer?
     private var renderFrameInFlight = false
     private var webActive = false
     private var webPreview: Bool
@@ -245,6 +247,9 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
     private func stopFrameTimer() {
         frameTimer?.invalidate()
         frameTimer = nil
+        renderFrameTimeoutTimer?.invalidate()
+        renderFrameTimeoutTimer = nil
+        renderFrameInFlight = false
     }
 
     private func setWebActive(_ active: Bool, reason: String) {
@@ -279,11 +284,18 @@ final class Mahjong3DExtensionRendererView: ScreenSaverView, WKNavigationDelegat
         }
 
         renderFrameInFlight = true
+        renderFrameTimeoutTimer?.invalidate()
+        renderFrameTimeoutTimer = Timer.scheduledTimer(withTimeInterval: Self.renderFrameTimeout, repeats: false) { [weak self] _ in
+            self?.renderFrameTimeoutTimer = nil
+            self?.renderFrameInFlight = false
+        }
         webView.evaluateJavaScript(
             """
             window.mahjongScreenSaver && window.mahjongScreenSaver.renderFrame && window.mahjongScreenSaver.renderFrame(performance.now());
             """,
             completionHandler: { [weak self] _, error in
+                self?.renderFrameTimeoutTimer?.invalidate()
+                self?.renderFrameTimeoutTimer = nil
                 self?.renderFrameInFlight = false
                 if let error {
                     rendererLogger.debug("renderFrame failed: \(error.localizedDescription, privacy: .public)")

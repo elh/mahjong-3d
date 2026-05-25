@@ -114,7 +114,7 @@ export function screenSaverRuntimeOptions({
     preloadEnabled: !isScreenSaver || isFullscreenScreenSaver,
     workerEnabled: !isScreenSaver,
     tableFlipTransitionsEnabled: !isScreenSaver || !isPreview,
-    nativeFrameDriverEnabled: false,
+    nativeFrameDriverEnabled: true,
     renderDpr: isPreview ? previewRenderDpr : defaultRenderDpr,
   };
 }
