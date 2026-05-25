@@ -124,10 +124,17 @@ uninstall target gives `pluginkit` a live extension path to unregister.
 make package-saver
 ```
 
-The package target creates a DMG containing `Mahjong3D.app` and `README.txt`:
+The package target uses `create-dmg` to create a DMG containing
+`Mahjong3D.app` and an Applications folder shortcut:
 
 ```text
 macos/build/Mahjong3D.dmg
+```
+
+Install `create-dmg` before packaging:
+
+```sh
+npm install --global create-dmg
 ```
 
 For a distributable release, sign and notarize it:

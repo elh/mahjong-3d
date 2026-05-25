@@ -28,11 +28,9 @@ make good         # format check, lint, knip, types, tests, and build
 
 ### macOS Screen Saver
 
-> [!WARNING]
-> Only works in macOS 15 Sequoia. There are known regressions with screen savers in macOS 26 Tahoe that I have not worked around yet. Contributors welcome!
-
 The native wrapper lives in `macos/` and bundles the Vite screen saver build
-into `Mahjong3D.saver`. See [macos/README.md](macos/README.md).
+into a small app with an embedded Screen Saver extension. See
+[macos/README.md](macos/README.md).
 
 ```bash
 make install-screensaver
