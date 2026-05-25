@@ -31,9 +31,9 @@ import {
   nextRoundPromotionDelayMs,
 } from "./ui/infinitePlayback";
 import {
-  MacScreenSaverDownloadWarningTooltip,
-  macScreenSaverDownloadWarning,
-} from "./ui/MacScreenSaverDownloadWarning";
+  MacScreenSaverDownloadTooltip,
+  macScreenSaverDownloadNote,
+} from "./ui/MacScreenSaverDownloadNote";
 import { PerfPanel } from "./ui/PerfPanel";
 import { playerNames } from "./ui/playerNames";
 import {
@@ -1151,12 +1151,12 @@ function MacDownloadCallout({ autoHide = false }: { autoHide?: boolean }) {
       <span className="screensaver-download-tooltip-wrap">
         <a
           href={macScreenSaverDownloadHref}
-          aria-label={`Download macOS DMG. ${macScreenSaverDownloadWarning}`}
+          aria-label={`Download macOS DMG. ${macScreenSaverDownloadNote}`}
         >
           <Download size={14} aria-hidden="true" />
           Get the macOS screen saver
         </a>
-        <MacScreenSaverDownloadWarningTooltip />
+        <MacScreenSaverDownloadTooltip />
       </span>
     </aside>
   );

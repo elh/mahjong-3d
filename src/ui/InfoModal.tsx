@@ -1,8 +1,8 @@
 import { macScreenSaverDownloadHref } from "./downloadLinks";
 import {
-  macScreenSaverDownloadWarning,
-  MacScreenSaverDownloadWarningTooltip,
-} from "./MacScreenSaverDownloadWarning";
+  macScreenSaverDownloadNote,
+  MacScreenSaverDownloadTooltip,
+} from "./MacScreenSaverDownloadNote";
 
 export function InfoModal({
   modalRef,
@@ -33,11 +33,11 @@ export function InfoModal({
         <span className="screensaver-download-tooltip-wrap">
           <a
             href={macScreenSaverDownloadHref}
-            aria-label={`Download macOS screen saver. ${macScreenSaverDownloadWarning}`}
+            aria-label={`Download macOS screen saver. ${macScreenSaverDownloadNote}`}
           >
             macOS screen saver
           </a>
-          <MacScreenSaverDownloadWarningTooltip />
+          <MacScreenSaverDownloadTooltip />
         </span>
       </p>
       <p className="info-modal-meta">

@@ -1,7 +1,7 @@
 # Mahjong 3D
 
 Taiwanese Mahjong 3D infinite simulator made with React Three Fiber. Enjoy it
-as a cozy [website](https://elh.github.io/mahjong-3d/) or [macOS 15 Sequoia screen saver](https://github.com/elh/mahjong-3d/releases/latest/download/Mahjong3D.dmg).
+as a cozy [website](https://elh.github.io/mahjong-3d/) or [macOS screen saver](https://github.com/elh/mahjong-3d/releases/latest/download/Mahjong3D.dmg).
 
 ![screenshot](public/social-preview.png)
 

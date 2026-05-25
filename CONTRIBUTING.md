@@ -14,7 +14,7 @@ First and foremost, this project is about making a pleasing, passive simulation 
 
 ## Larger changes
 
-* Support macOS 26 Tahoe
+* Improve macOS screen saver packaging and compatibility
 * Support other Mahjong variants
 * Support actually playing the game (3D interactions, scoring)
 * Use existing strong bots, perhaps when turns are live/async instead of up-front
