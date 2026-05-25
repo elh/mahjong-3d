@@ -39,6 +39,7 @@ describe("screen saver surface", () => {
       preloadEnabled: true,
       workerEnabled: true,
       tableFlipTransitionsEnabled: true,
+      nativeFrameDriverEnabled: false,
       renderDpr: [1, 1.75],
     });
   });
@@ -72,6 +73,7 @@ describe("screen saver surface", () => {
       preloadEnabled: false,
       workerEnabled: false,
       tableFlipTransitionsEnabled: false,
+      nativeFrameDriverEnabled: true,
       renderDpr: [1, 1],
     });
   });
@@ -92,6 +94,7 @@ describe("screen saver surface", () => {
       preloadEnabled: true,
       workerEnabled: false,
       tableFlipTransitionsEnabled: true,
+      nativeFrameDriverEnabled: true,
       renderDpr: [1, 1.75],
     });
   });
