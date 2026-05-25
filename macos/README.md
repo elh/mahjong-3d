@@ -47,6 +47,9 @@ handles:
 - On macOS 14 and newer, the extension sets `WKPreferences.inactiveSchedulingPolicy`
   to `.none` as a best-effort guard against WebKit suspending an attached screen
   saver web view.
+- The extension stays sandboxed and does not request network access. Its
+  remaining signing entitlements are limited to the system-hosted WebKit/screen
+  saver rendering path.
 - Startup and teardown are anchored to `viewDidMoveToWindow()` following the
   Aerial minimal sample. There are no independent overlay windows, process-exit
   watchdogs, duplicate renderer ownership systems, or WebGL mirror fallbacks in

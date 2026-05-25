@@ -205,7 +205,15 @@ func makeAppIcon(size: NSSize) -> NSImage {
     let image = NSImage(size: size)
     image.lockFocus()
 
-    drawPreviewAspectFit(appIcon, in: NSRect(origin: .zero, size: size), cornerRadius: 0)
+    NSColor(calibratedRed: 244 / 255, green: 237 / 255, blue: 220 / 255, alpha: 1).setFill()
+    NSRect(origin: .zero, size: size).fill()
+
+    let inset = size.width * 0.035
+    drawPreviewAspectFit(
+        appIcon,
+        in: NSRect(x: inset, y: inset, width: size.width - inset * 2, height: size.height - inset * 2),
+        cornerRadius: 0
+    )
 
     image.unlockFocus()
     return image
