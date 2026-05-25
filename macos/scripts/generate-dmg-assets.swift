@@ -4,6 +4,7 @@ import Foundation
 let rootURL = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 let outputURL = URL(fileURLWithPath: CommandLine.arguments[2], isDirectory: true)
 let previewURL = rootURL.appendingPathComponent("public/social-preview.png")
+let appIconURL = rootURL.appendingPathComponent("public/favicon.svg")
 let icnsEntries: [(type: String, pixels: CGFloat)] = [
     ("icp4", 16),
     ("icp5", 32),
@@ -25,6 +26,11 @@ try FileManager.default.createDirectory(
 
 guard let preview = NSImage(contentsOf: previewURL) else {
     fputs("Could not load \(previewURL.path)\n", stderr)
+    exit(1)
+}
+
+guard let appIcon = NSImage(contentsOf: appIconURL) else {
+    fputs("Could not load \(appIconURL.path)\n", stderr)
     exit(1)
 }
 
@@ -199,31 +205,7 @@ func makeAppIcon(size: NSSize) -> NSImage {
     let image = NSImage(size: size)
     image.lockFocus()
 
-    NSColor.clear.setFill()
-    NSRect(origin: .zero, size: size).fill()
-
-    let bounds = NSRect(origin: .zero, size: size)
-    let cornerRadius = size.width * 0.22
-    let background = NSBezierPath(roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius)
-    NSColor(calibratedRed: 229 / 255, green: 212 / 255, blue: 186 / 255, alpha: 1).setFill()
-    background.fill()
-
-    NSColor(calibratedWhite: 1, alpha: 0.16).setStroke()
-    background.lineWidth = max(1, size.width * 0.012)
-    background.stroke()
-
-    let fontSize = size.width * 0.77
-    let attributes: [NSAttributedString.Key: Any] = [
-        .font: NSFont(name: "Apple Color Emoji", size: fontSize) ?? NSFont.systemFont(ofSize: fontSize),
-    ]
-    let text = NSAttributedString(string: "🀄", attributes: attributes)
-    let textSize = text.size()
-    text.draw(
-        at: NSPoint(
-            x: (size.width - textSize.width) / 2,
-            y: (size.height - textSize.height) / 2 - size.height * 0.031
-        )
-    )
+    drawPreviewAspectFit(appIcon, in: NSRect(origin: .zero, size: size), cornerRadius: 0)
 
     image.unlockFocus()
     return image
