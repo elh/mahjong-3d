@@ -1,9 +1,11 @@
 # Mahjong 3D
 
-Taiwanese Mahjong 3D infinite simulator made with React Three Fiber. Enjoy it
-as a cozy [website](https://elh.github.io/mahjong-3d/) or [macOS 14+ screen saver](https://github.com/elh/mahjong-3d/releases/latest/download/Mahjong3D.dmg).
+Infinite 3D Taiwanese Mahjong made with React Three Fiber.
 
-![screenshot](public/social-preview.png)
+Watch the idle sim [online](https://elh.github.io/mahjong-3d/) or as a
+[macOS screen saver](https://github.com/elh/mahjong-3d/releases/latest/download/Mahjong3D.dmg) (macOS 14+ required, tested on macOS 26 Tahoe).
+
+[![screenshot](public/social-preview.png)](https://elh.github.io/mahjong-3d/)
 
 ## What It Does
 
@@ -26,6 +28,8 @@ make dev          # start the Vite app
 DEBUG=1 make dev  # enable controls like `?view=debug` and `?seed=...` control
 make good         # format check, lint, knip, types, tests, and build
 ```
+
+See [CONTRIBUTING](./CONTRIBUTING.md).
 
 ### macOS Screen Saver
 
@@ -50,8 +54,6 @@ make package-saver
 ├── public/tiles/     Mahjong tile SVG assets
 └── macos/            Native macOS screen saver and packaging scripts
 ```
-
-See [CONTRIBUTING](./CONTRIBUTING.md).
 
 ## Licensing
 

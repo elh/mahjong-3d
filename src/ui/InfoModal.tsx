@@ -1,8 +1,4 @@
 import { macScreenSaverDownloadHref } from "./downloadLinks";
-import {
-  macScreenSaverDownloadNote,
-  MacScreenSaverDownloadTooltip,
-} from "./MacScreenSaverDownloadNote";
 
 export function InfoModal({
   modalRef,
@@ -30,15 +26,12 @@ export function InfoModal({
       </header>
       <p className="info-modal-meta">
         Download:{" "}
-        <span className="screensaver-download-tooltip-wrap">
-          <a
-            href={macScreenSaverDownloadHref}
-            aria-label={`Download macOS screen saver. ${macScreenSaverDownloadNote}`}
-          >
-            macOS screen saver
-          </a>
-          <MacScreenSaverDownloadTooltip />
-        </span>
+        <a
+          href={macScreenSaverDownloadHref}
+          aria-label="Download macOS screen saver"
+        >
+          macOS screen saver
+        </a>
       </p>
       <p className="info-modal-meta">
         GitHub: <a href="https://github.com/elh/mahjong-3d">elh/mahjong-3d</a>
