@@ -93,6 +93,7 @@ Baseline bots should be legal and plausible, not optimal.
 
 - `macos/` should stay a minimal native wrapper around the existing React Three Fiber app.
 - The wrapper's job is to make the web renderer run reliably as a macOS screen saver: local resource loading, ScreenSaver lifecycle, frame delivery, install/package/signing scripts.
+- Keep committed macOS project files, signing settings, entitlements, and packaging details safe for a public OSS repository; do not commit private team IDs, credentials, profiles, or local absolute build artifacts.
 - Keep rules, bots, replay semantics, and 3D presentation logic in the existing web code unless a native concern truly requires otherwise.
 - See `macos/README.md` for screen saver architecture details, build commands, diagnostics, and packaging notes.
 

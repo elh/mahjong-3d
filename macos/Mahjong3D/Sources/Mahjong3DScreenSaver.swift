@@ -207,6 +207,7 @@ final class Mahjong3DScreenSaverView: ScreenSaverView, WKNavigationDelegate {
 
         let configuration = WKWebViewConfiguration()
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+        configureInactiveSchedulingPolicy(configuration.preferences)
         configuration.suppressesIncrementalRendering = false
         configuration.websiteDataStore = .nonPersistent()
         let userContentController = WKUserContentController()
@@ -255,6 +256,15 @@ final class Mahjong3DScreenSaverView: ScreenSaverView, WKNavigationDelegate {
         syncWebViewFrame()
 
         loadBundledWebApp(sequence: sequence)
+    }
+
+    private func configureInactiveSchedulingPolicy(_ preferences: WKPreferences) {
+        if #available(macOS 14.0, *) {
+            preferences.inactiveSchedulingPolicy = .none
+            log.write("instance[\(instanceID)] WK inactiveSchedulingPolicy=none")
+        } else {
+            log.write("instance[\(instanceID)] WK inactiveSchedulingPolicy unavailable")
+        }
     }
 
     private func loadBundledWebApp(sequence: Int) {

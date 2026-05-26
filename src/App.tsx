@@ -21,12 +21,8 @@ import { replayEvents } from "./sim/replay";
 import { macScreenSaverDownloadHref } from "./ui/downloadLinks";
 import { EventLog } from "./ui/EventLog";
 import { eventDetail, eventTitle } from "./ui/eventText";
-import { InfoModal } from "./ui/InfoModal";
 import type { InfoModalLink } from "./ui/InfoModal";
-import {
-  macScreenSaverDownloadWarning,
-  MacScreenSaverDownloadWarningTooltip,
-} from "./ui/MacScreenSaverDownloadWarning";
+import { InfoModal } from "./ui/InfoModal";
 import {
   infiniteRoundFadeMs,
   infiniteRoundFlipTransitionDelayMs,
@@ -34,18 +30,22 @@ import {
   infiniteRoundSwapMs,
   nextRoundPromotionDelayMs,
 } from "./ui/infinitePlayback";
+import {
+  MacScreenSaverDownloadTooltip,
+  macScreenSaverDownloadNote,
+} from "./ui/MacScreenSaverDownloadNote";
 import { PerfPanel } from "./ui/PerfPanel";
 import { playerNames } from "./ui/playerNames";
 import {
   initialScreenSaverLifecycle,
+  type ScreenSaverBridge,
+  type ScreenSaverFrameEventDetail,
+  type ScreenSaverLifecycle,
+  type ScreenSaverSurfaceConfig,
   screenSaverFrameEventName,
   screenSaverFrameTimestampFromEvent,
   screenSaverRuntimeOptions,
   screenSaverSurfaceFromSearch,
-  type ScreenSaverFrameEventDetail,
-  type ScreenSaverBridge,
-  type ScreenSaverLifecycle,
-  type ScreenSaverSurfaceConfig,
 } from "./ui/screenSaverSurface";
 import { TileGroup } from "./ui/TileGroup";
 import { useSimulationController } from "./ui/useSimulationController";
@@ -780,6 +780,7 @@ function SimApp({
       !runtimeOptions.isScreenSaver ||
       !runtimeOptions.isPlaybackActive ||
       !runtimeOptions.preloadEnabled ||
+      !runtimeOptions.nativeFrameDriverEnabled ||
       !isAtRoundEnd ||
       !hasQueuedNextRound ||
       terminalReachedAtRef.current === undefined
@@ -841,6 +842,64 @@ function SimApp({
     roundKey,
     runtimeOptions.isPlaybackActive,
     runtimeOptions.isScreenSaver,
+    runtimeOptions.nativeFrameDriverEnabled,
+    runtimeOptions.preloadEnabled,
+    runtimeOptions.tableFlipTransitionsEnabled,
+  ]);
+
+  useEffect(() => {
+    if (
+      !runtimeOptions.isScreenSaver ||
+      !runtimeOptions.isPlaybackActive ||
+      !runtimeOptions.preloadEnabled ||
+      runtimeOptions.nativeFrameDriverEnabled ||
+      !isAtRoundEnd ||
+      !hasQueuedNextRound ||
+      terminalReachedAtRef.current === undefined
+    ) {
+      return;
+    }
+
+    const holdMs = infiniteRoundHoldMs;
+    const flipDelayMs =
+      prefersReducedMotion || !runtimeOptions.tableFlipTransitionsEnabled
+        ? 0
+        : infiniteRoundFlipTransitionDelayMs();
+    let flipTimeout: number | undefined;
+    let promoteTimeout: number | undefined;
+
+    flipTimeout = window.setTimeout(() => {
+      flipTimeout = undefined;
+      if (runtimeOptions.tableFlipTransitionsEnabled && !prefersReducedMotion) {
+        setTableFlipTransitionKey(`${roundKey}:${eventIndex}`);
+      }
+      promoteTimeout = window.setTimeout(() => {
+        promoteTimeout = undefined;
+        if (promoteQueuedRound()) {
+          terminalReachedAtRef.current = undefined;
+          setTableFlipTransitionKey(undefined);
+        }
+      }, flipDelayMs);
+    }, holdMs);
+
+    return () => {
+      if (flipTimeout !== undefined) {
+        window.clearTimeout(flipTimeout);
+      }
+      if (promoteTimeout !== undefined) {
+        window.clearTimeout(promoteTimeout);
+      }
+    };
+  }, [
+    eventIndex,
+    hasQueuedNextRound,
+    isAtRoundEnd,
+    prefersReducedMotion,
+    promoteQueuedRound,
+    roundKey,
+    runtimeOptions.isPlaybackActive,
+    runtimeOptions.isScreenSaver,
+    runtimeOptions.nativeFrameDriverEnabled,
     runtimeOptions.preloadEnabled,
     runtimeOptions.tableFlipTransitionsEnabled,
   ]);
@@ -884,6 +943,7 @@ function SimApp({
     if (
       !runtimeOptions.isScreenSaver ||
       !runtimeOptions.isPlaybackActive ||
+      !runtimeOptions.nativeFrameDriverEnabled ||
       prefersReducedMotion ||
       isLoadingRound ||
       generationError ||
@@ -929,6 +989,44 @@ function SimApp({
     generationError,
     runtimeOptions.isScreenSaver,
     runtimeOptions.isPlaybackActive,
+    isLoadingRound,
+    runtimeOptions.nativeFrameDriverEnabled,
+    prefersReducedMotion,
+    stepEventImmediate,
+  ]);
+
+  useEffect(() => {
+    if (
+      !runtimeOptions.isScreenSaver ||
+      !runtimeOptions.isPlaybackActive ||
+      runtimeOptions.nativeFrameDriverEnabled ||
+      prefersReducedMotion ||
+      isLoadingRound ||
+      generationError ||
+      events.length === 0
+    ) {
+      return;
+    }
+
+    const nextEvent = events[eventIndex + 1];
+    if (!nextEvent) {
+      return;
+    }
+
+    const currentEvent = events[eventIndex];
+    const delay = eventAutoAdvanceDelay(currentEvent, nextEvent);
+    const timeout = window.setTimeout(() => stepEventImmediate(1), delay);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [
+    eventIndex,
+    events,
+    generationError,
+    runtimeOptions.isScreenSaver,
+    runtimeOptions.isPlaybackActive,
+    runtimeOptions.nativeFrameDriverEnabled,
     isLoadingRound,
     prefersReducedMotion,
     stepEventImmediate,
@@ -987,7 +1085,7 @@ function SimApp({
           pointerControlsEnabled={!runtimeOptions.isScreenSaver}
           audioEnabled={!runtimeOptions.isScreenSaver}
           sceneReadyMode={runtimeOptions.isScreenSaver ? "timer" : "raf"}
-          screenSaverFrameDriver={runtimeOptions.isScreenSaver}
+          screenSaverFrameDriver={runtimeOptions.nativeFrameDriverEnabled}
           allowInitialRenderWhilePaused={
             runtimeOptions.allowInitialRenderWhilePaused
           }
@@ -1053,12 +1151,12 @@ function MacDownloadCallout({ autoHide = false }: { autoHide?: boolean }) {
       <span className="screensaver-download-tooltip-wrap">
         <a
           href={macScreenSaverDownloadHref}
-          aria-label={`Download macOS DMG. ${macScreenSaverDownloadWarning}`}
+          aria-label={`Download macOS DMG. ${macScreenSaverDownloadNote}`}
         >
           <Download size={14} aria-hidden="true" />
           Get the macOS screen saver
         </a>
-        <MacScreenSaverDownloadWarningTooltip />
+        <MacScreenSaverDownloadTooltip />
       </span>
     </aside>
   );

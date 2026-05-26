@@ -1,8 +1,8 @@
 /**
  * Centralizes the native screen saver surface contract so the React app can keep
  * normal web playback worker-backed and requestAnimationFrame-driven, while the
- * macOS ScreenSaver host can opt into local-file-safe generation and native
- * frame delivery. The fullscreen saver intentionally ignores some WebKit
+ * macOS ScreenSaver host can opt into local-file-safe generation and lifecycle
+ * bridging. The fullscreen saver intentionally ignores some WebKit
  * visibility/lifecycle noise because the legacy saver host can report the
  * document hidden or briefly inactive while it is still the visible renderer.
  */
@@ -39,6 +39,7 @@ export type ScreenSaverRuntimeOptions = {
   preloadEnabled: boolean;
   workerEnabled: boolean;
   tableFlipTransitionsEnabled: boolean;
+  nativeFrameDriverEnabled: boolean;
   renderDpr: [number, number];
 };
 
@@ -113,6 +114,7 @@ export function screenSaverRuntimeOptions({
     preloadEnabled: !isScreenSaver || isFullscreenScreenSaver,
     workerEnabled: !isScreenSaver,
     tableFlipTransitionsEnabled: !isScreenSaver || !isPreview,
+    nativeFrameDriverEnabled: isScreenSaver,
     renderDpr: isPreview ? previewRenderDpr : defaultRenderDpr,
   };
 }
