@@ -15,6 +15,7 @@ as a cozy [website](https://elh.github.io/mahjong-3d/) or [macOS 14+ screen save
 
 - Taiwanese Mahjong variant only. Rule implementation may be incomplete.
 - Bot implementation is very simple.
+- 3D scene performance is unoptimized and may be poor in screen saver mode.
 - This is not a playable client.
 
 ## Development
