@@ -58,7 +58,11 @@ export function applyMeldClaim(
   if (action.claim === "chow" && tiles.length !== 2) {
     throw new Error(`Player ${playerId} tried to claim an illegal chow.`);
   }
-  const meldTiles = sortTiles([...tiles, discarded]);
+  const sortedClaimTiles = sortTiles(tiles);
+  const meldTiles =
+    action.claim === "chow"
+      ? [sortedClaimTiles[0], discarded, sortedClaimTiles[1]]
+      : sortTiles([...tiles, discarded]);
 
   for (const tile of tiles) {
     removeTile(player.hand, tile.id);

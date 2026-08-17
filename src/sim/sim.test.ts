@@ -940,8 +940,12 @@ describe("simulation", () => {
     expect(claim?.type).toBe("claimMade");
     if (claim?.type === "claimMade") {
       expect(claim.claim).toBe("chow");
+      expect(claim.tiles[1].id).toBe(discard.id);
       expect(claim.tiles.map((tile) => tile.id).sort()).toEqual(
         [discard.id, chosenChow[0].id, chosenChowSecond[0].id].sort(),
+      );
+      expect(result.finalState.players[1].melds[0].tiles[1].id).toBe(
+        discard.id,
       );
     }
   });

@@ -57,7 +57,10 @@ const tableHalfSize = 3.24;
 const tableSlabDepth = 0.24;
 const tableRailWidth = 0.16;
 const tableRailHeight = 0.08;
-const tableRailOuterHalfSize = tableHalfSize + tableRailWidth;
+const tableRailBevelSize = 0.018;
+// Keep the bevel from extending inward over flat revealed hands.
+const tableRailInnerHalfSize = tableHalfSize + tableRailBevelSize;
+const tableRailOuterHalfSize = tableRailInnerHalfSize + tableRailWidth;
 const sceneBackgroundColor = "#090e0d";
 const sceneToneMapping = THREE.ACESFilmicToneMapping;
 const sceneToneMappingExposure = 1.12;
@@ -1286,13 +1289,13 @@ function TableRail() {
   const railGeometry = useMemo(
     () =>
       new THREE.ExtrudeGeometry(
-        createSquareRingShape(tableRailOuterHalfSize, tableHalfSize),
+        createSquareRingShape(tableRailOuterHalfSize, tableRailInnerHalfSize),
         {
           depth: tableRailHeight,
           steps: 1,
           bevelEnabled: true,
           bevelSegments: 2,
-          bevelSize: 0.018,
+          bevelSize: tableRailBevelSize,
           bevelThickness: 0.008,
         },
       ),
