@@ -184,14 +184,14 @@ const defaultFlickDebugSettings: FlickDebugSettings = {
 };
 
 const defaultLightingDebugSettings: LightingDebugSettings = {
-  ambientIntensity: 0.22,
-  fillIntensity: 0.1,
+  ambientIntensity: 0.25,
+  fillIntensity: 0.13,
   keyIntensity: 2.65,
   keyX: -3.8,
   keyY: 5.4,
   keyZ: 2.2,
-  cameraFillIntensity: 0.82,
-  handFaceFillIntensity: 0.26,
+  cameraFillIntensity: 0.86,
+  handFaceFillIntensity: 0.28,
   environment: false,
 };
 
@@ -710,7 +710,7 @@ export function ThreeGameView({
         <hemisphereLight
           intensity={lightingDebug.fillIntensity}
           color="#d9e6ff"
-          groundColor="#120f0b"
+          groundColor="#1d1a15"
         />
         <directionalLight
           castShadow
@@ -729,6 +729,7 @@ export function ThreeGameView({
           shadow-camera-near={0.5}
           shadow-camera-far={12}
           shadow-bias={-0.00025}
+          shadow-radius={1.25}
         />
         <pointLight
           intensity={0.2}
@@ -3229,10 +3230,13 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
       smoothness={8}
     >
       <meshStandardMaterial
-        color="#efe2c5"
-        roughness={orientation === "faceUp" ? 0.42 : 0.38}
-        metalness={0.01}
-        customProgramCacheKey={() => `mahjong-tile-body-${orientation}`}
+        color="#ece4d4"
+        roughness={orientation === "faceUp" ? 0.58 : 0.56}
+        metalness={0}
+        envMapIntensity={0.12}
+        customProgramCacheKey={() =>
+          `mahjong-tile-body-matte-ivory-${orientation}`
+        }
         onBeforeCompile={(shader) => {
           shader.vertexShader = shader.vertexShader.replace(
             "#include <common>",
@@ -3249,7 +3253,7 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
           shader.fragmentShader = shader.fragmentShader.replace(
             "vec4 diffuseColor = vec4( diffuse, opacity );",
             `
-            vec3 tileIvory = vec3(0.94, 0.895, 0.795);
+            vec3 tileIvory = vec3(0.925, 0.895, 0.83);
             vec3 tileGreen = vec3(0.0, 0.33, 0.12);
             float backMask = step(${backThreshold.toFixed(5)}, ${backDirection.toFixed(1)} * vTileLocalPosition.y);
             vec3 tileUv = vec3(
@@ -3268,15 +3272,22 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
             float panelBorder = (smoothstep(0.68, 0.82, tileUv.x) + smoothstep(0.72, 0.86, tileUv.z)) * facePanel;
             float materialNoise = fract(sin(dot(vTileLocalPosition.xz, vec2(31.7, 47.3))) * 43758.5453) - 0.5;
             vec3 tileColor = mix(tileIvory, tileGreen, backMask);
-            tileColor = mix(tileColor, vec3(0.975, 0.94, 0.855), 0.18 * faceLift * (1.0 - backMask));
+            tileColor = mix(tileColor, vec3(0.965, 0.94, 0.885), 0.16 * faceLift * (1.0 - backMask));
             tileColor = mix(tileColor, vec3(0.0, 0.42, 0.16), 0.12 * faceLift * backMask);
             tileColor = mix(tileColor, vec3(0.16, 0.66, 0.32), 0.2 * backRim);
             tileColor = mix(tileColor, vec3(0.03, 0.39, 0.15), 0.08 * backFaceGlow);
-            tileColor = mix(tileColor, vec3(0.9, 0.835, 0.705), 0.13 * facePanel);
+            tileColor = mix(tileColor, vec3(0.89, 0.855, 0.78), 0.1 * facePanel);
             tileColor *= 1.0 - 0.08 * min(panelBorder, 1.0);
             tileColor *= 1.0 - 0.16 * bevelShade;
-            tileColor += materialNoise * vec3(0.012, 0.01, 0.007);
+            tileColor += materialNoise * vec3(0.006, 0.005, 0.004);
             vec4 diffuseColor = vec4(tileColor, opacity);
+            `,
+          );
+          shader.fragmentShader = shader.fragmentShader.replace(
+            "#include <roughnessmap_fragment>",
+            `
+            #include <roughnessmap_fragment>
+            roughnessFactor = clamp(roughnessFactor + materialNoise * 0.025, 0.5, 0.7);
             `,
           );
         }}
