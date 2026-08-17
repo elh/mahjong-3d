@@ -24,6 +24,7 @@ import { eventDetail, eventTitle } from "./ui/eventText";
 import type { InfoModalLink } from "./ui/InfoModal";
 import { InfoModal } from "./ui/InfoModal";
 import {
+  eventAutoAdvanceMode,
   infiniteRoundFadeMs,
   infiniteRoundFlipTransitionDelayMs,
   infiniteRoundHoldMs,
@@ -675,6 +676,13 @@ function SimApp({
   const showPerfPanel = !runtimeOptions.isScreenSaver && perfPanelEnabled();
   const showGenerationPill =
     !runtimeOptions.isScreenSaver && (isGenerating || generationError);
+  const autoAdvanceMode = eventAutoAdvanceMode({
+    isPlaybackActive: runtimeOptions.isPlaybackActive,
+    prefersReducedMotion,
+    isLoadingRound,
+    hasGenerationError: Boolean(generationError),
+    eventCount: events.length,
+  });
 
   useEffect(() => {
     if (
@@ -901,14 +909,7 @@ function SimApp({
   ]);
 
   useEffect(() => {
-    if (
-      runtimeOptions.isScreenSaver ||
-      !runtimeOptions.isPlaybackActive ||
-      prefersReducedMotion ||
-      isLoadingRound ||
-      generationError ||
-      events.length === 0
-    ) {
+    if (runtimeOptions.isScreenSaver || autoAdvanceMode === undefined) {
       return;
     }
 
@@ -919,31 +920,31 @@ function SimApp({
 
     const currentEvent = events[eventIndex];
     const delay = eventAutoAdvanceDelay(currentEvent, nextEvent);
-    const timeout = window.setTimeout(() => stepEvent(1), delay);
+    const timeout = window.setTimeout(() => {
+      if (autoAdvanceMode === "immediate") {
+        stepEventImmediate(1);
+      } else {
+        stepEvent(1);
+      }
+    }, delay);
 
     return () => {
       window.clearTimeout(timeout);
     };
   }, [
+    autoAdvanceMode,
     eventIndex,
     events,
-    generationError,
     runtimeOptions.isScreenSaver,
-    runtimeOptions.isPlaybackActive,
-    isLoadingRound,
-    prefersReducedMotion,
     stepEvent,
+    stepEventImmediate,
   ]);
 
   useEffect(() => {
     if (
       !runtimeOptions.isScreenSaver ||
-      !runtimeOptions.isPlaybackActive ||
       !runtimeOptions.nativeFrameDriverEnabled ||
-      prefersReducedMotion ||
-      isLoadingRound ||
-      generationError ||
-      events.length === 0
+      autoAdvanceMode === undefined
     ) {
       return;
     }
@@ -980,26 +981,19 @@ function SimApp({
       window.removeEventListener(screenSaverFrameEventName, handleNativeFrame);
     };
   }, [
+    autoAdvanceMode,
     eventIndex,
     events,
-    generationError,
     runtimeOptions.isScreenSaver,
-    runtimeOptions.isPlaybackActive,
-    isLoadingRound,
     runtimeOptions.nativeFrameDriverEnabled,
-    prefersReducedMotion,
     stepEventImmediate,
   ]);
 
   useEffect(() => {
     if (
       !runtimeOptions.isScreenSaver ||
-      !runtimeOptions.isPlaybackActive ||
       runtimeOptions.nativeFrameDriverEnabled ||
-      prefersReducedMotion ||
-      isLoadingRound ||
-      generationError ||
-      events.length === 0
+      autoAdvanceMode === undefined
     ) {
       return;
     }
@@ -1017,14 +1011,11 @@ function SimApp({
       window.clearTimeout(timeout);
     };
   }, [
+    autoAdvanceMode,
     eventIndex,
     events,
-    generationError,
     runtimeOptions.isScreenSaver,
-    runtimeOptions.isPlaybackActive,
     runtimeOptions.nativeFrameDriverEnabled,
-    isLoadingRound,
-    prefersReducedMotion,
     stepEventImmediate,
   ]);
 

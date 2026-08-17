@@ -10,6 +10,7 @@ import {
 } from "./engine";
 import { analyzeHand, evaluateDiscard } from "./handAnalysis";
 import { validateBetweenTurns } from "./invariants";
+import { legalClaimActions } from "./legalActions";
 import { replayEvents } from "./replay";
 import { createSeededRng, shuffle } from "./rng";
 import type { RoundState } from "./state";
@@ -324,6 +325,27 @@ describe("Taiwanese rule expectations", () => {
         claimPriority(claim as Parameters<typeof claimPriority>[0]),
       ),
     ).toEqual([4, 3, 2, 1]);
+  });
+
+  test("offers both pong and kong when holding three matching tiles", () => {
+    const { state } = createInitialRound("pong-or-kong");
+    const matchingTiles = tilesByKinds([["c5", 4]]);
+    state.players[1].hand = matchingTiles.slice(0, 3);
+
+    const actions = legalClaimActions(state, 1, 0, matchingTiles[3]).filter(
+      (action) => action.type === "claim",
+    );
+
+    expect(actions).toContainEqual({
+      type: "claim",
+      claim: "pong",
+      tileId: matchingTiles[3].id,
+    });
+    expect(actions).toContainEqual({
+      type: "claim",
+      claim: "kong",
+      tileId: matchingTiles[3].id,
+    });
   });
 
   test("hand analysis counts live waits after an improving discard", () => {
