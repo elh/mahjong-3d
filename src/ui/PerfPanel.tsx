@@ -42,11 +42,12 @@ export function PerfPanel({
     let lastPanelUpdateAt = 0;
 
     function recordFrame(timestamp: number) {
-      const nextStats = tracker.record(timestamp);
+      tracker.record(timestamp);
       if (
         timestamp - lastPanelUpdateAt >= panelUpdateMs ||
         latestStatsRef.current.frames === 0
       ) {
+        const nextStats = tracker.snapshot(timestamp);
         lastPanelUpdateAt = timestamp;
         latestStatsRef.current = nextStats;
         setStats(nextStats);

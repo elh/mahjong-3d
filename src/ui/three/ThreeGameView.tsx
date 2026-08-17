@@ -56,9 +56,9 @@ const tileTextureLoadTimeoutMs = 2500;
 const tableHalfSize = 3.24;
 const tableSlabDepth = 0.24;
 const tableRailWidth = 0.16;
-const tableRailHeight = 0.075;
+const tableRailHeight = 0.08;
 const tableRailOuterHalfSize = tableHalfSize + tableRailWidth;
-const sceneBackgroundColor = "#101514";
+const sceneBackgroundColor = "#090e0d";
 const sceneToneMapping = THREE.ACESFilmicToneMapping;
 const sceneToneMappingExposure = 1.12;
 const cameraTarget: Vec3 = [0, 0, 0];
@@ -184,14 +184,14 @@ const defaultFlickDebugSettings: FlickDebugSettings = {
 };
 
 const defaultLightingDebugSettings: LightingDebugSettings = {
-  ambientIntensity: 0.3,
-  fillIntensity: 0,
-  keyIntensity: 3,
+  ambientIntensity: 0.22,
+  fillIntensity: 0.1,
+  keyIntensity: 2.65,
   keyX: -3.8,
   keyY: 5.4,
   keyZ: 2.2,
-  cameraFillIntensity: 1.14,
-  handFaceFillIntensity: 0.38,
+  cameraFillIntensity: 0.82,
+  handFaceFillIntensity: 0.26,
   environment: false,
 };
 
@@ -705,6 +705,7 @@ export function ThreeGameView({
           <ScreenSaverFrameDriver active={!effectiveRenderPaused} />
         ) : null}
         <color attach="background" args={[sceneBackgroundColor]} />
+        <AtmosphereBackdrop />
         <ambientLight intensity={lightingDebug.ambientIntensity} />
         <hemisphereLight
           intensity={lightingDebug.fillIntensity}
@@ -730,11 +731,11 @@ export function ThreeGameView({
           shadow-bias={-0.00025}
         />
         <pointLight
-          intensity={0.26}
+          intensity={0.2}
           distance={7.5}
           decay={2}
           position={[2.8, 2.4, -3.2]}
-          color="#c6c0b8"
+          color="#aabfc4"
         />
         <CameraShoulderFill intensity={lightingDebug.cameraFillIntensity} />
         <HandFaceFill intensity={lightingDebug.handFaceFillIntensity} />
@@ -1013,6 +1014,54 @@ function TableSurface() {
   );
 }
 
+function AtmosphereBackdrop() {
+  const uniforms = useMemo(
+    () => ({
+      zenithColor: { value: new THREE.Color("#090e0d") },
+      horizonColor: { value: new THREE.Color("#101816") },
+      lowerColor: { value: new THREE.Color("#151812") },
+    }),
+    [],
+  );
+
+  return (
+    <mesh renderOrder={-10} frustumCulled={false}>
+      <sphereGeometry args={[24, 24, 12]} />
+      <shaderMaterial
+        side={THREE.BackSide}
+        depthWrite={false}
+        depthTest={false}
+        toneMapped={false}
+        uniforms={uniforms}
+        vertexShader={`
+          varying vec3 vBackdropDirection;
+
+          void main() {
+            vBackdropDirection = normalize(position);
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `}
+        fragmentShader={`
+          uniform vec3 zenithColor;
+          uniform vec3 horizonColor;
+          uniform vec3 lowerColor;
+          varying vec3 vBackdropDirection;
+
+          void main() {
+            float vertical = normalize(vBackdropDirection).y;
+            float downwardHaze = 1.0 - smoothstep(-0.58, 0.12, vertical);
+            float horizonBand = 1.0 - smoothstep(0.0, 0.42, abs(vertical + 0.04));
+            vec3 atmosphere = mix(zenithColor, lowerColor, downwardHaze);
+            atmosphere = mix(atmosphere, horizonColor, horizonBand * 0.48);
+            gl_FragColor = vec4(atmosphere, 1.0);
+            #include <colorspace_fragment>
+          }
+        `}
+      />
+    </mesh>
+  );
+}
+
 function createFeltTextures(): {
   color: THREE.CanvasTexture;
   bump: THREE.CanvasTexture;
@@ -1233,75 +1282,82 @@ function createCenterTableFallbackTexture(): THREE.CanvasTexture {
 }
 
 function TableRail() {
-  const railY = tableRailHeight / 2;
-  const railLength = tableRailOuterHalfSize * 2;
-  const railMaterial = (
-    <meshStandardMaterial
-      color="#0d2c25"
-      roughness={0.68}
-      metalness={0.02}
-      envMapIntensity={0.28}
-    />
+  const railGeometry = useMemo(
+    () =>
+      new THREE.ExtrudeGeometry(
+        createSquareRingShape(tableRailOuterHalfSize, tableHalfSize),
+        {
+          depth: tableRailHeight,
+          steps: 1,
+          bevelEnabled: true,
+          bevelSegments: 2,
+          bevelSize: 0.018,
+          bevelThickness: 0.008,
+        },
+      ),
+    [],
+  );
+
+  useEffect(
+    () => () => {
+      railGeometry.dispose();
+    },
+    [railGeometry],
   );
 
   return (
     <group>
-      <RoundedBox
+      <mesh
+        geometry={railGeometry}
+        rotation={[-Math.PI / 2, 0, 0]}
         castShadow
         receiveShadow
-        args={[railLength, tableRailHeight, tableRailWidth]}
-        radius={0.035}
-        smoothness={6}
-        position={[0, railY, tableRailOuterHalfSize - tableRailWidth / 2]}
       >
-        {railMaterial}
-      </RoundedBox>
-      <RoundedBox
-        castShadow
-        receiveShadow
-        args={[railLength, tableRailHeight, tableRailWidth]}
-        radius={0.035}
-        smoothness={6}
-        position={[0, railY, -tableRailOuterHalfSize + tableRailWidth / 2]}
-      >
-        {railMaterial}
-      </RoundedBox>
-      <RoundedBox
-        castShadow
-        receiveShadow
-        args={[tableRailWidth, tableRailHeight, railLength]}
-        radius={0.035}
-        smoothness={6}
-        position={[tableRailOuterHalfSize - tableRailWidth / 2, railY, 0]}
-      >
-        {railMaterial}
-      </RoundedBox>
-      <RoundedBox
-        castShadow
-        receiveShadow
-        args={[tableRailWidth, tableRailHeight, railLength]}
-        radius={0.035}
-        smoothness={6}
-        position={[-tableRailOuterHalfSize + tableRailWidth / 2, railY, 0]}
-      >
-        {railMaterial}
-      </RoundedBox>
+        <meshStandardMaterial
+          color="#1f1c1a"
+          roughness={0.68}
+          metalness={0.02}
+          envMapIntensity={0.1}
+        />
+      </mesh>
     </group>
   );
+}
+
+function createSquareRingShape(outerHalfSize: number, innerHalfSize: number) {
+  const shape = new THREE.Shape();
+  shape.moveTo(-outerHalfSize, -outerHalfSize);
+  shape.lineTo(outerHalfSize, -outerHalfSize);
+  shape.lineTo(outerHalfSize, outerHalfSize);
+  shape.lineTo(-outerHalfSize, outerHalfSize);
+  shape.closePath();
+
+  const hole = new THREE.Path();
+  hole.moveTo(-innerHalfSize, -innerHalfSize);
+  hole.lineTo(-innerHalfSize, innerHalfSize);
+  hole.lineTo(innerHalfSize, innerHalfSize);
+  hole.lineTo(innerHalfSize, -innerHalfSize);
+  hole.closePath();
+  shape.holes.push(hole);
+  return shape;
 }
 
 function CameraShoulderFill({ intensity }: { intensity: number }) {
   const lightRef = useRef<THREE.DirectionalLight>(null);
   const { camera } = useThree();
+  const cameraRight = useMemo(() => new THREE.Vector3(), []);
+  const cameraUp = useMemo(() => new THREE.Vector3(), []);
 
   useFrame(() => {
     if (!lightRef.current) {
       return;
     }
-    const cameraRight = new THREE.Vector3(1, 0, 0)
+    cameraRight
+      .set(1, 0, 0)
       .applyQuaternion(camera.quaternion)
       .multiplyScalar(-0.18);
-    const cameraUp = new THREE.Vector3(0, 1, 0)
+    cameraUp
+      .set(0, 1, 0)
       .applyQuaternion(camera.quaternion)
       .multiplyScalar(0.42);
     lightRef.current.position
@@ -2794,14 +2850,7 @@ function TileMesh({
   useLayoutEffect(() => {
     onPoseChange?.(placement.tile.id, groupTilePose(ref.current));
     return () => onPoseChange?.(placement.tile.id, undefined);
-  }, [onPoseChange, placement.tile.id]);
-
-  useFrame(() => {
-    const pose = groupTilePose(ref.current);
-    if (pose) {
-      onPoseChange?.(placement.tile.id, pose);
-    }
-  });
+  }, [onPoseChange, placement]);
 
   return (
     <group
