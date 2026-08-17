@@ -56,9 +56,9 @@ const tileTextureLoadTimeoutMs = 2500;
 const tableHalfSize = 3.24;
 const tableSlabDepth = 0.24;
 const tableRailWidth = 0.16;
-const tableRailHeight = 0.075;
+const tableRailHeight = 0.08;
 const tableRailOuterHalfSize = tableHalfSize + tableRailWidth;
-const sceneBackgroundColor = "#101514";
+const sceneBackgroundColor = "#090e0d";
 const sceneToneMapping = THREE.ACESFilmicToneMapping;
 const sceneToneMappingExposure = 1.12;
 const cameraTarget: Vec3 = [0, 0, 0];
@@ -184,14 +184,14 @@ const defaultFlickDebugSettings: FlickDebugSettings = {
 };
 
 const defaultLightingDebugSettings: LightingDebugSettings = {
-  ambientIntensity: 0.3,
-  fillIntensity: 0,
-  keyIntensity: 3,
+  ambientIntensity: 0.25,
+  fillIntensity: 0.13,
+  keyIntensity: 2.65,
   keyX: -3.8,
   keyY: 5.4,
   keyZ: 2.2,
-  cameraFillIntensity: 1.14,
-  handFaceFillIntensity: 0.38,
+  cameraFillIntensity: 0.86,
+  handFaceFillIntensity: 0.28,
   environment: false,
 };
 
@@ -705,11 +705,12 @@ export function ThreeGameView({
           <ScreenSaverFrameDriver active={!effectiveRenderPaused} />
         ) : null}
         <color attach="background" args={[sceneBackgroundColor]} />
+        <AtmosphereBackdrop />
         <ambientLight intensity={lightingDebug.ambientIntensity} />
         <hemisphereLight
           intensity={lightingDebug.fillIntensity}
           color="#d9e6ff"
-          groundColor="#120f0b"
+          groundColor="#1d1a15"
         />
         <directionalLight
           castShadow
@@ -728,13 +729,14 @@ export function ThreeGameView({
           shadow-camera-near={0.5}
           shadow-camera-far={12}
           shadow-bias={-0.00025}
+          shadow-radius={1.25}
         />
         <pointLight
-          intensity={0.26}
+          intensity={0.2}
           distance={7.5}
           decay={2}
           position={[2.8, 2.4, -3.2]}
-          color="#c6c0b8"
+          color="#aabfc4"
         />
         <CameraShoulderFill intensity={lightingDebug.cameraFillIntensity} />
         <HandFaceFill intensity={lightingDebug.handFaceFillIntensity} />
@@ -1013,6 +1015,54 @@ function TableSurface() {
   );
 }
 
+function AtmosphereBackdrop() {
+  const uniforms = useMemo(
+    () => ({
+      zenithColor: { value: new THREE.Color("#090e0d") },
+      horizonColor: { value: new THREE.Color("#101816") },
+      lowerColor: { value: new THREE.Color("#151812") },
+    }),
+    [],
+  );
+
+  return (
+    <mesh renderOrder={-10} frustumCulled={false}>
+      <sphereGeometry args={[24, 24, 12]} />
+      <shaderMaterial
+        side={THREE.BackSide}
+        depthWrite={false}
+        depthTest={false}
+        toneMapped={false}
+        uniforms={uniforms}
+        vertexShader={`
+          varying vec3 vBackdropDirection;
+
+          void main() {
+            vBackdropDirection = normalize(position);
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `}
+        fragmentShader={`
+          uniform vec3 zenithColor;
+          uniform vec3 horizonColor;
+          uniform vec3 lowerColor;
+          varying vec3 vBackdropDirection;
+
+          void main() {
+            float vertical = normalize(vBackdropDirection).y;
+            float downwardHaze = 1.0 - smoothstep(-0.58, 0.12, vertical);
+            float horizonBand = 1.0 - smoothstep(0.0, 0.42, abs(vertical + 0.04));
+            vec3 atmosphere = mix(zenithColor, lowerColor, downwardHaze);
+            atmosphere = mix(atmosphere, horizonColor, horizonBand * 0.48);
+            gl_FragColor = vec4(atmosphere, 1.0);
+            #include <colorspace_fragment>
+          }
+        `}
+      />
+    </mesh>
+  );
+}
+
 function createFeltTextures(): {
   color: THREE.CanvasTexture;
   bump: THREE.CanvasTexture;
@@ -1233,75 +1283,82 @@ function createCenterTableFallbackTexture(): THREE.CanvasTexture {
 }
 
 function TableRail() {
-  const railY = tableRailHeight / 2;
-  const railLength = tableRailOuterHalfSize * 2;
-  const railMaterial = (
-    <meshStandardMaterial
-      color="#0d2c25"
-      roughness={0.68}
-      metalness={0.02}
-      envMapIntensity={0.28}
-    />
+  const railGeometry = useMemo(
+    () =>
+      new THREE.ExtrudeGeometry(
+        createSquareRingShape(tableRailOuterHalfSize, tableHalfSize),
+        {
+          depth: tableRailHeight,
+          steps: 1,
+          bevelEnabled: true,
+          bevelSegments: 2,
+          bevelSize: 0.018,
+          bevelThickness: 0.008,
+        },
+      ),
+    [],
+  );
+
+  useEffect(
+    () => () => {
+      railGeometry.dispose();
+    },
+    [railGeometry],
   );
 
   return (
     <group>
-      <RoundedBox
+      <mesh
+        geometry={railGeometry}
+        rotation={[-Math.PI / 2, 0, 0]}
         castShadow
         receiveShadow
-        args={[railLength, tableRailHeight, tableRailWidth]}
-        radius={0.035}
-        smoothness={6}
-        position={[0, railY, tableRailOuterHalfSize - tableRailWidth / 2]}
       >
-        {railMaterial}
-      </RoundedBox>
-      <RoundedBox
-        castShadow
-        receiveShadow
-        args={[railLength, tableRailHeight, tableRailWidth]}
-        radius={0.035}
-        smoothness={6}
-        position={[0, railY, -tableRailOuterHalfSize + tableRailWidth / 2]}
-      >
-        {railMaterial}
-      </RoundedBox>
-      <RoundedBox
-        castShadow
-        receiveShadow
-        args={[tableRailWidth, tableRailHeight, railLength]}
-        radius={0.035}
-        smoothness={6}
-        position={[tableRailOuterHalfSize - tableRailWidth / 2, railY, 0]}
-      >
-        {railMaterial}
-      </RoundedBox>
-      <RoundedBox
-        castShadow
-        receiveShadow
-        args={[tableRailWidth, tableRailHeight, railLength]}
-        radius={0.035}
-        smoothness={6}
-        position={[-tableRailOuterHalfSize + tableRailWidth / 2, railY, 0]}
-      >
-        {railMaterial}
-      </RoundedBox>
+        <meshStandardMaterial
+          color="#1f1c1a"
+          roughness={0.68}
+          metalness={0.02}
+          envMapIntensity={0.1}
+        />
+      </mesh>
     </group>
   );
+}
+
+function createSquareRingShape(outerHalfSize: number, innerHalfSize: number) {
+  const shape = new THREE.Shape();
+  shape.moveTo(-outerHalfSize, -outerHalfSize);
+  shape.lineTo(outerHalfSize, -outerHalfSize);
+  shape.lineTo(outerHalfSize, outerHalfSize);
+  shape.lineTo(-outerHalfSize, outerHalfSize);
+  shape.closePath();
+
+  const hole = new THREE.Path();
+  hole.moveTo(-innerHalfSize, -innerHalfSize);
+  hole.lineTo(-innerHalfSize, innerHalfSize);
+  hole.lineTo(innerHalfSize, innerHalfSize);
+  hole.lineTo(innerHalfSize, -innerHalfSize);
+  hole.closePath();
+  shape.holes.push(hole);
+  return shape;
 }
 
 function CameraShoulderFill({ intensity }: { intensity: number }) {
   const lightRef = useRef<THREE.DirectionalLight>(null);
   const { camera } = useThree();
+  const cameraRight = useMemo(() => new THREE.Vector3(), []);
+  const cameraUp = useMemo(() => new THREE.Vector3(), []);
 
   useFrame(() => {
     if (!lightRef.current) {
       return;
     }
-    const cameraRight = new THREE.Vector3(1, 0, 0)
+    cameraRight
+      .set(1, 0, 0)
       .applyQuaternion(camera.quaternion)
       .multiplyScalar(-0.18);
-    const cameraUp = new THREE.Vector3(0, 1, 0)
+    cameraUp
+      .set(0, 1, 0)
       .applyQuaternion(camera.quaternion)
       .multiplyScalar(0.42);
     lightRef.current.position
@@ -2794,14 +2851,7 @@ function TileMesh({
   useLayoutEffect(() => {
     onPoseChange?.(placement.tile.id, groupTilePose(ref.current));
     return () => onPoseChange?.(placement.tile.id, undefined);
-  }, [onPoseChange, placement.tile.id]);
-
-  useFrame(() => {
-    const pose = groupTilePose(ref.current);
-    if (pose) {
-      onPoseChange?.(placement.tile.id, pose);
-    }
-  });
+  }, [onPoseChange, placement]);
 
   return (
     <group
@@ -3180,10 +3230,13 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
       smoothness={8}
     >
       <meshStandardMaterial
-        color="#efe2c5"
-        roughness={orientation === "faceUp" ? 0.42 : 0.38}
-        metalness={0.01}
-        customProgramCacheKey={() => `mahjong-tile-body-${orientation}`}
+        color="#ece4d4"
+        roughness={orientation === "faceUp" ? 0.58 : 0.56}
+        metalness={0}
+        envMapIntensity={0.12}
+        customProgramCacheKey={() =>
+          `mahjong-tile-body-matte-ivory-${orientation}`
+        }
         onBeforeCompile={(shader) => {
           shader.vertexShader = shader.vertexShader.replace(
             "#include <common>",
@@ -3200,7 +3253,7 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
           shader.fragmentShader = shader.fragmentShader.replace(
             "vec4 diffuseColor = vec4( diffuse, opacity );",
             `
-            vec3 tileIvory = vec3(0.94, 0.895, 0.795);
+            vec3 tileIvory = vec3(0.925, 0.895, 0.83);
             vec3 tileGreen = vec3(0.0, 0.33, 0.12);
             float backMask = step(${backThreshold.toFixed(5)}, ${backDirection.toFixed(1)} * vTileLocalPosition.y);
             vec3 tileUv = vec3(
@@ -3219,15 +3272,22 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
             float panelBorder = (smoothstep(0.68, 0.82, tileUv.x) + smoothstep(0.72, 0.86, tileUv.z)) * facePanel;
             float materialNoise = fract(sin(dot(vTileLocalPosition.xz, vec2(31.7, 47.3))) * 43758.5453) - 0.5;
             vec3 tileColor = mix(tileIvory, tileGreen, backMask);
-            tileColor = mix(tileColor, vec3(0.975, 0.94, 0.855), 0.18 * faceLift * (1.0 - backMask));
+            tileColor = mix(tileColor, vec3(0.965, 0.94, 0.885), 0.16 * faceLift * (1.0 - backMask));
             tileColor = mix(tileColor, vec3(0.0, 0.42, 0.16), 0.12 * faceLift * backMask);
             tileColor = mix(tileColor, vec3(0.16, 0.66, 0.32), 0.2 * backRim);
             tileColor = mix(tileColor, vec3(0.03, 0.39, 0.15), 0.08 * backFaceGlow);
-            tileColor = mix(tileColor, vec3(0.9, 0.835, 0.705), 0.13 * facePanel);
+            tileColor = mix(tileColor, vec3(0.89, 0.855, 0.78), 0.1 * facePanel);
             tileColor *= 1.0 - 0.08 * min(panelBorder, 1.0);
             tileColor *= 1.0 - 0.16 * bevelShade;
-            tileColor += materialNoise * vec3(0.012, 0.01, 0.007);
+            tileColor += materialNoise * vec3(0.006, 0.005, 0.004);
             vec4 diffuseColor = vec4(tileColor, opacity);
+            `,
+          );
+          shader.fragmentShader = shader.fragmentShader.replace(
+            "#include <roughnessmap_fragment>",
+            `
+            #include <roughnessmap_fragment>
+            roughnessFactor = clamp(roughnessFactor + materialNoise * 0.025, 0.5, 0.7);
             `,
           );
         }}

@@ -42,4 +42,20 @@ describe("frame stats tracker", () => {
       worstFrameMs: 0,
     });
   });
+
+  test("uses a bounded rolling window for current frame health", () => {
+    const tracker = createFrameStatsTracker({ rollingFrameCount: 3 });
+    tracker.record(0);
+    tracker.record(100);
+    tracker.record(110);
+    tracker.record(120);
+    tracker.record(130);
+
+    expect(tracker.snapshot(130)).toMatchObject({
+      frames: 4,
+      averageFrameMs: 32.5,
+      p95FrameMs: 10,
+      worstFrameMs: 100,
+    });
+  });
 });

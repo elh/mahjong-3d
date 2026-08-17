@@ -9,7 +9,7 @@ export type FrameStatsSnapshot = {
 };
 
 export type FrameStatsTracker = {
-  record(timestampMs: number): FrameStatsSnapshot;
+  record(timestampMs: number): void;
   reset(timestampMs?: number): FrameStatsSnapshot;
   snapshot(nowMs?: number): FrameStatsSnapshot;
 };
@@ -27,9 +27,9 @@ export function createFrameStatsTracker({
   let startedAt: number | undefined;
   let lastTimestamp: number | undefined;
   let totalFrameMs = 0;
+  let frameCount = 0;
   let longFrameCount = 0;
   let worstFrameMs = 0;
-  const frameDurations: number[] = [];
   const rollingDurations: number[] = [];
 
   function reset(timestampMs?: number): FrameStatsSnapshot {
@@ -38,23 +38,23 @@ export function createFrameStatsTracker({
     totalFrameMs = 0;
     longFrameCount = 0;
     worstFrameMs = 0;
-    frameDurations.length = 0;
+    frameCount = 0;
     rollingDurations.length = 0;
     return snapshot(timestampMs);
   }
 
-  function record(timestampMs: number): FrameStatsSnapshot {
+  function record(timestampMs: number): void {
     if (startedAt === undefined) {
       startedAt = timestampMs;
       lastTimestamp = timestampMs;
-      return snapshot(timestampMs);
+      return;
     }
 
     const frameMs =
       lastTimestamp === undefined ? 0 : timestampMs - lastTimestamp;
     lastTimestamp = timestampMs;
     if (frameMs > 0) {
-      frameDurations.push(frameMs);
+      frameCount += 1;
       rollingDurations.push(frameMs);
       if (rollingDurations.length > rollingFrameCount) {
         rollingDurations.shift();
@@ -65,25 +65,22 @@ export function createFrameStatsTracker({
         longFrameCount += 1;
       }
     }
-
-    return snapshot(timestampMs);
   }
 
   function snapshot(
     nowMs = lastTimestamp ?? startedAt ?? 0,
   ): FrameStatsSnapshot {
-    const frames = frameDurations.length;
     const rollingTotal = rollingDurations.reduce(
       (total, frameMs) => total + frameMs,
       0,
     );
     return {
-      frames,
+      frames: frameCount,
       elapsedMs: startedAt === undefined ? 0 : Math.max(0, nowMs - startedAt),
       currentFps:
         rollingTotal > 0 ? (rollingDurations.length * 1000) / rollingTotal : 0,
-      averageFrameMs: frames > 0 ? totalFrameMs / frames : 0,
-      p95FrameMs: percentile(frameDurations, 0.95),
+      averageFrameMs: frameCount > 0 ? totalFrameMs / frameCount : 0,
+      p95FrameMs: percentile(rollingDurations, 0.95),
       longFrameCount,
       worstFrameMs,
     };
