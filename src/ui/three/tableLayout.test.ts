@@ -403,7 +403,7 @@ describe("3D table layout", () => {
     }
   });
 
-  test("animates claimed tiles from previous discard and hand positions into melds", () => {
+  test("animates a chow with the claimed discard in the middle", () => {
     const tiles = createTileSet();
     const claimed = tiles[0];
     const handTiles = tiles.slice(1, 3);
@@ -413,7 +413,11 @@ describe("3D table layout", () => {
 
     const replay = emptyReplayState();
     replay.players[0].melds = [
-      { type: "chow", tiles: [claimed, ...handTiles], claimedFrom: 1 },
+      {
+        type: "chow",
+        tiles: [handTiles[0], claimed, handTiles[1]],
+        claimedFrom: 1,
+      },
     ];
     const event: GameEvent = {
       type: "claimMade",
@@ -424,7 +428,7 @@ describe("3D table layout", () => {
       from: 1,
       claim: "chow",
       tile: claimed,
-      tiles: [claimed, ...handTiles],
+      tiles: [handTiles[0], claimed, handTiles[1]],
     };
 
     const previousLayout = createThreeTableLayout(previousReplay, undefined);
@@ -451,6 +455,12 @@ describe("3D table layout", () => {
       layout.tiles.find((placement) => placement.tile.id === claimed.id)
         ?.position,
     );
+    const meldPlacements = layout.tiles
+      .filter(
+        (placement) => placement.owner === "meld" && placement.player === 0,
+      )
+      .sort((left, right) => left.position[0] - right.position[0]);
+    expect(meldPlacements[1].tile.id).toBe(claimed.id);
     expect(claimedAnimation?.via?.position[1]).toBeCloseTo(
       tileSize.height / 2 + 0.56,
       5,
