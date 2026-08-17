@@ -39,7 +39,8 @@ export function legalClaimActions(
   );
   if (matching.length >= 3) {
     actions.push({ type: "claim", claim: "kong", tileId: discarded.id });
-  } else if (matching.length >= 2) {
+  }
+  if (matching.length >= 2) {
     actions.push({ type: "claim", claim: "pong", tileId: discarded.id });
   }
 

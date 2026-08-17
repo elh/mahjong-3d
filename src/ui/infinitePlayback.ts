@@ -5,6 +5,33 @@ export const infiniteRoundFlipPrepMs = 300;
 export const infiniteRoundFlipDurationMs = 1150;
 export const infiniteRoundResetDelayMs = 4000;
 
+export type EventAutoAdvanceMode = "animated" | "immediate";
+
+export function eventAutoAdvanceMode({
+  isPlaybackActive,
+  prefersReducedMotion,
+  isLoadingRound,
+  hasGenerationError,
+  eventCount,
+}: {
+  isPlaybackActive: boolean;
+  prefersReducedMotion: boolean;
+  isLoadingRound: boolean;
+  hasGenerationError: boolean;
+  eventCount: number;
+}): EventAutoAdvanceMode | undefined {
+  if (
+    !isPlaybackActive ||
+    isLoadingRound ||
+    hasGenerationError ||
+    eventCount <= 0
+  ) {
+    return undefined;
+  }
+
+  return prefersReducedMotion ? "immediate" : "animated";
+}
+
 export function infiniteRoundFlipTransitionDelayMs(): number {
   return (
     infiniteRoundFlipPrepMs +

@@ -1,10 +1,45 @@
 import { describe, expect, test } from "bun:test";
 import {
+  eventAutoAdvanceMode,
   infiniteRoundHoldMs,
   nextRoundPromotionDelayMs,
 } from "./infinitePlayback";
 
 describe("infinite playback timing", () => {
+  test("keeps semantic playback moving with reduced motion", () => {
+    expect(
+      eventAutoAdvanceMode({
+        isPlaybackActive: true,
+        prefersReducedMotion: true,
+        isLoadingRound: false,
+        hasGenerationError: false,
+        eventCount: 10,
+      }),
+    ).toBe("immediate");
+  });
+
+  test("pauses event playback only for runtime blockers", () => {
+    const ready = {
+      isPlaybackActive: true,
+      prefersReducedMotion: false,
+      isLoadingRound: false,
+      hasGenerationError: false,
+      eventCount: 10,
+    };
+
+    expect(eventAutoAdvanceMode(ready)).toBe("animated");
+    expect(
+      eventAutoAdvanceMode({ ...ready, isPlaybackActive: false }),
+    ).toBeUndefined();
+    expect(
+      eventAutoAdvanceMode({ ...ready, isLoadingRound: true }),
+    ).toBeUndefined();
+    expect(
+      eventAutoAdvanceMode({ ...ready, hasGenerationError: true }),
+    ).toBeUndefined();
+    expect(eventAutoAdvanceMode({ ...ready, eventCount: 0 })).toBeUndefined();
+  });
+
   test("waits for the hold duration when next round generation is fast", () => {
     expect(
       nextRoundPromotionDelayMs({
