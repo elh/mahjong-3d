@@ -5,10 +5,14 @@ saver build.
 
 ## Architecture
 
-The default macOS 14+ artifact is `Mahjong3D.app`, a minimal SwiftUI container
-app with an embedded `Mahjong3DScreenSaverExtension.appex`. The extension uses
-the `com.apple.screensaver` app-extension point and hosts the local Vite screen
-saver build in a `WKWebView` over the custom `mahjong3d-saver://` scheme.
+Only macOS 26 Tahoe is supported. Older deployment targets and the legacy saver
+build remain available for development and regression testing, but they are not
+supported release configurations.
+
+The default artifact is `Mahjong3D.app`, a minimal SwiftUI container app with an
+embedded `Mahjong3DScreenSaverExtension.appex`. The extension uses the
+`com.apple.screensaver` app-extension point and hosts the local Vite screen saver
+build in a `WKWebView` over the custom `mahjong3d-saver://` scheme.
 
 This structure follows the approach documented by
 [AerialScreensaver/AppexSaverMinimal](https://github.com/AerialScreensaver/AppexSaverMinimal):
