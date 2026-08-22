@@ -262,12 +262,13 @@ type ThreeGameViewProps = {
   sceneReadyMode?: "raf" | "timer";
   screenSaverFrameDriver?: boolean;
   allowInitialRenderWhilePaused?: boolean;
-  suppressLoadingOverlay?: boolean;
   preserveSceneOnRoundChange?: boolean;
   tableFlipDebug?: boolean;
   tableFlipTransitionKey?: string;
   onTableFlipPreviewTransition?: (delayMs: number) => void;
   sceneTransitionOverlayActive?: boolean;
+  onSceneReady?: (roundKey: string) => void;
+  onSceneRevealed?: (roundKey: string) => void;
 };
 
 export function ThreeGameView({
@@ -289,12 +290,13 @@ export function ThreeGameView({
   sceneReadyMode = "raf",
   screenSaverFrameDriver = false,
   allowInitialRenderWhilePaused = false,
-  suppressLoadingOverlay = false,
   preserveSceneOnRoundChange = false,
   tableFlipDebug = false,
   tableFlipTransitionKey,
   onTableFlipPreviewTransition,
   sceneTransitionOverlayActive = false,
+  onSceneReady,
+  onSceneRevealed,
 }: ThreeGameViewProps) {
   const [flickDebug, setFlickDebug] = useState(defaultFlickDebugSettings);
   const [lightingDebug, setLightingDebug] = useState(
@@ -306,6 +308,8 @@ export function ThreeGameView({
     defaultTableFlipDebugSettings,
   );
   const [sceneReady, setSceneReady] = useState(false);
+  const [effectsReady, setEffectsReady] = useState(false);
+  const [sceneContentReady, setSceneContentReady] = useState(false);
   const [hasSceneBeenVisible, setHasSceneBeenVisible] = useState(false);
   const [tableFlipRun, setTableFlipRun] = useState(0);
   const [tableFlipPhysicsKey, setTableFlipPhysicsKey] = useState(0);
@@ -323,6 +327,7 @@ export function ThreeGameView({
   const preserveSceneOnRoundChangeRef = useRef(preserveSceneOnRoundChange);
   const tableFlipRoundKeyRef = useRef(roundKey);
   const lastTableFlipTransitionKeyRef = useRef<string | undefined>(undefined);
+  const reportedSceneReadyRoundRef = useRef<string | undefined>(undefined);
   const tableFlipDelayTimeoutRef = useRef<number | undefined>(undefined);
   const tableFlipResetFrameRef = useRef<number | undefined>(undefined);
   const didMountRef = useRef(false);
@@ -342,6 +347,12 @@ export function ThreeGameView({
   }
   const isCameraUserControlled =
     cameraUserControlled ?? internalCameraUserControlled;
+  const markSceneReady = useCallback(() => setSceneReady(true), []);
+  const markEffectsReady = useCallback(() => setEffectsReady(true), []);
+  const markSceneContentReady = useCallback(
+    () => setSceneContentReady(true),
+    [],
+  );
   const setIsCameraUserControlled = useCallback(
     (isUserControlled: boolean) => {
       if (cameraUserControlled === undefined) {
@@ -361,6 +372,8 @@ export function ThreeGameView({
   const centerTableMarkReady = useCenterTableMarkReady();
   const sceneVisible =
     sceneReady &&
+    effectsReady &&
+    sceneContentReady &&
     tileFacesReady &&
     centerTableMarkReady &&
     !roundChanged &&
@@ -609,6 +622,10 @@ export function ThreeGameView({
     setHasSceneBeenVisible(true);
     didMountRef.current = true;
     lastEventIndexRef.current = eventIndex;
+    if (reportedSceneReadyRoundRef.current !== roundKey) {
+      reportedSceneReadyRoundRef.current = roundKey;
+      onSceneReady?.(roundKey);
+    }
   });
 
   useEffect(() => {
@@ -618,25 +635,7 @@ export function ThreeGameView({
     if (!preserveSceneOnRoundChangeRef.current) {
       setInternalCameraUserControlled(false);
     }
-    let timeout: number | undefined;
-    let frame: number | undefined;
-    const markReady = () => {
-      timeout = window.setTimeout(() => setSceneReady(true), 120);
-    };
-    if (sceneReadyMode === "timer") {
-      markReady();
-    } else {
-      frame = window.requestAnimationFrame(markReady);
-    }
-    return () => {
-      if (frame !== undefined) {
-        window.cancelAnimationFrame(frame);
-      }
-      if (timeout !== undefined) {
-        window.clearTimeout(timeout);
-      }
-    };
-  }, [roundKey, sceneReadyMode]);
+  }, [roundKey]);
 
   return (
     <section className="three-viewer" aria-label="3D autonomous game viewer">
@@ -691,11 +690,6 @@ export function ThreeGameView({
           />
         </>
       ) : null}
-      {!sceneVisible && !suppressLoadingOverlay ? (
-        <div className="three-loading-overlay" aria-live="polite">
-          Loading...
-        </div>
-      ) : null}
       <Canvas
         className="three-r3f-canvas"
         frameloop={canvasFrameloop}
@@ -735,6 +729,21 @@ export function ThreeGameView({
           }}
         >
           <CameraPresetSync preset={cameraPreset} />
+          {!sceneReady ? (
+            <SceneReadySignal
+              key={roundKey}
+              ready={
+                effectsReady &&
+                sceneContentReady &&
+                tileFacesReady &&
+                centerTableMarkReady &&
+                !roundChanged &&
+                !loading
+              }
+              mode={sceneReadyMode}
+              onReady={markSceneReady}
+            />
+          ) : null}
           {screenSaverFrameDriver ? (
             <ScreenSaverFrameDriver active={!effectiveRenderPaused} />
           ) : null}
@@ -797,7 +806,7 @@ export function ThreeGameView({
                       tilePhysics={tilePhysics}
                       settings={tableFlipDebugSettings}
                       onContactSound={playContactSound}
-                      visible={sceneVisible}
+                      visible
                     />
                   ))
                 : discardTiles.map((placement) => (
@@ -824,11 +833,11 @@ export function ThreeGameView({
                       onContactSound={playContactSound}
                       onFlickStarted={hideAnimatedTileForHandoff}
                       onPoseChange={recordDiscardPose}
-                      visible={sceneVisible}
+                      visible
                     />
                   ))}
             </Physics>
-            <group visible={sceneVisible && !isTableFlipped}>
+            <group visible={!isTableFlipped}>
               {staticTiles.map((placement) => (
                 <TileMesh
                   key={placement.tile.id}
@@ -859,6 +868,9 @@ export function ThreeGameView({
                 />
               ))}
             </group>
+            {!sceneContentReady ? (
+              <SceneContentReadySignal onReady={markSceneContentReady} />
+            ) : null}
           </Suspense>
           <OrbitControls
             autoRotate={
@@ -877,19 +889,107 @@ export function ThreeGameView({
           />
           <Suspense fallback={null}>
             <VisualEffects settings={visualDebug} />
+            {!effectsReady ? (
+              <EffectsReadySignal onReady={markEffectsReady} />
+            ) : null}
           </Suspense>
         </VisualRenderContext.Provider>
       </Canvas>
       <div
         className={
-          sceneTransitionOverlayActive
+          sceneTransitionOverlayActive || !sceneVisible
             ? "round-transition-overlay active"
             : "round-transition-overlay"
         }
         aria-hidden="true"
+        onTransitionEnd={(event) => {
+          if (
+            event.propertyName === "opacity" &&
+            sceneVisible &&
+            !sceneTransitionOverlayActive
+          ) {
+            onSceneRevealed?.(roundKey);
+          }
+        }}
       />
     </section>
   );
+}
+
+function EffectsReadySignal({ onReady }: { onReady: () => void }) {
+  const renderedFramesRef = useRef(0);
+
+  useFrame(() => {
+    if (renderedFramesRef.current >= 3) {
+      return;
+    }
+    renderedFramesRef.current += 1;
+    if (renderedFramesRef.current === 3) {
+      onReady();
+    }
+  }, 2);
+
+  return null;
+}
+
+function SceneContentReadySignal({ onReady }: { onReady: () => void }) {
+  const renderedFramesRef = useRef(0);
+
+  useFrame(() => {
+    if (renderedFramesRef.current >= 2) {
+      return;
+    }
+    renderedFramesRef.current += 1;
+    if (renderedFramesRef.current === 2) {
+      onReady();
+    }
+  });
+
+  return null;
+}
+
+function SceneReadySignal({
+  ready,
+  mode,
+  onReady,
+}: {
+  ready: boolean;
+  mode: "raf" | "timer";
+  onReady: () => void;
+}) {
+  const renderedFramesRef = useRef(0);
+  const didReportReadyRef = useRef(false);
+
+  useEffect(() => {
+    if (!ready) {
+      renderedFramesRef.current = 0;
+      didReportReadyRef.current = false;
+      return;
+    }
+    if (mode !== "timer") {
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      if (!didReportReadyRef.current) {
+        didReportReadyRef.current = true;
+        onReady();
+      }
+    }, 120);
+    return () => window.clearTimeout(timeout);
+  }, [mode, onReady, ready]);
+
+  useFrame(() => {
+    if (mode !== "raf" || !ready || didReportReadyRef.current) {
+      return;
+    }
+    renderedFramesRef.current += 1;
+    if (renderedFramesRef.current >= 2) {
+      didReportReadyRef.current = true;
+      onReady();
+    }
+  }, 3);
+
+  return null;
 }
 
 function useResponsiveCameraPreset(): CameraPreset {

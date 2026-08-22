@@ -359,24 +359,6 @@ h3 {
   background: #101514;
 }
 
-.three-loading-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  display: grid;
-  place-items: center;
-  background: #131614;
-  color: var(--stone-300);
-  font-size: 0.82rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
-.screensaver-shell .three-loading-overlay {
-  color: #131614;
-}
-
 .table-flip-controls {
   position: absolute;
   top: 14px;
@@ -435,9 +417,10 @@ h3 {
   inset: 0;
   z-index: 3;
   pointer-events: none;
-  background: #0f1112;
+  background: #090e0d;
   opacity: 0;
   transition: opacity 620ms ease-in-out;
+  will-change: opacity;
 }
 
 .round-transition-overlay.active {
@@ -572,15 +555,7 @@ h3 {
 }
 
 .three-viewer.loading {
-  display: grid;
-  place-items: center;
-  color: var(--stone-300);
-  font-size: 0.82rem;
-  font-weight: 700;
-}
-
-.screensaver-shell .three-viewer.loading {
-  color: #131614;
+  background: #090e0d;
 }
 
 .round-loading {

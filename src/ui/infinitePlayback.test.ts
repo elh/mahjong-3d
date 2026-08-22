@@ -1,15 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import {
   eventAutoAdvanceMode,
+  infiniteRoundFadeMs,
   infiniteRoundHoldMs,
+  infiniteRoundSwapMs,
   nextRoundPromotionDelayMs,
 } from "./infinitePlayback";
 
 describe("infinite playback timing", () => {
+  test("keeps the round swap covered until the fade is opaque", () => {
+    expect(infiniteRoundSwapMs).toBeGreaterThanOrEqual(infiniteRoundFadeMs);
+  });
+
   test("keeps semantic playback moving with reduced motion", () => {
     expect(
       eventAutoAdvanceMode({
         isPlaybackActive: true,
+        isSceneRevealed: true,
         prefersReducedMotion: true,
         isLoadingRound: false,
         hasGenerationError: false,
@@ -21,6 +28,7 @@ describe("infinite playback timing", () => {
   test("pauses event playback only for runtime blockers", () => {
     const ready = {
       isPlaybackActive: true,
+      isSceneRevealed: true,
       prefersReducedMotion: false,
       isLoadingRound: false,
       hasGenerationError: false,
@@ -30,6 +38,9 @@ describe("infinite playback timing", () => {
     expect(eventAutoAdvanceMode(ready)).toBe("animated");
     expect(
       eventAutoAdvanceMode({ ...ready, isPlaybackActive: false }),
+    ).toBeUndefined();
+    expect(
+      eventAutoAdvanceMode({ ...ready, isSceneRevealed: false }),
     ).toBeUndefined();
     expect(
       eventAutoAdvanceMode({ ...ready, isLoadingRound: true }),
