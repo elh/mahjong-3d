@@ -2,10 +2,11 @@ import {
   Bloom,
   EffectComposer,
   N8AO,
+  SMAA,
   ToneMapping,
 } from "@react-three/postprocessing";
-import { useEffect, useMemo } from "react";
 import { BlendFunction, Effect, ToneMappingMode } from "postprocessing";
+import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import type { VisualDebugSettings } from "./visualSettings";
 
@@ -235,8 +236,15 @@ export function VisualEffects({ settings }: { settings: VisualDebugSettings }) {
       {settings.warmHalation ? (
         <WarmHalation strength={settings.halationStrength} />
       ) : null}
-      <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+      <ToneMapping
+        mode={
+          settings.agxToneMapping
+            ? ToneMappingMode.AGX
+            : ToneMappingMode.ACES_FILMIC
+        }
+      />
       <ColorFinishing settings={settings} />
+      {settings.smaaAntialiasing ? <SMAA /> : null}
     </EffectComposer>
   );
 }

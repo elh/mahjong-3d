@@ -4,6 +4,7 @@ import { defaultVisualDebugSettings } from "./visualSettings";
 describe("visual defaults", () => {
   test("uses the approved neutral material finish", () => {
     expect(defaultVisualDebugSettings).toEqual({
+      agxToneMapping: false,
       filmGrade: true,
       filmStock: "neutral",
       filmStrength: 0.2,
@@ -12,6 +13,7 @@ describe("visual defaults", () => {
       softDiffusion: false,
       diffusionStrength: 0.24,
       enhancedTileMaterial: true,
+      smaaAntialiasing: true,
       ditheredShadows: true,
       ditherStrength: 0.2,
       ambientOcclusion: false,

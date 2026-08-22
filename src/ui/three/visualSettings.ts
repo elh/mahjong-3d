@@ -1,4 +1,5 @@
 export type VisualDebugSettings = {
+  agxToneMapping: boolean;
   filmGrade: boolean;
   filmStock: "neutral" | "tungsten" | "faded";
   filmStrength: number;
@@ -7,6 +8,7 @@ export type VisualDebugSettings = {
   softDiffusion: boolean;
   diffusionStrength: number;
   enhancedTileMaterial: boolean;
+  smaaAntialiasing: boolean;
   ditheredShadows: boolean;
   ditherStrength: number;
   ambientOcclusion: boolean;
@@ -17,6 +19,7 @@ export type VisualDebugSettings = {
 };
 
 export const materialVisualDebugSettings: VisualDebugSettings = {
+  agxToneMapping: false,
   filmGrade: false,
   filmStock: "neutral",
   filmStrength: 0.2,
@@ -25,6 +28,7 @@ export const materialVisualDebugSettings: VisualDebugSettings = {
   softDiffusion: false,
   diffusionStrength: 0.24,
   enhancedTileMaterial: true,
+  smaaAntialiasing: true,
   ditheredShadows: false,
   ditherStrength: 0.2,
   ambientOcclusion: false,

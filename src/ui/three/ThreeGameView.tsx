@@ -1679,6 +1679,13 @@ function VisualDebugControls({
       </fieldset>
 
       <DebugControlGroup title="Film finish">
+        <DebugToggle
+          label="AgX tone mapping"
+          checked={settings.agxToneMapping}
+          onChange={(agxToneMapping) =>
+            onChange({ ...settings, agxToneMapping })
+          }
+        />
         <label>
           <span>Film stock</span>
           <select
@@ -1747,13 +1754,20 @@ function VisualDebugControls({
 
       <DebugControlGroup title="Secondary effects">
         <p className="three-debug-group-note">
-          Optional material, glow, and depth treatments.
+          Optional material, edge, glow, and depth treatments.
         </p>
         <DebugToggle
           label="Improved tile material"
           checked={settings.enhancedTileMaterial}
           onChange={(enhancedTileMaterial) =>
             onChange({ ...settings, enhancedTileMaterial })
+          }
+        />
+        <DebugToggle
+          label="SMAA antialiasing"
+          checked={settings.smaaAntialiasing}
+          onChange={(smaaAntialiasing) =>
+            onChange({ ...settings, smaaAntialiasing })
           }
         />
         <DebugToggle
