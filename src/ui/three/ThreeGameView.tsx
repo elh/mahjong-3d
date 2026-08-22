@@ -10,8 +10,12 @@ import {
   type RigidBodyProps,
 } from "@react-three/rapier";
 import {
+  createContext,
+  lazy,
   Suspense,
+  type ReactNode,
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -43,6 +47,14 @@ import {
   tileSize,
   type Vec3,
 } from "./tableLayout";
+import {
+  defaultVisualDebugSettings,
+  fadedVisualDebugSettings,
+  materialVisualDebugSettings,
+  neutralVisualDebugSettings,
+  tungstenVisualDebugSettings,
+  type VisualDebugSettings,
+} from "./visualSettings";
 
 declare const __DEBUG_MODE_ENABLED__: boolean;
 
@@ -64,6 +76,15 @@ const tableRailOuterHalfSize = tableRailInnerHalfSize + tableRailWidth;
 const sceneBackgroundColor = "#090e0d";
 const sceneToneMapping = THREE.ACESFilmicToneMapping;
 const sceneToneMappingExposure = 1.12;
+const VisualRenderContext = createContext({
+  enhancedTileMaterial: false,
+  postProcessingActive: false,
+});
+const VisualEffects = lazy(() =>
+  import("./VisualEffects").then((module) => ({
+    default: module.VisualEffects,
+  })),
+);
 const cameraTarget: Vec3 = [0, 0, 0];
 const rapierRigidBodyType = {
   dynamic: 0,
@@ -187,14 +208,14 @@ const defaultFlickDebugSettings: FlickDebugSettings = {
 };
 
 const defaultLightingDebugSettings: LightingDebugSettings = {
-  ambientIntensity: 0.25,
-  fillIntensity: 0.13,
-  keyIntensity: 2.65,
-  keyX: -3.8,
-  keyY: 5.4,
-  keyZ: 2.2,
-  cameraFillIntensity: 0.86,
-  handFaceFillIntensity: 0.28,
+  ambientIntensity: 0.55,
+  fillIntensity: 0.24,
+  keyIntensity: 3.8,
+  keyX: 0,
+  keyY: 5.8,
+  keyZ: 0.2,
+  cameraFillIntensity: 0.82,
+  handFaceFillIntensity: 0.24,
   environment: false,
 };
 
@@ -279,6 +300,7 @@ export function ThreeGameView({
     defaultLightingDebugSettings,
   );
   const [soundDebug, setSoundDebug] = useState(defaultSoundDebugSettings);
+  const [visualDebug, setVisualDebug] = useState(defaultVisualDebugSettings);
   const [tableFlipDebugSettings, setTableFlipDebugSettings] = useState(
     defaultTableFlipDebugSettings,
   );
@@ -622,9 +644,11 @@ export function ThreeGameView({
           flickSettings={flickDebug}
           lightingSettings={lightingDebug}
           soundSettings={soundDebug}
+          visualSettings={visualDebug}
           onFlickChange={setFlickDebug}
           onLightingChange={setLightingDebug}
           onSoundChange={setSoundDebug}
+          onVisualChange={setVisualDebug}
         />
       ) : null}
       {tableFlipDebug ? (
@@ -703,162 +727,157 @@ export function ThreeGameView({
           }
         }}
       >
-        <CameraPresetSync preset={cameraPreset} />
-        {screenSaverFrameDriver ? (
-          <ScreenSaverFrameDriver active={!effectiveRenderPaused} />
-        ) : null}
-        <color attach="background" args={[sceneBackgroundColor]} />
-        <AtmosphereBackdrop />
-        <ambientLight intensity={lightingDebug.ambientIntensity} />
-        <hemisphereLight
-          intensity={lightingDebug.fillIntensity}
-          color="#d9e6ff"
-          groundColor="#1d1a15"
-        />
-        <directionalLight
-          castShadow
-          intensity={lightingDebug.keyIntensity}
-          color="#ffe7cc"
-          position={[
-            lightingDebug.keyX,
-            lightingDebug.keyY,
-            lightingDebug.keyZ,
-          ]}
-          shadow-mapSize={[1024, 1024]}
-          shadow-camera-left={-4.2}
-          shadow-camera-right={4.2}
-          shadow-camera-top={4.2}
-          shadow-camera-bottom={-4.2}
-          shadow-camera-near={0.5}
-          shadow-camera-far={12}
-          shadow-bias={-0.00025}
-          shadow-radius={1.25}
-        />
-        <pointLight
-          intensity={0.2}
-          distance={7.5}
-          decay={2}
-          position={[2.8, 2.4, -3.2]}
-          color="#aabfc4"
-        />
-        <CameraShoulderFill intensity={lightingDebug.cameraFillIntensity} />
-        <HandFaceFill intensity={lightingDebug.handFaceFillIntensity} />
-        {!tableFlipEnabled || !isTableFlipMotionActive ? (
-          <TableSurface />
-        ) : null}
-        <Suspense fallback={null}>
-          {lightingDebug.environment ? <Environment preset="studio" /> : null}
-          <Physics
-            key={tableFlipEnabled ? tableFlipPhysicsKey : "main"}
-            gravity={[0, -9.81, 0]}
-            timeStep={tableFlipEnabled ? 1 / 90 : undefined}
-            numSolverIterations={tableFlipEnabled ? 10 : undefined}
-            numInternalPgsIterations={tableFlipEnabled ? 2 : undefined}
-            maxCcdSubsteps={tableFlipEnabled ? 4 : undefined}
-            paused={renderPaused || isTableFlipPhysicsPaused}
-          >
-            {tableFlipEnabled ? (
-              <FlipTable
-                key={tableFlipRun}
-                active={isTableFlipMotionActive}
-                showSurface={isTableFlipMotionActive}
-                settings={tableFlipSettings}
-                debugSettings={tableFlipDebugSettings}
-                tableFriction={flickDebug.tableFriction}
-              />
-            ) : (
-              <CuboidCollider
-                position={[0, -tableSlabDepth / 2, 0]}
-                args={[tableHalfSize, tableSlabDepth / 2, tableHalfSize]}
-                friction={flickDebug.tableFriction}
-                restitution={0.02}
-              />
-            )}
-            {isTableFlipped
-              ? tableFlipSnapshot?.map((tilePhysics) => (
-                  <TableFlipPhysicsTile
-                    key={`${tableFlipRun}:${tilePhysics.placement.tile.id}`}
-                    tilePhysics={tilePhysics}
-                    settings={tableFlipDebugSettings}
-                    onContactSound={playContactSound}
-                    visible={sceneVisible}
-                  />
-                ))
-              : discardTiles.map((placement) => (
-                  <DiscardPhysicsTile
-                    key={placement.tile.id}
-                    placement={
-                      flickByTileId.has(placement.tile.id)
-                        ? {
-                            ...placement,
-                            position: flickByTileId.get(placement.tile.id)!
-                              .position,
-                            rotation: flickByTileId.get(placement.tile.id)!
-                              .rotation,
-                          }
-                        : placement
-                    }
-                    flick={flickByTileId.get(placement.tile.id)}
-                    handoffKey={
-                      flickByTileId.has(placement.tile.id)
-                        ? `${roundKey}:${eventIndex}:${placement.tile.id}`
-                        : undefined
-                    }
-                    settings={flickDebug}
-                    onContactSound={playContactSound}
-                    onFlickStarted={hideAnimatedTileForHandoff}
-                    onPoseChange={recordDiscardPose}
-                    visible={sceneVisible}
-                  />
-                ))}
-          </Physics>
-          <group visible={sceneVisible && !isTableFlipped}>
-            {staticTiles.map((placement) => (
-              <TileMesh
-                key={placement.tile.id}
-                placement={placement}
-                onPoseChange={recordRenderedTilePose}
-              />
-            ))}
-            {renderedAnimations.map((animation) => (
-              <AnimatedTile
-                key={`${animation.tile.id}-${eventIndex}`}
-                tile={animation.tile}
-                from={animation.from}
-                to={animation.to}
-                fromRotation={animation.fromRotation}
-                toRotation={animation.toRotation}
-                via={animation.via}
-                drawStaging={animation.drawStaging}
-                flipAxis={animation.flipAxis}
-                faceUp={animation.faceUp}
-                motion={animation.motion}
-                handoffKey={
-                  animation.flick
-                    ? `${roundKey}:${eventIndex}:${animation.tile.id}`
-                    : undefined
-                }
-                registerHandoff={registerAnimatedTileHandoff}
-                onPoseChange={recordRenderedTilePose}
-              />
-            ))}
-          </group>
-        </Suspense>
-        <OrbitControls
-          autoRotate={
-            simulatorMode && cameraAutoRotate && !isCameraUserControlled
-          }
-          autoRotateSpeed={0.14}
-          enableRotate={pointerControlsEnabled}
-          enableZoom={pointerControlsEnabled}
-          enablePan={false}
-          enableDamping
-          target={cameraPreset.target}
-          minDistance={cameraPreset.minDistance}
-          maxDistance={cameraPreset.maxDistance}
-          maxPolarAngle={cameraPreset.maxPolarAngle}
-          minPolarAngle={cameraPreset.minPolarAngle}
-        />
+        <VisualRenderContext.Provider
+          value={{
+            enhancedTileMaterial: visualDebug.enhancedTileMaterial,
+            postProcessingActive: true,
+          }}
+        >
+          <CameraPresetSync preset={cameraPreset} />
+          {screenSaverFrameDriver ? (
+            <ScreenSaverFrameDriver active={!effectiveRenderPaused} />
+          ) : null}
+          <color attach="background" args={[sceneBackgroundColor]} />
+          <AtmosphereBackdrop />
+          <ambientLight
+            intensity={lightingDebug.ambientIntensity}
+            color="#fff1df"
+          />
+          <hemisphereLight
+            intensity={lightingDebug.fillIntensity}
+            color="#fff4e8"
+            groundColor="#30291f"
+          />
+          <TableLampKey settings={lightingDebug} />
+          <pointLight
+            intensity={0.12}
+            distance={7.5}
+            decay={2}
+            position={[2.8, 2.4, -3.2]}
+            color="#f2dbc4"
+          />
+          <CameraShoulderFill intensity={lightingDebug.cameraFillIntensity} />
+          <HandFaceFill intensity={lightingDebug.handFaceFillIntensity} />
+          {!tableFlipEnabled || !isTableFlipMotionActive ? (
+            <TableSurface />
+          ) : null}
+          <Suspense fallback={null}>
+            {lightingDebug.environment ? <Environment preset="studio" /> : null}
+            <Physics
+              key={tableFlipEnabled ? tableFlipPhysicsKey : "main"}
+              gravity={[0, -9.81, 0]}
+              timeStep={tableFlipEnabled ? 1 / 90 : undefined}
+              numSolverIterations={tableFlipEnabled ? 10 : undefined}
+              numInternalPgsIterations={tableFlipEnabled ? 2 : undefined}
+              maxCcdSubsteps={tableFlipEnabled ? 4 : undefined}
+              paused={renderPaused || isTableFlipPhysicsPaused}
+            >
+              {tableFlipEnabled ? (
+                <FlipTable
+                  key={tableFlipRun}
+                  active={isTableFlipMotionActive}
+                  showSurface={isTableFlipMotionActive}
+                  settings={tableFlipSettings}
+                  debugSettings={tableFlipDebugSettings}
+                  tableFriction={flickDebug.tableFriction}
+                />
+              ) : (
+                <CuboidCollider
+                  position={[0, -tableSlabDepth / 2, 0]}
+                  args={[tableHalfSize, tableSlabDepth / 2, tableHalfSize]}
+                  friction={flickDebug.tableFriction}
+                  restitution={0.02}
+                />
+              )}
+              {isTableFlipped
+                ? tableFlipSnapshot?.map((tilePhysics) => (
+                    <TableFlipPhysicsTile
+                      key={`${tableFlipRun}:${tilePhysics.placement.tile.id}`}
+                      tilePhysics={tilePhysics}
+                      settings={tableFlipDebugSettings}
+                      onContactSound={playContactSound}
+                      visible={sceneVisible}
+                    />
+                  ))
+                : discardTiles.map((placement) => (
+                    <DiscardPhysicsTile
+                      key={placement.tile.id}
+                      placement={
+                        flickByTileId.has(placement.tile.id)
+                          ? {
+                              ...placement,
+                              position: flickByTileId.get(placement.tile.id)!
+                                .position,
+                              rotation: flickByTileId.get(placement.tile.id)!
+                                .rotation,
+                            }
+                          : placement
+                      }
+                      flick={flickByTileId.get(placement.tile.id)}
+                      handoffKey={
+                        flickByTileId.has(placement.tile.id)
+                          ? `${roundKey}:${eventIndex}:${placement.tile.id}`
+                          : undefined
+                      }
+                      settings={flickDebug}
+                      onContactSound={playContactSound}
+                      onFlickStarted={hideAnimatedTileForHandoff}
+                      onPoseChange={recordDiscardPose}
+                      visible={sceneVisible}
+                    />
+                  ))}
+            </Physics>
+            <group visible={sceneVisible && !isTableFlipped}>
+              {staticTiles.map((placement) => (
+                <TileMesh
+                  key={placement.tile.id}
+                  placement={placement}
+                  onPoseChange={recordRenderedTilePose}
+                />
+              ))}
+              {renderedAnimations.map((animation) => (
+                <AnimatedTile
+                  key={`${animation.tile.id}-${eventIndex}`}
+                  tile={animation.tile}
+                  from={animation.from}
+                  to={animation.to}
+                  fromRotation={animation.fromRotation}
+                  toRotation={animation.toRotation}
+                  via={animation.via}
+                  drawStaging={animation.drawStaging}
+                  flipAxis={animation.flipAxis}
+                  faceUp={animation.faceUp}
+                  motion={animation.motion}
+                  handoffKey={
+                    animation.flick
+                      ? `${roundKey}:${eventIndex}:${animation.tile.id}`
+                      : undefined
+                  }
+                  registerHandoff={registerAnimatedTileHandoff}
+                  onPoseChange={recordRenderedTilePose}
+                />
+              ))}
+            </group>
+          </Suspense>
+          <OrbitControls
+            autoRotate={
+              simulatorMode && cameraAutoRotate && !isCameraUserControlled
+            }
+            autoRotateSpeed={0.14}
+            enableRotate={pointerControlsEnabled}
+            enableZoom={pointerControlsEnabled}
+            enablePan={false}
+            enableDamping
+            target={cameraPreset.target}
+            minDistance={cameraPreset.minDistance}
+            maxDistance={cameraPreset.maxDistance}
+            maxPolarAngle={cameraPreset.maxPolarAngle}
+            minPolarAngle={cameraPreset.minPolarAngle}
+          />
+          <Suspense fallback={null}>
+            <VisualEffects settings={visualDebug} />
+          </Suspense>
+        </VisualRenderContext.Provider>
       </Canvas>
       <div
         className={
@@ -1159,6 +1178,7 @@ function clampColor(value: number): number {
 }
 
 function CenterTableMark() {
+  const { postProcessingActive } = useContext(VisualRenderContext);
   const loadedTexture = useCenterTableMarkTexture();
   const texture =
     loadedTexture ??
@@ -1178,6 +1198,7 @@ function CenterTableMark() {
       <meshBasicMaterial
         map={texture}
         transparent
+        opacity={postProcessingActive ? 0.4 : 1}
         depthWrite={false}
         toneMapped={false}
       />
@@ -1346,6 +1367,32 @@ function createSquareRingShape(outerHalfSize: number, innerHalfSize: number) {
   return shape;
 }
 
+function TableLampKey({ settings }: { settings: LightingDebugSettings }) {
+  const target = useMemo(() => new THREE.Object3D(), []);
+
+  return (
+    <>
+      <primitive object={target} position={[0, 0, 0]} />
+      <spotLight
+        castShadow
+        target={target}
+        intensity={settings.keyIntensity * 30}
+        color="#ffe5c4"
+        position={[settings.keyX, settings.keyY, settings.keyZ]}
+        distance={14}
+        decay={2}
+        angle={0.92}
+        penumbra={0.62}
+        shadow-mapSize={[1024, 1024]}
+        shadow-camera-near={0.5}
+        shadow-camera-far={12}
+        shadow-bias={-0.0002}
+        shadow-radius={1.5}
+      />
+    </>
+  );
+}
+
 function CameraShoulderFill({ intensity }: { intensity: number }) {
   const lightRef = useRef<THREE.DirectionalLight>(null);
   const { camera } = useThree();
@@ -1403,18 +1450,24 @@ export function ThreeDebugPanel({
   flickSettings,
   lightingSettings,
   soundSettings,
+  visualSettings,
   onFlickChange,
   onLightingChange,
   onSoundChange,
+  onVisualChange,
 }: {
   flickSettings: FlickDebugSettings;
   lightingSettings: LightingDebugSettings;
   soundSettings: SoundDebugSettings;
+  visualSettings: VisualDebugSettings;
   onFlickChange: (settings: FlickDebugSettings) => void;
   onLightingChange: (settings: LightingDebugSettings) => void;
   onSoundChange: (settings: SoundDebugSettings) => void;
+  onVisualChange: (settings: VisualDebugSettings) => void;
 }) {
-  const [mode, setMode] = useState<"flick" | "lighting" | "sound">("lighting");
+  const [mode, setMode] = useState<"flick" | "lighting" | "sound" | "visual">(
+    "visual",
+  );
 
   return (
     <aside className="three-debug-panel" aria-label="3D debug settings">
@@ -1427,13 +1480,22 @@ export function ThreeDebugPanel({
               ? onFlickChange(defaultFlickDebugSettings)
               : mode === "lighting"
                 ? onLightingChange(defaultLightingDebugSettings)
-                : onSoundChange(defaultSoundDebugSettings)
+                : mode === "visual"
+                  ? onVisualChange(defaultVisualDebugSettings)
+                  : onSoundChange(defaultSoundDebugSettings)
           }
         >
           Reset
         </button>
       </header>
       <div className="three-debug-tabs" role="tablist" aria-label="Debug mode">
+        <button
+          type="button"
+          className={mode === "visual" ? "active" : ""}
+          onClick={() => setMode("visual")}
+        >
+          Visual
+        </button>
         <button
           type="button"
           className={mode === "flick" ? "active" : ""}
@@ -1456,7 +1518,12 @@ export function ThreeDebugPanel({
           Sound
         </button>
       </div>
-      {mode === "flick" ? (
+      {mode === "visual" ? (
+        <VisualDebugControls
+          settings={visualSettings}
+          onChange={onVisualChange}
+        />
+      ) : mode === "flick" ? (
         <FlickDebugControls settings={flickSettings} onChange={onFlickChange} />
       ) : mode === "lighting" ? (
         <LightingDebugControls
@@ -1467,6 +1534,193 @@ export function ThreeDebugPanel({
         <SoundDebugControls settings={soundSettings} onChange={onSoundChange} />
       )}
     </aside>
+  );
+}
+
+function VisualDebugControls({
+  settings,
+  onChange,
+}: {
+  settings: VisualDebugSettings;
+  onChange: (settings: VisualDebugSettings) => void;
+}) {
+  return (
+    <>
+      <fieldset className="three-debug-presets" aria-label="Visual presets">
+        <button
+          type="button"
+          onClick={() => onChange(materialVisualDebugSettings)}
+        >
+          Material
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange(neutralVisualDebugSettings)}
+        >
+          Neutral
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange(tungstenVisualDebugSettings)}
+        >
+          Tungsten
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange(fadedVisualDebugSettings)}
+        >
+          Faded
+        </button>
+      </fieldset>
+
+      <DebugControlGroup title="Film finish">
+        <label>
+          <span>Film stock</span>
+          <select
+            value={settings.filmStock}
+            onChange={(event) =>
+              onChange({
+                ...settings,
+                filmStock: event.currentTarget
+                  .value as VisualDebugSettings["filmStock"],
+              })
+            }
+          >
+            <option value="neutral">Neutral</option>
+            <option value="tungsten">Tungsten</option>
+            <option value="faded">Faded print</option>
+          </select>
+        </label>
+        <DebugToggle
+          label="Film color grade"
+          checked={settings.filmGrade}
+          onChange={(filmGrade) => onChange({ ...settings, filmGrade })}
+        />
+        <DebugSlider
+          label="Film strength"
+          value={settings.filmStrength}
+          min={0}
+          max={1}
+          step={0.02}
+          onChange={(filmStrength) => onChange({ ...settings, filmStrength })}
+        />
+        <DebugToggle
+          label="Minimal finishing"
+          checked={settings.colorFinishing}
+          onChange={(colorFinishing) =>
+            onChange({ ...settings, colorFinishing })
+          }
+        />
+        <DebugSlider
+          label="Finish strength"
+          value={settings.finishingStrength}
+          min={0}
+          max={1}
+          step={0.02}
+          onChange={(finishingStrength) =>
+            onChange({ ...settings, finishingStrength })
+          }
+        />
+        <DebugToggle
+          label="Shadow texture"
+          checked={settings.ditheredShadows}
+          onChange={(ditheredShadows) =>
+            onChange({ ...settings, ditheredShadows })
+          }
+        />
+        <DebugSlider
+          label="Texture strength"
+          value={settings.ditherStrength}
+          min={0}
+          max={1}
+          step={0.02}
+          onChange={(ditherStrength) =>
+            onChange({ ...settings, ditherStrength })
+          }
+        />
+      </DebugControlGroup>
+
+      <DebugControlGroup title="Secondary effects">
+        <p className="three-debug-group-note">
+          Optional material, glow, and depth treatments.
+        </p>
+        <DebugToggle
+          label="Improved tile material"
+          checked={settings.enhancedTileMaterial}
+          onChange={(enhancedTileMaterial) =>
+            onChange({ ...settings, enhancedTileMaterial })
+          }
+        />
+        <DebugToggle
+          label="Soft diffusion"
+          checked={settings.softDiffusion}
+          onChange={(softDiffusion) => onChange({ ...settings, softDiffusion })}
+        />
+        <DebugSlider
+          label="Diffusion"
+          value={settings.diffusionStrength}
+          min={0}
+          max={1.2}
+          step={0.02}
+          onChange={(diffusionStrength) =>
+            onChange({ ...settings, diffusionStrength })
+          }
+        />
+        <DebugToggle
+          label="Ambient occlusion"
+          checked={settings.ambientOcclusion}
+          onChange={(ambientOcclusion) =>
+            onChange({ ...settings, ambientOcclusion })
+          }
+        />
+        <DebugSlider
+          label="AO intensity"
+          value={settings.aoIntensity}
+          min={0}
+          max={2.5}
+          step={0.05}
+          onChange={(aoIntensity) => onChange({ ...settings, aoIntensity })}
+        />
+        <DebugSlider
+          label="AO radius"
+          value={settings.aoRadius}
+          min={0.04}
+          max={0.7}
+          step={0.01}
+          onChange={(aoRadius) => onChange({ ...settings, aoRadius })}
+        />
+        <DebugToggle
+          label="Warm halation"
+          checked={settings.warmHalation}
+          onChange={(warmHalation) => onChange({ ...settings, warmHalation })}
+        />
+        <DebugSlider
+          label="Halation"
+          value={settings.halationStrength}
+          min={0}
+          max={0.8}
+          step={0.01}
+          onChange={(halationStrength) =>
+            onChange({ ...settings, halationStrength })
+          }
+        />
+      </DebugControlGroup>
+    </>
+  );
+}
+
+function DebugControlGroup({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="three-debug-group">
+      <h3>{title}</h3>
+      {children}
+    </section>
   );
 }
 
@@ -1572,7 +1826,7 @@ function LightingDebugControls({
         onChange={(fillIntensity) => onChange({ ...settings, fillIntensity })}
       />
       <DebugSlider
-        label="Key"
+        label="Lamp"
         value={settings.keyIntensity}
         min={0}
         max={6}
@@ -1580,7 +1834,7 @@ function LightingDebugControls({
         onChange={(keyIntensity) => onChange({ ...settings, keyIntensity })}
       />
       <DebugSlider
-        label="Key X"
+        label="Lamp X"
         value={settings.keyX}
         min={-6}
         max={6}
@@ -1588,7 +1842,7 @@ function LightingDebugControls({
         onChange={(keyX) => onChange({ ...settings, keyX })}
       />
       <DebugSlider
-        label="Key Y"
+        label="Lamp Y"
         value={settings.keyY}
         min={1}
         max={8}
@@ -1596,7 +1850,7 @@ function LightingDebugControls({
         onChange={(keyY) => onChange({ ...settings, keyY })}
       />
       <DebugSlider
-        label="Key Z"
+        label="Lamp Z"
         value={settings.keyZ}
         min={-6}
         max={6}
@@ -1809,6 +2063,7 @@ function DebugSlider({
   min,
   max,
   step,
+  digits = 2,
   onChange,
 }: {
   label: string;
@@ -1816,13 +2071,14 @@ function DebugSlider({
   min: number;
   max: number;
   step: number;
+  digits?: number;
   onChange: (value: number) => void;
 }) {
   return (
     <label>
       <span>
         {label}
-        <strong>{value.toFixed(2)}</strong>
+        <strong>{value.toFixed(digits)}</strong>
       </span>
       <input
         type="range"
@@ -3033,6 +3289,7 @@ function FaceUpTileBlock({
   tile: TileInstance;
   faceVisible?: boolean;
 }) {
+  const { enhancedTileMaterial } = useContext(VisualRenderContext);
   const texture = useTileTexture(tileImage(tile));
   return (
     <group>
@@ -3046,13 +3303,27 @@ function FaceUpTileBlock({
           <planeGeometry
             args={[tileSize.width * 0.82, tileSize.depth * 0.86]}
           />
-          <meshBasicMaterial
-            map={texture}
-            transparent
-            alphaTest={0.02}
-            toneMapped={false}
-            side={THREE.FrontSide}
-          />
+          {enhancedTileMaterial ? (
+            <meshStandardMaterial
+              map={texture}
+              emissive="#fff8e8"
+              emissiveMap={texture}
+              emissiveIntensity={0.12}
+              roughness={0.58}
+              metalness={0}
+              transparent
+              alphaTest={0.02}
+              side={THREE.FrontSide}
+            />
+          ) : (
+            <meshBasicMaterial
+              map={texture}
+              transparent
+              alphaTest={0.02}
+              toneMapped={false}
+              side={THREE.FrontSide}
+            />
+          )}
         </mesh>
       ) : null}
     </group>
@@ -3221,6 +3492,8 @@ function FaceDownTileBlock() {
 }
 
 function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
+  const { enhancedTileMaterial: enhancedMaterial } =
+    useContext(VisualRenderContext);
   const backDirection = orientation === "faceUp" ? -1 : 1;
   const backThreshold = tileSize.height / 2 - tileBackThickness;
 
@@ -3232,13 +3505,23 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
       radius={tileCornerRadius}
       smoothness={8}
     >
-      <meshStandardMaterial
+      <meshPhysicalMaterial
         color="#ece4d4"
-        roughness={orientation === "faceUp" ? 0.58 : 0.56}
+        emissive={enhancedMaterial ? "#7a6753" : "#000000"}
+        emissiveIntensity={enhancedMaterial ? 0.08 : 0}
+        roughness={
+          enhancedMaterial ? 0.46 : orientation === "faceUp" ? 0.58 : 0.56
+        }
         metalness={0}
-        envMapIntensity={0.12}
+        envMapIntensity={enhancedMaterial ? 0.3 : 0.12}
+        clearcoat={enhancedMaterial ? 0.22 : 0}
+        clearcoatRoughness={0.34}
+        sheen={enhancedMaterial ? 0.08 : 0}
+        sheenColor="#fff4df"
+        sheenRoughness={0.72}
+        ior={1.47}
         customProgramCacheKey={() =>
-          `mahjong-tile-body-matte-ivory-${orientation}`
+          `mahjong-tile-body-${enhancedMaterial ? "resin" : "matte"}-${orientation}`
         }
         onBeforeCompile={(shader) => {
           shader.vertexShader = shader.vertexShader.replace(
@@ -3256,8 +3539,8 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
           shader.fragmentShader = shader.fragmentShader.replace(
             "vec4 diffuseColor = vec4( diffuse, opacity );",
             `
-            vec3 tileIvory = vec3(0.925, 0.895, 0.83);
-            vec3 tileGreen = vec3(0.0, 0.33, 0.12);
+            vec3 tileIvory = ${enhancedMaterial ? "vec3(0.94, 0.905, 0.835)" : "vec3(0.925, 0.895, 0.83)"};
+            vec3 tileGreen = ${enhancedMaterial ? "vec3(0.0, 0.275, 0.1)" : "vec3(0.0, 0.33, 0.12)"};
             float backMask = step(${backThreshold.toFixed(5)}, ${backDirection.toFixed(1)} * vTileLocalPosition.y);
             vec3 tileUv = vec3(
               abs(vTileLocalPosition.x) / ${(tileSize.width / 2).toFixed(5)},
@@ -3276,12 +3559,12 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
             float materialNoise = fract(sin(dot(vTileLocalPosition.xz, vec2(31.7, 47.3))) * 43758.5453) - 0.5;
             vec3 tileColor = mix(tileIvory, tileGreen, backMask);
             tileColor = mix(tileColor, vec3(0.965, 0.94, 0.885), 0.16 * faceLift * (1.0 - backMask));
-            tileColor = mix(tileColor, vec3(0.0, 0.42, 0.16), 0.12 * faceLift * backMask);
-            tileColor = mix(tileColor, vec3(0.16, 0.66, 0.32), 0.2 * backRim);
+            tileColor = mix(tileColor, ${enhancedMaterial ? "vec3(0.0, 0.355, 0.135)" : "vec3(0.0, 0.42, 0.16)"}, 0.12 * faceLift * backMask);
+            tileColor = mix(tileColor, ${enhancedMaterial ? "vec3(0.1, 0.5, 0.24)" : "vec3(0.16, 0.66, 0.32)"}, ${enhancedMaterial ? "0.13" : "0.2"} * backRim);
             tileColor = mix(tileColor, vec3(0.03, 0.39, 0.15), 0.08 * backFaceGlow);
             tileColor = mix(tileColor, vec3(0.89, 0.855, 0.78), 0.1 * facePanel);
             tileColor *= 1.0 - 0.08 * min(panelBorder, 1.0);
-            tileColor *= 1.0 - 0.16 * bevelShade;
+            tileColor *= 1.0 - ${enhancedMaterial ? "0.11" : "0.16"} * bevelShade;
             tileColor += materialNoise * vec3(0.006, 0.005, 0.004);
             vec4 diffuseColor = vec4(tileColor, opacity);
             `,
@@ -3290,7 +3573,7 @@ function TileBody({ orientation }: { orientation: "faceUp" | "faceDown" }) {
             "#include <roughnessmap_fragment>",
             `
             #include <roughnessmap_fragment>
-            roughnessFactor = clamp(roughnessFactor + materialNoise * 0.025, 0.5, 0.7);
+            roughnessFactor = clamp(roughnessFactor + materialNoise * ${enhancedMaterial ? "0.04" : "0.025"}, ${enhancedMaterial ? "0.38, 0.62" : "0.5, 0.7"});
             `,
           );
         }}
