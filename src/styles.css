@@ -418,13 +418,7 @@ h3 {
   z-index: 3;
   pointer-events: none;
   background: #090e0d;
-  opacity: 0;
-  transition: opacity 620ms ease-in-out;
   will-change: opacity;
-}
-
-.round-transition-overlay.active {
-  opacity: 1;
 }
 
 .three-debug-panel {

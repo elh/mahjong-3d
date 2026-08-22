@@ -11,7 +11,6 @@ import {
 } from "@react-three/rapier";
 import {
   createContext,
-  lazy,
   type ReactNode,
   Suspense,
   useCallback,
@@ -28,10 +27,12 @@ import type { ReplayState } from "../../sim/replay";
 import type { PlayerId } from "../../sim/state";
 import type { TileInstance } from "../../sim/tiles";
 import {
+  postScreenSaverDiagnostic,
   screenSaverFrameEventName,
   screenSaverFrameTimestampFromEvent,
 } from "../screenSaverSurface";
 import { allTileImageUrls, tileImage } from "../tileImages";
+import { SceneTransitionOverlay } from "./SceneTransitionOverlay";
 import {
   createTableFlipSettings,
   createTableFlipTilePhysics,
@@ -54,10 +55,6 @@ import {
 } from "./tileEngraving";
 import {
   defaultVisualDebugSettings,
-  fadedVisualDebugSettings,
-  materialVisualDebugSettings,
-  neutralVisualDebugSettings,
-  tungstenVisualDebugSettings,
   type VisualDebugSettings,
 } from "./visualSettings";
 
@@ -70,6 +67,7 @@ const enableTileCollisionSound = false;
 const showThreeDebugPanel = __DEBUG_MODE_ENABLED__;
 const tileSoundCooldownMs = 62;
 const tileTextureLoadTimeoutMs = 2500;
+const sceneRevealFallbackMs = tileTextureLoadTimeoutMs + 500;
 const tableHalfSize = 3.24;
 const tableSlabDepth = 0.24;
 const tableRailWidth = 0.16;
@@ -83,13 +81,7 @@ const sceneToneMapping = THREE.ACESFilmicToneMapping;
 const sceneToneMappingExposure = 1.12;
 const VisualRenderContext = createContext({
   enhancedTileMaterial: false,
-  postProcessingActive: false,
 });
-const VisualEffects = lazy(() =>
-  import("./VisualEffects").then((module) => ({
-    default: module.VisualEffects,
-  })),
-);
 const cameraTarget: Vec3 = [0, 0, 0];
 const rapierRigidBodyType = {
   dynamic: 0,
@@ -312,8 +304,9 @@ export function ThreeGameView({
     defaultTableFlipDebugSettings,
   );
   const [sceneReady, setSceneReady] = useState(false);
-  const [effectsReady, setEffectsReady] = useState(false);
   const [sceneContentReady, setSceneContentReady] = useState(false);
+  const [sceneRevealFallbackElapsed, setSceneRevealFallbackElapsed] =
+    useState(false);
   const [hasSceneBeenVisible, setHasSceneBeenVisible] = useState(false);
   const [tableFlipRun, setTableFlipRun] = useState(0);
   const [tableFlipPhysicsKey, setTableFlipPhysicsKey] = useState(0);
@@ -352,7 +345,6 @@ export function ThreeGameView({
   const isCameraUserControlled =
     cameraUserControlled ?? internalCameraUserControlled;
   const markSceneReady = useCallback(() => setSceneReady(true), []);
-  const markEffectsReady = useCallback(() => setEffectsReady(true), []);
   const markSceneContentReady = useCallback(
     () => setSceneContentReady(true),
     [],
@@ -374,12 +366,10 @@ export function ThreeGameView({
   const requiredTileTextureUrls = useMemo(() => allTileImageUrls(), []);
   const tileFacesReady = useTileTexturesReady(requiredTileTextureUrls);
   const centerTableMarkReady = useCenterTableMarkReady();
+  const sceneReadinessComplete =
+    sceneReady && sceneContentReady && tileFacesReady && centerTableMarkReady;
   const sceneVisible =
-    sceneReady &&
-    effectsReady &&
-    sceneContentReady &&
-    tileFacesReady &&
-    centerTableMarkReady &&
+    (sceneReadinessComplete || sceneRevealFallbackElapsed) &&
     !roundChanged &&
     !loading;
   const effectiveRenderPaused =
@@ -635,11 +625,40 @@ export function ThreeGameView({
   useEffect(() => {
     void roundKey;
     setSceneReady(false);
+    setSceneRevealFallbackElapsed(false);
     setHasSceneBeenVisible(false);
     if (!preserveSceneOnRoundChangeRef.current) {
       setInternalCameraUserControlled(false);
     }
   }, [roundKey]);
+
+  useEffect(() => {
+    if (loading || sceneReadinessComplete) {
+      return;
+    }
+    const timeout = window.setTimeout(
+      () => setSceneRevealFallbackElapsed(true),
+      sceneRevealFallbackMs,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [loading, sceneReadinessComplete]);
+
+  useEffect(() => {
+    if (!screenSaverFrameDriver) {
+      return;
+    }
+    postScreenSaverDiagnostic(
+      `scene readiness ready=${sceneReady} content=${sceneContentReady} tiles=${tileFacesReady} mark=${centerTableMarkReady} fallback=${sceneRevealFallbackElapsed} visible=${sceneVisible}`,
+    );
+  }, [
+    centerTableMarkReady,
+    sceneContentReady,
+    sceneReady,
+    sceneRevealFallbackElapsed,
+    sceneVisible,
+    screenSaverFrameDriver,
+    tileFacesReady,
+  ]);
 
   return (
     <section className="three-viewer" aria-label="3D autonomous game viewer">
@@ -729,7 +748,6 @@ export function ThreeGameView({
         <VisualRenderContext.Provider
           value={{
             enhancedTileMaterial: visualDebug.enhancedTileMaterial,
-            postProcessingActive: true,
           }}
         >
           <CameraPresetSync preset={cameraPreset} />
@@ -737,7 +755,6 @@ export function ThreeGameView({
             <SceneReadySignal
               key={roundKey}
               ready={
-                effectsReady &&
                 sceneContentReady &&
                 tileFacesReady &&
                 centerTableMarkReady &&
@@ -873,7 +890,10 @@ export function ThreeGameView({
               ))}
             </group>
             {!sceneContentReady ? (
-              <SceneContentReadySignal onReady={markSceneContentReady} />
+              <SceneContentReadySignal
+                mode={sceneReadyMode}
+                onReady={markSceneContentReady}
+              />
             ) : null}
           </Suspense>
           <OrbitControls
@@ -891,63 +911,58 @@ export function ThreeGameView({
             maxPolarAngle={cameraPreset.maxPolarAngle}
             minPolarAngle={cameraPreset.minPolarAngle}
           />
-          <Suspense fallback={null}>
-            <VisualEffects settings={visualDebug} />
-            {!effectsReady ? (
-              <EffectsReadySignal onReady={markEffectsReady} />
-            ) : null}
-          </Suspense>
         </VisualRenderContext.Provider>
       </Canvas>
-      <div
-        className={
-          sceneTransitionOverlayActive || !sceneVisible
-            ? "round-transition-overlay active"
-            : "round-transition-overlay"
-        }
-        aria-hidden="true"
-        onTransitionEnd={(event) => {
-          if (
-            event.propertyName === "opacity" &&
-            sceneVisible &&
-            !sceneTransitionOverlayActive
-          ) {
-            onSceneRevealed?.(roundKey);
-          }
-        }}
+      <SceneTransitionOverlay
+        covered={sceneTransitionOverlayActive || !sceneVisible}
+        nativeFrameDriver={screenSaverFrameDriver}
+        onRevealed={() => onSceneRevealed?.(roundKey)}
       />
     </section>
   );
 }
 
-function EffectsReadySignal({ onReady }: { onReady: () => void }) {
-  const renderedFramesRef = useRef(0);
-
-  useFrame(() => {
-    if (renderedFramesRef.current >= 3) {
-      return;
-    }
-    renderedFramesRef.current += 1;
-    if (renderedFramesRef.current === 3) {
-      onReady();
-    }
-  }, 2);
-
-  return null;
+function SceneContentReadySignal({
+  mode,
+  onReady,
+}: {
+  mode: "raf" | "timer";
+  onReady: () => void;
+}) {
+  return <ReadyAfterCommitSignal delayMs={40} mode={mode} onReady={onReady} />;
 }
 
-function SceneContentReadySignal({ onReady }: { onReady: () => void }) {
-  const renderedFramesRef = useRef(0);
+function ReadyAfterCommitSignal({
+  delayMs,
+  mode,
+  onReady,
+}: {
+  delayMs: number;
+  mode: "raf" | "timer";
+  onReady: () => void;
+}) {
+  useEffect(() => {
+    let frame: number | undefined;
+    let timeout: number | undefined;
+    const scheduleReady = () => {
+      timeout = window.setTimeout(onReady, delayMs);
+    };
 
-  useFrame(() => {
-    if (renderedFramesRef.current >= 2) {
-      return;
+    if (mode === "raf") {
+      frame = window.requestAnimationFrame(scheduleReady);
+    } else {
+      scheduleReady();
     }
-    renderedFramesRef.current += 1;
-    if (renderedFramesRef.current === 2) {
-      onReady();
-    }
-  });
+
+    return () => {
+      if (frame !== undefined) {
+        window.cancelAnimationFrame(frame);
+      }
+      if (timeout !== undefined) {
+        window.clearTimeout(timeout);
+      }
+    };
+  }, [delayMs, mode, onReady]);
 
   return null;
 }
@@ -961,37 +976,39 @@ function SceneReadySignal({
   mode: "raf" | "timer";
   onReady: () => void;
 }) {
-  const renderedFramesRef = useRef(0);
   const didReportReadyRef = useRef(false);
 
   useEffect(() => {
     if (!ready) {
-      renderedFramesRef.current = 0;
       didReportReadyRef.current = false;
       return;
     }
-    if (mode !== "timer") {
-      return;
-    }
-    const timeout = window.setTimeout(() => {
-      if (!didReportReadyRef.current) {
-        didReportReadyRef.current = true;
-        onReady();
-      }
-    }, 120);
-    return () => window.clearTimeout(timeout);
-  }, [mode, onReady, ready]);
+    let frame: number | undefined;
+    let timeout: number | undefined;
+    const scheduleReady = () => {
+      timeout = window.setTimeout(() => {
+        if (!didReportReadyRef.current) {
+          didReportReadyRef.current = true;
+          onReady();
+        }
+      }, 120);
+    };
 
-  useFrame(() => {
-    if (mode !== "raf" || !ready || didReportReadyRef.current) {
-      return;
+    if (mode === "raf") {
+      frame = window.requestAnimationFrame(scheduleReady);
+    } else {
+      scheduleReady();
     }
-    renderedFramesRef.current += 1;
-    if (renderedFramesRef.current >= 2) {
-      didReportReadyRef.current = true;
-      onReady();
-    }
-  }, 3);
+
+    return () => {
+      if (frame !== undefined) {
+        window.cancelAnimationFrame(frame);
+      }
+      if (timeout !== undefined) {
+        window.clearTimeout(timeout);
+      }
+    };
+  }, [mode, onReady, ready]);
 
   return null;
 }
@@ -1283,7 +1300,6 @@ function clampColor(value: number): number {
 }
 
 function CenterTableMark() {
-  const { postProcessingActive } = useContext(VisualRenderContext);
   const loadedTexture = useCenterTableMarkTexture();
   const texture =
     loadedTexture ??
@@ -1303,7 +1319,7 @@ function CenterTableMark() {
       <meshBasicMaterial
         map={texture}
         transparent
-        opacity={postProcessingActive ? 0.4 : 1}
+        opacity={1}
         depthWrite={false}
         toneMapped={false}
       />
@@ -1650,181 +1666,15 @@ function VisualDebugControls({
   onChange: (settings: VisualDebugSettings) => void;
 }) {
   return (
-    <>
-      <fieldset className="three-debug-presets" aria-label="Visual presets">
-        <button
-          type="button"
-          onClick={() => onChange(materialVisualDebugSettings)}
-        >
-          Material
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange(neutralVisualDebugSettings)}
-        >
-          Neutral
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange(tungstenVisualDebugSettings)}
-        >
-          Tungsten
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange(fadedVisualDebugSettings)}
-        >
-          Faded
-        </button>
-      </fieldset>
-
-      <DebugControlGroup title="Film finish">
-        <DebugToggle
-          label="AgX tone mapping"
-          checked={settings.agxToneMapping}
-          onChange={(agxToneMapping) =>
-            onChange({ ...settings, agxToneMapping })
-          }
-        />
-        <label>
-          <span>Film stock</span>
-          <select
-            value={settings.filmStock}
-            onChange={(event) =>
-              onChange({
-                ...settings,
-                filmStock: event.currentTarget
-                  .value as VisualDebugSettings["filmStock"],
-              })
-            }
-          >
-            <option value="neutral">Neutral</option>
-            <option value="tungsten">Tungsten</option>
-            <option value="faded">Faded print</option>
-          </select>
-        </label>
-        <DebugToggle
-          label="Film color grade"
-          checked={settings.filmGrade}
-          onChange={(filmGrade) => onChange({ ...settings, filmGrade })}
-        />
-        <DebugSlider
-          label="Film strength"
-          value={settings.filmStrength}
-          min={0}
-          max={1}
-          step={0.02}
-          onChange={(filmStrength) => onChange({ ...settings, filmStrength })}
-        />
-        <DebugToggle
-          label="Minimal finishing"
-          checked={settings.colorFinishing}
-          onChange={(colorFinishing) =>
-            onChange({ ...settings, colorFinishing })
-          }
-        />
-        <DebugSlider
-          label="Finish strength"
-          value={settings.finishingStrength}
-          min={0}
-          max={1}
-          step={0.02}
-          onChange={(finishingStrength) =>
-            onChange({ ...settings, finishingStrength })
-          }
-        />
-        <DebugToggle
-          label="Shadow texture"
-          checked={settings.ditheredShadows}
-          onChange={(ditheredShadows) =>
-            onChange({ ...settings, ditheredShadows })
-          }
-        />
-        <DebugSlider
-          label="Texture strength"
-          value={settings.ditherStrength}
-          min={0}
-          max={1}
-          step={0.02}
-          onChange={(ditherStrength) =>
-            onChange({ ...settings, ditherStrength })
-          }
-        />
-      </DebugControlGroup>
-
-      <DebugControlGroup title="Secondary effects">
-        <p className="three-debug-group-note">
-          Optional material, edge, glow, and depth treatments.
-        </p>
-        <DebugToggle
-          label="Improved tile material"
-          checked={settings.enhancedTileMaterial}
-          onChange={(enhancedTileMaterial) =>
-            onChange({ ...settings, enhancedTileMaterial })
-          }
-        />
-        <DebugToggle
-          label="SMAA antialiasing"
-          checked={settings.smaaAntialiasing}
-          onChange={(smaaAntialiasing) =>
-            onChange({ ...settings, smaaAntialiasing })
-          }
-        />
-        <DebugToggle
-          label="Soft diffusion"
-          checked={settings.softDiffusion}
-          onChange={(softDiffusion) => onChange({ ...settings, softDiffusion })}
-        />
-        <DebugSlider
-          label="Diffusion"
-          value={settings.diffusionStrength}
-          min={0}
-          max={1.2}
-          step={0.02}
-          onChange={(diffusionStrength) =>
-            onChange({ ...settings, diffusionStrength })
-          }
-        />
-        <DebugToggle
-          label="Ambient occlusion"
-          checked={settings.ambientOcclusion}
-          onChange={(ambientOcclusion) =>
-            onChange({ ...settings, ambientOcclusion })
-          }
-        />
-        <DebugSlider
-          label="AO intensity"
-          value={settings.aoIntensity}
-          min={0}
-          max={2.5}
-          step={0.05}
-          onChange={(aoIntensity) => onChange({ ...settings, aoIntensity })}
-        />
-        <DebugSlider
-          label="AO radius"
-          value={settings.aoRadius}
-          min={0.04}
-          max={0.7}
-          step={0.01}
-          onChange={(aoRadius) => onChange({ ...settings, aoRadius })}
-        />
-        <DebugToggle
-          label="Warm halation"
-          checked={settings.warmHalation}
-          onChange={(warmHalation) => onChange({ ...settings, warmHalation })}
-        />
-        <DebugSlider
-          label="Halation"
-          value={settings.halationStrength}
-          min={0}
-          max={0.8}
-          step={0.01}
-          onChange={(halationStrength) =>
-            onChange({ ...settings, halationStrength })
-          }
-        />
-      </DebugControlGroup>
-    </>
+    <DebugControlGroup title="Tile material">
+      <DebugToggle
+        label="Improved tile material"
+        checked={settings.enhancedTileMaterial}
+        onChange={(enhancedTileMaterial) =>
+          onChange({ ...settings, enhancedTileMaterial })
+        }
+      />
+    </DebugControlGroup>
   );
 }
 

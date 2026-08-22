@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   initialScreenSaverLifecycle,
+  postScreenSaverDiagnostic,
   readNativeScreenSaverState,
   screenSaverFrameTimestampFromEvent,
   screenSaverRuntimeOptions,
@@ -141,6 +142,22 @@ describe("screen saver surface", () => {
         500,
       ),
     ).toBe(500);
+  });
+
+  test("forwards diagnostics to the native screen saver log bridge", () => {
+    const messages: string[] = [];
+    postScreenSaverDiagnostic("scene visible", {
+      webkit: {
+        messageHandlers: {
+          mahjong3DLog: {
+            postMessage: (message: string) => messages.push(message),
+          },
+        },
+      },
+    });
+    postScreenSaverDiagnostic("ignored without a native bridge", {});
+
+    expect(messages).toEqual(["web: scene visible"]);
   });
 
   test("keeps initial rendering allowed while the screen saver is inactive", () => {
