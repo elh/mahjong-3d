@@ -1,6 +1,7 @@
+import { sceneTransitionFadeMs } from "./sceneTransition";
+
 export const infiniteRoundHoldMs = 4500;
-export const infiniteRoundFadeMs = 620;
-export const infiniteRoundSwapMs = infiniteRoundFadeMs + 40;
+export const infiniteRoundSwapMs = sceneTransitionFadeMs + 40;
 export const infiniteRoundFlipPrepMs = 300;
 export const infiniteRoundFlipDurationMs = 1150;
 export const infiniteRoundResetDelayMs = 4000;

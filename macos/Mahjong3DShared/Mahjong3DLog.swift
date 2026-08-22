@@ -2,6 +2,8 @@ import Foundation
 import os.log
 
 enum Mahjong3DLog {
+    private final class BundleToken {}
+
     static let subsystem = "io.github.elh.mahjong-3d.app"
 
     static func logger(_ category: String) -> Logger {
@@ -41,9 +43,11 @@ enum Mahjong3DLog {
     }
 
     private static func loggingFlagValue() -> String? {
-        Bundle.main
-            .url(forResource: "LoggingEnabled", withExtension: "txt")
-            .flatMap { try? String(contentsOf: $0, encoding: .utf8) }
+        let bundles = [Bundle(for: BundleToken.self), Bundle.main]
+        return bundles.lazy
+            .compactMap { $0.url(forResource: "LoggingEnabled", withExtension: "txt") }
+            .compactMap { try? String(contentsOf: $0, encoding: .utf8) }
+            .first
     }
 
     private static func isTruthy(_ rawValue: String) -> Bool {

@@ -3,7 +3,7 @@
 Infinite 3D Taiwanese Mahjong made with React Three Fiber.
 
 Watch the idle sim [online](https://elh.github.io/mahjong-3d/) or as a
-[macOS screen saver](https://github.com/elh/mahjong-3d/releases/latest/download/Mahjong3D.dmg) (macOS 14+ required, tested on macOS 26 Tahoe).
+[macOS screen saver](https://github.com/elh/mahjong-3d/releases/latest/download/Mahjong3D.dmg) (macOS 26 Tahoe only).
 
 [![screenshot](public/social-preview.png)](https://elh.github.io/mahjong-3d/)
 

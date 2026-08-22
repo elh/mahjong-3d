@@ -5,10 +5,14 @@ saver build.
 
 ## Architecture
 
-The default macOS 14+ artifact is `Mahjong3D.app`, a minimal SwiftUI container
-app with an embedded `Mahjong3DScreenSaverExtension.appex`. The extension uses
-the `com.apple.screensaver` app-extension point and hosts the local Vite screen
-saver build in a `WKWebView` over the custom `mahjong3d-saver://` scheme.
+Only macOS 26 Tahoe is supported. Older deployment targets and the legacy saver
+build remain available for development and regression testing, but they are not
+supported release configurations.
+
+The default artifact is `Mahjong3D.app`, a minimal SwiftUI container app with an
+embedded `Mahjong3DScreenSaverExtension.appex`. The extension uses the
+`com.apple.screensaver` app-extension point and hosts the local Vite screen saver
+build in a `WKWebView` over the custom `mahjong3d-saver://` scheme.
 
 This structure follows the approach documented by
 [AerialScreensaver/AppexSaverMinimal](https://github.com/AerialScreensaver/AppexSaverMinimal):
@@ -43,6 +47,16 @@ handles:
   calls `window.mahjongScreenSaver.renderFrame(performance.now())` at 30 fps,
   and the web app advances its manual React Three Fiber frame loop from that
   event instead of relying on WebKit's own animation scheduling.
+- Do not make screen saver visibility or playback depend on CSS animation or
+  transition completion events. An inactive `WKWebView` can stall its normal
+  animation/compositor scheduling even while the native frame bridge continues
+  to advance Three.js. In particular, an opaque loading or round-transition
+  layer that waits for `transitionend` can cover a correctly rendered scene
+  forever and look like a WebGL failure. Scene fades therefore share one
+  elapsed-time state machine: the web surface samples it with
+  `requestAnimationFrame`, while the screen saver samples it from
+  `mahjong-screen-saver-frame` timestamps. Once a reveal reaches zero opacity,
+  the cover is removed from the DOM rather than left composited over the canvas.
 - On macOS 14 and newer, the extension sets `WKPreferences.inactiveSchedulingPolicy`
   to `.none` as a best-effort guard against WebKit suspending an attached screen
   saver web view.
@@ -191,6 +205,12 @@ For local installs with logging enabled:
 ```sh
 env OPEN_SETTINGS=0 MAHJONG3D_SCREENSAVER_LOGGING=1 make install-screensaver
 ```
+
+After changing startup readiness, fades, overlays, or frame scheduling, test the
+installed extension in the actual full-screen `ScreenSaverEngine`. The small
+System Settings preview and the normal browser do not reproduce all inactive
+WKWebView scheduling behavior. Verify both the initial reveal and at least one
+complete end-of-round cover, scene swap, and reveal before packaging a release.
 
 Useful registration checks:
 

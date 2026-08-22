@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import {
   eventAutoAdvanceMode,
-  infiniteRoundFadeMs,
   infiniteRoundHoldMs,
   infiniteRoundSwapMs,
   nextRoundPromotionDelayMs,
 } from "./infinitePlayback";
+import { sceneTransitionFadeMs } from "./sceneTransition";
 
 describe("infinite playback timing", () => {
   test("keeps the round swap covered until the fade is opaque", () => {
-    expect(infiniteRoundSwapMs).toBeGreaterThanOrEqual(infiniteRoundFadeMs);
+    expect(infiniteRoundSwapMs).toBeGreaterThanOrEqual(sceneTransitionFadeMs);
   });
 
   test("keeps semantic playback moving with reduced motion", () => {

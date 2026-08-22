@@ -45,6 +45,25 @@ export type ScreenSaverRuntimeOptions = {
 
 export type NativeScreenSaverState = Partial<ScreenSaverLifecycle>;
 
+type NativeScreenSaverLogSource = {
+  webkit?: {
+    messageHandlers?: {
+      mahjong3DLog?: {
+        postMessage(message: string): void;
+      };
+    };
+  };
+};
+
+export function postScreenSaverDiagnostic(
+  message: string,
+  source: unknown = globalThis,
+): void {
+  const handler = (source as NativeScreenSaverLogSource).webkit?.messageHandlers
+    ?.mahjong3DLog;
+  handler?.postMessage(`web: ${message}`);
+}
+
 export function screenSaverSurfaceFromSearch(
   search: string,
 ): ScreenSaverSurfaceConfig | undefined {
