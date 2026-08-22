@@ -21,7 +21,7 @@ export const materialVisualDebugSettings: VisualDebugSettings = {
   filmStock: "neutral",
   filmStrength: 0.2,
   colorFinishing: false,
-  finishingStrength: 0.26,
+  finishingStrength: 0.1,
   softDiffusion: false,
   diffusionStrength: 0.24,
   enhancedTileMaterial: true,
