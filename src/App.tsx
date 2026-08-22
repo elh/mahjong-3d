@@ -25,7 +25,6 @@ import type { InfoModalLink } from "./ui/InfoModal";
 import { InfoModal } from "./ui/InfoModal";
 import {
   eventAutoAdvanceMode,
-  infiniteRoundFadeMs,
   infiniteRoundFlipTransitionDelayMs,
   infiniteRoundHoldMs,
   infiniteRoundSwapMs,
@@ -68,6 +67,12 @@ const ThreeGameView = lazy(() =>
     default: module.ThreeGameView,
   })),
 );
+
+function ThreeViewLoadingFallback() {
+  return (
+    <section className="three-viewer loading" aria-label="Loading 3D view" />
+  );
+}
 
 function eventAutoAdvanceDelay(
   currentEvent: GameEvent | undefined,
@@ -184,7 +189,6 @@ function TableFlipDebugApp() {
   const [isPreviewTransitioning, setIsPreviewTransitioning] = useState(false);
   const previewFadeTimeoutRef = useRef<number | undefined>(undefined);
   const previewSwapTimeoutRef = useRef<number | undefined>(undefined);
-  const previewClearTimeoutRef = useRef<number | undefined>(undefined);
   const previewRoundKey =
     previewRoundVersion === 0
       ? roundKey
@@ -198,10 +202,6 @@ function TableFlipDebugApp() {
       window.clearTimeout(previewSwapTimeoutRef.current);
       previewSwapTimeoutRef.current = undefined;
     }
-    if (previewClearTimeoutRef.current !== undefined) {
-      window.clearTimeout(previewClearTimeoutRef.current);
-      previewClearTimeoutRef.current = undefined;
-    }
   }, []);
   const previewNextTable = useCallback(
     (delayMs: number) => {
@@ -213,14 +213,18 @@ function TableFlipDebugApp() {
         previewSwapTimeoutRef.current = window.setTimeout(() => {
           previewSwapTimeoutRef.current = undefined;
           setPreviewRoundVersion((version) => version + 1);
-          previewClearTimeoutRef.current = window.setTimeout(() => {
-            previewClearTimeoutRef.current = undefined;
-            setIsPreviewTransitioning(false);
-          }, infiniteRoundFadeMs);
         }, infiniteRoundSwapMs);
       }, delayMs);
     },
     [clearPreviewTransitionTimeouts],
+  );
+  const handlePreviewSceneReady = useCallback(
+    (readyRoundKey: string) => {
+      if (readyRoundKey === previewRoundKey) {
+        setIsPreviewTransitioning(false);
+      }
+    },
+    [previewRoundKey],
   );
 
   useEffect(() => {
@@ -260,16 +264,7 @@ function TableFlipDebugApp() {
             : `Generating ${pendingSeed}...`}
         </section>
       )}
-      <Suspense
-        fallback={
-          <section
-            className="three-viewer loading"
-            aria-label="Loading 3D view"
-          >
-            Loading 3D view...
-          </section>
-        }
-      >
+      <Suspense fallback={<ThreeViewLoadingFallback />}>
         <ThreeGameView
           replay={replay}
           previousReplay={previousReplay}
@@ -280,11 +275,11 @@ function TableFlipDebugApp() {
           loading={isLoadingRound}
           simulatorMode
           cameraAutoRotate={false}
-          suppressLoadingOverlay={isPreviewTransitioning}
           preserveSceneOnRoundChange={isPreviewTransitioning}
           tableFlipDebug
           onTableFlipPreviewTransition={previewNextTable}
           sceneTransitionOverlayActive={isPreviewTransitioning}
+          onSceneReady={handlePreviewSceneReady}
         />
       </Suspense>
       <InfoPopover
@@ -479,16 +474,7 @@ function DebugApp() {
       {isLoadingRound && viewMode === "debug" ? (
         <RoundLoadingView mode={viewMode} />
       ) : viewMode === "three" ? (
-        <Suspense
-          fallback={
-            <section
-              className="three-viewer loading"
-              aria-label="Loading 3D view"
-            >
-              Loading 3D view...
-            </section>
-          }
-        >
+        <Suspense fallback={<ThreeViewLoadingFallback />}>
           <ThreeGameView
             replay={replay}
             previousReplay={previousReplay}
@@ -645,6 +631,7 @@ function SimApp({
   );
   const [isCameraUserControlled, setIsCameraUserControlled] = useState(false);
   const [isRoundTransitioning, setIsRoundTransitioning] = useState(false);
+  const [revealedRoundKey, setRevealedRoundKey] = useState<string>();
   const [tableFlipTransitionKey, setTableFlipTransitionKey] = useState<
     string | undefined
   >();
@@ -674,26 +661,47 @@ function SimApp({
   const isAtRoundEnd = events.length > 0 && eventIndex >= events.length - 1;
   const renderPaused = !runtimeOptions.isPlaybackActive;
   const showPerfPanel = !runtimeOptions.isScreenSaver && perfPanelEnabled();
-  const showGenerationPill =
-    !runtimeOptions.isScreenSaver && (isGenerating || generationError);
+  const showGenerationError =
+    !runtimeOptions.isScreenSaver && Boolean(generationError);
   const autoAdvanceMode = eventAutoAdvanceMode({
     isPlaybackActive: runtimeOptions.isPlaybackActive,
+    isSceneRevealed: revealedRoundKey === roundKey,
     prefersReducedMotion,
     isLoadingRound,
     hasGenerationError: Boolean(generationError),
     eventCount: events.length,
   });
+  const handleSceneReady = useCallback(
+    (readyRoundKey: string) => {
+      if (readyRoundKey === roundKey) {
+        setIsRoundTransitioning(false);
+      }
+    },
+    [roundKey],
+  );
+  const handleSceneRevealed = useCallback(
+    (readyRoundKey: string) => {
+      if (readyRoundKey === roundKey) {
+        setRevealedRoundKey(readyRoundKey);
+      }
+    },
+    [roundKey],
+  );
 
   useEffect(() => {
     if (
       !runtimeOptions.isPlaybackActive ||
       !runtimeOptions.preloadEnabled ||
       isLoadingRound ||
-      generationError ||
-      !isAtRoundEnd
+      generationError
     ) {
       terminalReachedAtRef.current = undefined;
       setIsRoundTransitioning(false);
+      setTableFlipTransitionKey(undefined);
+      return;
+    }
+    if (!isAtRoundEnd) {
+      terminalReachedAtRef.current = undefined;
       setTableFlipTransitionKey(undefined);
       return;
     }
@@ -733,7 +741,6 @@ function SimApp({
     }
     let flipSettleTimeout: number | undefined;
     let promoteTimeout: number | undefined;
-    let clearFadeTimeout: number | undefined;
     const transitionTimeout = window.setTimeout(() => {
       if (!prefersReducedMotion) {
         setTableFlipTransitionKey(`${roundKey}:${eventIndex}`);
@@ -745,10 +752,9 @@ function SimApp({
             if (promoteQueuedRound()) {
               terminalReachedAtRef.current = undefined;
               setTableFlipTransitionKey(undefined);
-            }
-            clearFadeTimeout = window.setTimeout(() => {
+            } else {
               setIsRoundTransitioning(false);
-            }, infiniteRoundFadeMs);
+            }
           }, infiniteRoundSwapMs);
         },
         prefersReducedMotion ? 0 : infiniteRoundFlipTransitionDelayMs(),
@@ -762,9 +768,6 @@ function SimApp({
       }
       if (promoteTimeout !== undefined) {
         window.clearTimeout(promoteTimeout);
-      }
-      if (clearFadeTimeout !== undefined) {
-        window.clearTimeout(clearFadeTimeout);
       }
     };
   }, [
@@ -797,10 +800,12 @@ function SimApp({
       prefersReducedMotion || !runtimeOptions.tableFlipTransitionsEnabled
         ? 0
         : infiniteRoundFlipTransitionDelayMs();
-    const promotionDelayMs = holdMs + flipDelayMs;
+    const fadeDelayMs = holdMs + flipDelayMs;
+    const promotionDelayMs = fadeDelayMs + infiniteRoundSwapMs;
     const flipKey = `${roundKey}:${eventIndex}`;
     let startedAtMs: number | undefined;
     let didStartFlip = false;
+    let didStartFade = false;
     let didPromote = false;
 
     const handleNativeFrame = (event: Event) => {
@@ -822,6 +827,10 @@ function SimApp({
         didStartFlip = true;
         setTableFlipTransitionKey(flipKey);
       }
+      if (!didStartFade && elapsedMs >= fadeDelayMs) {
+        didStartFade = true;
+        setIsRoundTransitioning(true);
+      }
       if (elapsedMs < promotionDelayMs) {
         return;
       }
@@ -830,6 +839,8 @@ function SimApp({
       if (promoteQueuedRound()) {
         terminalReachedAtRef.current = undefined;
         setTableFlipTransitionKey(undefined);
+      } else {
+        setIsRoundTransitioning(false);
       }
     };
 
@@ -870,6 +881,7 @@ function SimApp({
         ? 0
         : infiniteRoundFlipTransitionDelayMs();
     let flipTimeout: number | undefined;
+    let fadeTimeout: number | undefined;
     let promoteTimeout: number | undefined;
 
     flipTimeout = window.setTimeout(() => {
@@ -877,18 +889,27 @@ function SimApp({
       if (runtimeOptions.tableFlipTransitionsEnabled && !prefersReducedMotion) {
         setTableFlipTransitionKey(`${roundKey}:${eventIndex}`);
       }
-      promoteTimeout = window.setTimeout(() => {
-        promoteTimeout = undefined;
-        if (promoteQueuedRound()) {
-          terminalReachedAtRef.current = undefined;
-          setTableFlipTransitionKey(undefined);
-        }
+      fadeTimeout = window.setTimeout(() => {
+        fadeTimeout = undefined;
+        setIsRoundTransitioning(true);
+        promoteTimeout = window.setTimeout(() => {
+          promoteTimeout = undefined;
+          if (promoteQueuedRound()) {
+            terminalReachedAtRef.current = undefined;
+            setTableFlipTransitionKey(undefined);
+          } else {
+            setIsRoundTransitioning(false);
+          }
+        }, infiniteRoundSwapMs);
       }, flipDelayMs);
     }, holdMs);
 
     return () => {
       if (flipTimeout !== undefined) {
         window.clearTimeout(flipTimeout);
+      }
+      if (fadeTimeout !== undefined) {
+        window.clearTimeout(fadeTimeout);
       }
       if (promoteTimeout !== undefined) {
         window.clearTimeout(promoteTimeout);
@@ -1027,28 +1048,12 @@ function SimApp({
           : "sim-shell"
       }
     >
-      {showGenerationPill && (
-        <section
-          className={
-            generationError ? "generation-pill error" : "generation-pill"
-          }
-          aria-live="polite"
-        >
-          {generationError
-            ? `Could not generate ${pendingSeed}: ${generationError}`
-            : `Generating ${pendingSeed}...`}
+      {showGenerationError && (
+        <section className="generation-pill error" aria-live="polite">
+          Could not generate {pendingSeed}: {generationError}
         </section>
       )}
-      <Suspense
-        fallback={
-          <section
-            className="three-viewer loading"
-            aria-label="Loading 3D view"
-          >
-            Loading 3D view...
-          </section>
-        }
-      >
+      <Suspense fallback={<ThreeViewLoadingFallback />}>
         <ThreeGameView
           replay={replay}
           previousReplay={previousReplay}
@@ -1076,7 +1081,6 @@ function SimApp({
           allowInitialRenderWhilePaused={
             runtimeOptions.allowInitialRenderWhilePaused
           }
-          suppressLoadingOverlay={isRoundTransitioning}
           preserveSceneOnRoundChange={isRoundTransitioning}
           tableFlipTransitionKey={
             prefersReducedMotion || !runtimeOptions.tableFlipTransitionsEnabled
@@ -1084,6 +1088,8 @@ function SimApp({
               : tableFlipTransitionKey
           }
           sceneTransitionOverlayActive={isRoundTransitioning}
+          onSceneReady={handleSceneReady}
+          onSceneRevealed={handleSceneRevealed}
         />
       </Suspense>
       {!runtimeOptions.isScreenSaver ? (

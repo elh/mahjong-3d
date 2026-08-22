@@ -1,6 +1,6 @@
 export const infiniteRoundHoldMs = 4500;
 export const infiniteRoundFadeMs = 620;
-export const infiniteRoundSwapMs = 560;
+export const infiniteRoundSwapMs = infiniteRoundFadeMs + 40;
 export const infiniteRoundFlipPrepMs = 300;
 export const infiniteRoundFlipDurationMs = 1150;
 export const infiniteRoundResetDelayMs = 4000;
@@ -9,12 +9,14 @@ export type EventAutoAdvanceMode = "animated" | "immediate";
 
 export function eventAutoAdvanceMode({
   isPlaybackActive,
+  isSceneRevealed,
   prefersReducedMotion,
   isLoadingRound,
   hasGenerationError,
   eventCount,
 }: {
   isPlaybackActive: boolean;
+  isSceneRevealed: boolean;
   prefersReducedMotion: boolean;
   isLoadingRound: boolean;
   hasGenerationError: boolean;
@@ -22,6 +24,7 @@ export function eventAutoAdvanceMode({
 }): EventAutoAdvanceMode | undefined {
   if (
     !isPlaybackActive ||
+    !isSceneRevealed ||
     isLoadingRound ||
     hasGenerationError ||
     eventCount <= 0
