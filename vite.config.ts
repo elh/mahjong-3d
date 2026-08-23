@@ -1,5 +1,29 @@
+import { rm } from "node:fs/promises";
+import { resolve } from "node:path";
 import { defineConfig } from "vite";
+import type { Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+
+const screenSaverExcludedPublicAssets = ["social-preview.png", ".DS_Store"];
+
+function excludeScreenSaverPublicAssets(): Plugin {
+  let outputDirectory: string;
+
+  return {
+    name: "exclude-screen-saver-public-assets",
+    apply: "build",
+    configResolved(config) {
+      outputDirectory = resolve(config.root, config.build.outDir);
+    },
+    async closeBundle() {
+      await Promise.all(
+        screenSaverExcludedPublicAssets.map((asset) =>
+          rm(resolve(outputDirectory, asset), { force: true }),
+        ),
+      );
+    },
+  };
+}
 
 function debugEnabled(): boolean {
   const value = process.env.DEBUG?.trim().toLowerCase();
@@ -20,7 +44,10 @@ export default defineConfig(({ command, mode }) => {
     define: {
       __DEBUG_MODE_ENABLED__: JSON.stringify(debugEnabled()),
     },
-    plugins: [react()],
+    plugins: [
+      react(),
+      ...(isScreenSaverBuild ? [excludeScreenSaverPublicAssets()] : []),
+    ],
     server: {
       watch: {
         usePolling: true,
